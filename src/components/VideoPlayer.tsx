@@ -571,7 +571,7 @@ export function VideoPlayer({
   const availableAngles = currentMoment.videos.map(v => v.angle);
 
   // Render a single video element
-  const renderVideo = (angle: string, isMain: boolean, className: string = '', showLabel: boolean = false) => {
+  const renderVideo = (angle: string, isMain: boolean, className: string = '', showLabel: boolean = false, moreLabelSpacing: boolean = false) => {
     const url = videoUrls[angle];
     const isAvailable = availableAngles.includes(angle);
 
@@ -605,9 +605,11 @@ export function VideoPlayer({
         {isMain && layout !== 'single' && layout !== 'pip' && (
           <div className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full" />
         )}
-        {/* Angle label for small windows (non-main videos) */}
-        {showLabel && !isMain && (
-          <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] text-white/90 font-medium pointer-events-none">
+        {/* Angle label for all videos (blue for main, black for others) */}
+        {showLabel && (
+          <div className={`absolute bottom-1 ${moreLabelSpacing ? 'left-2' : 'left-1'} px-1.5 py-0.5 backdrop-blur-sm rounded text-[10px] text-white/90 font-medium pointer-events-none ${
+            isMain ? 'bg-blue-600/80' : 'bg-black/70'
+          }`}>
             {ANGLE_LABELS[angle] || angle}
           </div>
         )}
@@ -768,7 +770,7 @@ export function VideoPlayer({
                       } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
                       onClick={() => isAvailable && handleAngleChange(angle)}
                     >
-                      {renderVideo(angle, isMain, 'w-full h-full', true)}
+                      {renderVideo(angle, isMain, 'w-full h-full', true, true)}
                     </div>
                   );
                 })}
