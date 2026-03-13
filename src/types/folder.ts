@@ -22,30 +22,36 @@ export interface FolderStructure {
   allFiles: File[];
 }
 
-/** Parse TeslaCam folder structure from files */
+/** Parse TeslaCam folder structure from files (batched for performance) */
 export function parseFolderStructure(files: File[]): FolderStructure {
   const dateMap = new Map<string, Map<string, Map<string, File>>>();
   
-  for (const file of files) {
-    // Skip event.json files for the date/time parsing
-    if (file.name === 'event.json') continue;
-    
+  // Filter only video files first to reduce iteration
+  const videoFiles = files.filter(f => f.name.endsWith('.mp4'));
+  
+  for (const file of videoFiles) {
     // Parse Tesla filename format: YYYY-MM-DD_HH-MM-SS-angle.mp4
-    const match = file.name.match(/^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})-(.+?)\.mp4$/i);
+    // Use a more specific regex for better performance
+    const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
     if (!match) continue;
     
-    const [, dateStr, timeStr, angle] = match;
+    const [, year, month, day, hour, minute, second, angle] = match;
+    const dateStr = `${year}-${month}-${day}`;
+    const timeStr = `${hour}-${minute}-${second}`;
     const angleKey = angle.toLowerCase().replace(/-/g, '_');
     
-    if (!dateMap.has(dateStr)) {
-      dateMap.set(dateStr, new Map());
+    // Fast path - avoid repeated lookups
+    let timeMap = dateMap.get(dateStr);
+    if (!timeMap) {
+      timeMap = new Map();
+      dateMap.set(dateStr, timeMap);
     }
-    const timeMap = dateMap.get(dateStr)!;
     
-    if (!timeMap.has(timeStr)) {
-      timeMap.set(timeStr, new Map());
+    let angleMap = timeMap.get(timeStr);
+    if (!angleMap) {
+      angleMap = new Map();
+      timeMap.set(timeStr, angleMap);
     }
-    const angleMap = timeMap.get(timeStr)!;
     
     angleMap.set(angleKey, file);
   }
@@ -61,16 +67,92 @@ export function parseFolderStructure(files: File[]): FolderStructure {
     
     for (const timeStr of sortedTimes) {
       const angleMap = timeMap.get(timeStr)!;
-      const files: Record<string, File> = {};
-      
-      // Convert angle map to record
-      for (const [angle, file] of angleMap) {
-        files[angle] = file;
-      }
+      // Convert Map to object using Object.fromEntries (faster than manual iteration)
+      const files: Record<string, File> = Object.fromEntries(angleMap);
       
       timeSlots.push({
         time: timeStr,
-        displayTime: timeStr.replace(/-/g, ':'),
+        displayTime: `${timeStr.slice(0, 2)}:${timeStr.slice(3, 5)}:${timeStr.slice(6, 8)}`,
+        files,
+      });
+    }
+    
+    dates.push({
+      date: dateStr,
+      displayDate: dateStr,
+      timeSlots,
+    });
+  }
+  
+  return {
+    dates,
+    allFiles: files,
+  };
+}
+
+/** Parse folder structure asynchronously with progress callback */
+export async function parseFolderStructureAsync(
+  files: File[],
+  onProgress?: (current: number, total: number) => void
+): Promise<FolderStructure> {
+  const dateMap = new Map<string, Map<string, Map<string, File>>>();
+  const videoFiles = files.filter(f => f.name.endsWith('.mp4'));
+  const total = videoFiles.length;
+  const BATCH_SIZE = 100; // Process 100 files at a time
+  
+  for (let i = 0; i < total; i += BATCH_SIZE) {
+    const batch = videoFiles.slice(i, i + BATCH_SIZE);
+    
+    // Process batch
+    for (const file of batch) {
+      const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
+      if (!match) continue;
+      
+      const [, year, month, day, hour, minute, second, angle] = match;
+      const dateStr = `${year}-${month}-${day}`;
+      const timeStr = `${hour}-${minute}-${second}`;
+      const angleKey = angle.toLowerCase().replace(/-/g, '_');
+      
+      let timeMap = dateMap.get(dateStr);
+      if (!timeMap) {
+        timeMap = new Map();
+        dateMap.set(dateStr, timeMap);
+      }
+      
+      let angleMap = timeMap.get(timeStr);
+      if (!angleMap) {
+        angleMap = new Map();
+        timeMap.set(timeStr, angleMap);
+      }
+      
+      angleMap.set(angleKey, file);
+    }
+    
+    // Report progress
+    onProgress?.(Math.min(i + BATCH_SIZE, total), total);
+    
+    // Yield to main thread
+    if (i + BATCH_SIZE < total) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+  
+  // Convert to sorted array
+  const dates: DateEntry[] = [];
+  const sortedDates = Array.from(dateMap.keys()).sort();
+  
+  for (const dateStr of sortedDates) {
+    const timeMap = dateMap.get(dateStr)!;
+    const timeSlots: TimeSlot[] = [];
+    const sortedTimes = Array.from(timeMap.keys()).sort();
+    
+    for (const timeStr of sortedTimes) {
+      const angleMap = timeMap.get(timeStr)!;
+      const files: Record<string, File> = Object.fromEntries(angleMap);
+      
+      timeSlots.push({
+        time: timeStr,
+        displayTime: `${timeStr.slice(0, 2)}:${timeStr.slice(3, 5)}:${timeStr.slice(6, 8)}`,
         files,
       });
     }

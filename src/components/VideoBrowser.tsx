@@ -13,10 +13,24 @@ interface VideoBrowserProps {
 
 export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: VideoBrowserProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [currentMonth, setCurrentMonth] = useState(() => {
+  
+  // Find earliest date with videos
+  const earliestDate = useMemo(() => {
+    if (folderStructure.dates.length === 0) return null;
+    return folderStructure.dates[0].date; // Dates are already sorted
+  }, [folderStructure.dates]);
+  
+  // Parse earliest date for initial month
+  const initialMonth = useMemo(() => {
+    if (earliestDate) {
+      const [year, month] = earliestDate.split('-').map(Number);
+      return { year, month: month - 1 }; // month is 0-indexed in JS Date
+    }
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
-  });
+  }, [earliestDate]);
+  
+  const [currentMonth, setCurrentMonth] = useState(initialMonth);
 
   // Get selected date entry
   const selectedDateEntry = useMemo(() => {
@@ -78,6 +92,14 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     });
   };
 
+  const jumpToEarliestDate = () => {
+    if (earliestDate) {
+      const [year, month] = earliestDate.split('-').map(Number);
+      setCurrentMonth({ year, month: month - 1 });
+      setSelectedDate(earliestDate);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div 
@@ -86,7 +108,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
       >
         {/* Left: Calendar */}
         <div className="w-[400px] p-6 border-r border-gray-700">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <button
               onClick={goToPreviousMonth}
               className="p-1 rounded hover:bg-gray-800 text-gray-400"
@@ -107,6 +129,21 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
               </svg>
             </button>
           </div>
+
+          {/* Jump to earliest date button */}
+          {earliestDate && (
+            <div className="flex justify-center mb-3">
+              <button
+                onClick={jumpToEarliestDate}
+                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-600/10 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+                Jump to earliest ({earliestDate})
+              </button>
+            </div>
+          )}
 
           {/* Weekday headers */}
           <div className="grid grid-cols-7 gap-1 mb-2">

@@ -1174,7 +1174,7 @@ export function VideoPlayer({
                 <IconBolt size={16} />
               </button>
             </Tooltip>
-            <div className="relative">
+            <div className="relative flex items-center">
               <Tooltip content="Map (M)" position="top">
                 <button
                   onClick={() => setShowMap(prev => !prev)}
@@ -1182,7 +1182,7 @@ export function VideoPlayer({
                     e.preventDefault();
                     setShowMapSizeControl(prev => !prev);
                   }}
-                  className={`p-1.5 rounded transition-all ${
+                  className={`p-1.5 rounded transition-all h-[28px] flex items-center justify-center ${
                     showMap
                       ? 'bg-green-600 text-white'
                       : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
@@ -1193,7 +1193,7 @@ export function VideoPlayer({
               </Tooltip>
               {/* Map Size Control Popover */}
               {showMapSizeControl && showMap && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 rounded-lg p-3 shadow-xl border border-gray-700 z-50 w-40">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 rounded-lg p-3 shadow-xl border border-gray-700 z-[100] w-40">
                   <div className="text-xs text-gray-400 mb-2">Map Size</div>
                   <input
                     type="range"
@@ -1269,7 +1269,7 @@ export function VideoPlayer({
               <Tooltip content="Browse videos by date" position="top">
                 <button
                   onClick={onOpenVideoBrowser}
-                  className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-all bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30"
+                  className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-all bg-gray-700 text-gray-300 hover:bg-gray-600 h-[28px]"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />

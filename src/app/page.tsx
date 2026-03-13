@@ -6,7 +6,7 @@ import { VideoPlayer } from '@/components/VideoPlayer';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { VideoBrowser } from '@/components/VideoBrowser';
 import { VideoSequence, ProcessingProgress } from '@/types/video';
-import { FolderStructure, parseFolderStructure, TimeSlot } from '@/types/folder';
+import { FolderStructure, parseFolderStructure, parseFolderStructureAsync, TimeSlot } from '@/types/folder';
 import { processFilesToMoments, detectSequences } from '@/lib/sequence-detector';
 
 export default function Home() {
@@ -30,9 +30,27 @@ export default function Home() {
     const hasDirectoryStructure = newFiles.some(f => f.webkitRelativePath && f.webkitRelativePath.includes('/'));
     
     if (hasDirectoryStructure) {
-      // Parse folder structure
-      const structure = parseFolderStructure(newFiles);
+      // Show loading for folder parsing
+      setIsProcessing(true);
+      setProcessingProgress({
+        stage: 'scanning',
+        current: 0,
+        total: newFiles.length,
+        message: 'Parsing folder structure...',
+      });
+      
+      // Parse folder structure asynchronously with progress
+      const structure = await parseFolderStructureAsync(newFiles, (current, total) => {
+        setProcessingProgress(prev => ({
+          ...prev,
+          current,
+          total,
+          message: `Parsing folder structure... ${current}/${total}`,
+        }));
+      });
+      
       setFolderStructure(structure);
+      setIsProcessing(false);
       setShowVideoBrowser(true);
       return;
     }
