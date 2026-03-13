@@ -678,9 +678,17 @@ export function VideoPlayer({
       const handlePipCornerClick = (clickedAngle: string, idx: number) => {
         if (clickedAngle === 'map' || clickedAngle === 'none') return;
         
+        // Find where the current main angle is in the corners (if it exists)
+        const mainAngleInCornersIdx = corners.findIndex(c => c === selectedAngle);
+        
         // Swap the clicked angle with current main angle in corners array
         const newCorners = [...corners];
         newCorners[idx] = selectedAngle;
+        
+        // If main angle was already in corners, swap it with clicked angle
+        if (mainAngleInCornersIdx !== -1 && mainAngleInCornersIdx !== idx) {
+          newCorners[mainAngleInCornersIdx] = clickedAngle;
+        }
         
         // Update layout config with swapped corners
         handleLayoutConfigChange({
@@ -690,32 +698,6 @@ export function VideoPlayer({
         
         // Update selected angle to the clicked one
         handleAngleChange(clickedAngle);
-      };
-
-      // Render a single PiP corner element (camera, map, or nothing)
-      const renderPipCorner = (value: string, idx: number) => {
-        if (value === 'none' || value === selectedAngle) return null;
-        const pos = cornerPositions[idx];
-        if (value === 'map') {
-          if (!hasGps) return null;
-          return (
-            <div key={idx} className={`${pos} w-[18%] aspect-square rounded-lg overflow-hidden border border-white/20 shadow-lg pointer-events-auto`}>
-              <Suspense fallback={<div className="bg-gray-900 w-full h-full" />}>
-                <MapView seiData={mapSeiData} />
-              </Suspense>
-            </div>
-          );
-        }
-        if (!availableAngles.includes(value)) return null;
-        return (
-          <div
-            key={idx}
-            className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 transition-all`}
-            onClick={() => handlePipCornerClick(value, idx)}
-          >
-            {renderVideo(value, false, 'w-full', true)}
-          </div>
-        );
       };
 
       return (
@@ -728,7 +710,30 @@ export function VideoPlayer({
               {renderVideo(selectedAngle, true, 'w-full h-full')}
             </div>
             {/* All 5 PiP corners - each absolutely positioned */}
-            {corners.map((value, idx) => renderPipCorner(value, idx))}
+            {corners.map((value, idx) => {
+              if (value === 'none' || value === selectedAngle) return null;
+              const pos = cornerPositions[idx];
+              if (value === 'map') {
+                if (!hasGps) return null;
+                return (
+                  <div key={`pip-${idx}-${value}`} className={`${pos} w-[18%] aspect-square rounded-lg overflow-hidden border border-white/20 shadow-lg pointer-events-auto`}>
+                    <Suspense fallback={<div className="bg-gray-900 w-full h-full" />}>
+                      <MapView seiData={mapSeiData} />
+                    </Suspense>
+                  </div>
+                );
+              }
+              if (!availableAngles.includes(value)) return null;
+              return (
+                <div
+                  key={`pip-${idx}-${value}`}
+                  className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 transition-all`}
+                  onClick={() => handlePipCornerClick(value, idx)}
+                >
+                  {renderVideo(value, false, 'w-full', true)}
+                </div>
+              );
+            })}
 
             {renderPlayOverlay()}
           </div>
