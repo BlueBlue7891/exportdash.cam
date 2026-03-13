@@ -68,6 +68,6 @@ jobs:
             - Windows: `.exe` installer
             - macOS: `.dmg` disk image
             - Linux: `.AppImage` or `.deb`
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.rust_target }}
