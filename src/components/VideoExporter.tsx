@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { IconDownload, IconPlayerStop, IconLoader2, IconCheck } from '@tabler/icons-react';
 import { SeiData, SeiWithFrameIndex } from '@/lib/dashcam-mp4';
-import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { Output, Mp4OutputFormat, BufferTarget, VideoSampleSource, VideoSample } from 'mediabunny';
 import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG } from '@/types/video';
 import { Tooltip } from './Tooltip';
 
@@ -710,39 +710,25 @@ export function VideoExporter({
 
       setStatus('Initializing encoder...');
 
-      const muxer = new Muxer({
-        target: new ArrayBufferTarget(),
-        video: {
-          codec: 'avc',
-          width,
-          height,
-        },
-        fastStart: 'in-memory',
+      const output = new Output({
+        format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
+        target: new BufferTarget(),
       });
 
-      let encoderError: Error | null = null;
-      const encoder = new VideoEncoder({
-        output: (chunk, meta) => {
-          muxer.addVideoChunk(chunk, meta);
-        },
-        error: (e) => {
-          console.error('Encoder error:', e);
-          encoderError = e;
-        },
-      });
-
-      encoder.configure({
-        codec: 'avc1.640033',
-        width,
-        height,
+      const videoSource = new VideoSampleSource({
+        codec: 'avc',
         bitrate: 8_000_000,
-        framerate: exportFps,
         latencyMode: 'quality',
+        onEncoderConfig: (config) => {
+          console.log('Encoder config:', config);
+        },
+        onEncodedPacket: () => {
+          // Packet encoded successfully
+        },
       });
 
-      if ((encoder.state as string) === 'closed') {
-        throw new Error('Video encoder failed to initialize');
-      }
+      output.addVideoTrack(videoSource);
+      await output.start();
 
       // Helper to find clip and local time for an absolute time
       const findClipForTime = (absTime: number): { clipIdx: number; localTime: number } | null => {
@@ -778,11 +764,7 @@ export function VideoExporter({
       let currentLoadedAngle = '';
 
       for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
-        if (abortRef.current || encoderError) break;
-
-        if ((encoder.state as string) === 'closed') {
-          throw new Error('Encoder closed unexpectedly');
-        }
+        if (abortRef.current) break;
 
         const absoluteTime = exportStart + (frameIdx / exportFps);
 
@@ -975,7 +957,9 @@ export function VideoExporter({
           duration: (1 / exportFps) * 1_000_000,
         });
 
-        encoder.encode(frame, { keyFrame: frameCount % 30 === 0 });
+        const sample = new VideoSample(frame);
+        await videoSource.add(sample, { keyFrame: frameCount % 30 === 0 });
+        sample.close();
         frame.close();
 
         frameCount++;
@@ -988,27 +972,19 @@ export function VideoExporter({
         if (ev.blobUrl) URL.revokeObjectURL(ev.blobUrl);
       }
 
-      if (encoderError) {
-        throw encoderError;
-      }
-
       if (abortRef.current) {
-        if ((encoder.state as string) !== 'closed') {
-          encoder.close();
-        }
         setIsExporting(false);
         return;
       }
 
       setStatus('Finalizing...');
 
-      if ((encoder.state as string) !== 'closed') {
-        await encoder.flush();
-        encoder.close();
-      }
-      muxer.finalize();
+      await output.finalize();
 
-      const { buffer } = muxer.target;
+      const buffer = output.target.buffer;
+      if (!buffer) {
+        throw new Error('Failed to generate video output');
+      }
       const blob = new Blob([buffer], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
 
