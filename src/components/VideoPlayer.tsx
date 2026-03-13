@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback, lazy, Suspense, ReactNode, useMemo } from 'react';
 import { useSeiData } from '@/hooks/useSeiData';
 import { TelemetryCard } from './TelemetryCard';
-import { VideoSequence, ANGLE_LABELS, ANGLE_ORDER, VideoMoment, TrimPoints, CameraSegment, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, loadLayoutConfig, saveLayoutConfig } from '@/types/video';
+import { VideoSequence, ANGLE_LABELS, ANGLE_ORDER, VideoMoment, TrimPoints, CameraSegment, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, loadLayoutConfig, saveLayoutConfig, loadMapSize, saveMapSize, DEFAULT_MAP_SIZE, MIN_MAP_SIZE, MAX_MAP_SIZE } from '@/types/video';
 import { findMomentForTime, toAbsoluteTime } from '@/lib/sequence-detector';
 import {
   IconArrowUp,
@@ -50,6 +50,8 @@ interface VideoPlayerProps {
   onSelectSequence: (sequence: VideoSequence) => void;
   onClear: () => void;
   onAddFiles: (files: File[]) => void;
+  folderStructure?: { dates: { date: string; timeSlots: { time: string; files: Record<string, File> }[] }[] } | null;
+  onOpenVideoBrowser?: () => void;
 }
 
 const ANGLE_ICONS: Record<string, ReactNode> = {
@@ -103,6 +105,8 @@ export function VideoPlayer({
   onSelectSequence,
   onClear,
   onAddFiles,
+  folderStructure,
+  onOpenVideoBrowser,
 }: VideoPlayerProps) {
   const [showSequenceMenu, setShowSequenceMenu] = useState(false);
   const mainVideoRef = useRef<HTMLVideoElement>(null);
@@ -129,14 +133,25 @@ export function VideoPlayer({
   const [layoutConfig, setLayoutConfig] = useState<LayoutCameraConfig>(DEFAULT_LAYOUT_CONFIG);
   const [showLayoutConfig, setShowLayoutConfig] = useState(false);
 
+  // Map size config
+  const [mapSize, setMapSize] = useState<number>(DEFAULT_MAP_SIZE);
+  const [showMapSizeControl, setShowMapSizeControl] = useState(false);
+
   // Load layout config from localStorage on mount
   useEffect(() => {
     setLayoutConfig(loadLayoutConfig());
+    setMapSize(loadMapSize());
   }, []);
 
   const handleLayoutConfigChange = useCallback((newConfig: LayoutCameraConfig) => {
     setLayoutConfig(newConfig);
     saveLayoutConfig(newConfig);
+  }, []);
+
+  const handleMapSizeChange = useCallback((newSize: number) => {
+    const clampedSize = Math.max(MIN_MAP_SIZE, Math.min(MAX_MAP_SIZE, newSize));
+    setMapSize(clampedSize);
+    saveMapSize(clampedSize);
   }, []);
 
   // Edit mode state
@@ -555,6 +570,21 @@ export function VideoPlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePlay, absoluteTime, sequence, seekToAbsoluteTime, handleLayoutChange, toggleFullscreen, skipToPreviousClip, skipToNextClip, toggleTrimMode]);
 
+  // Close map size control when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showMapSizeControl) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.relative') || target.closest('input[type="range"]')) {
+          return;
+        }
+        setShowMapSizeControl(false);
+      }
+    };
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [showMapSizeControl]);
+
   if (!sequence || !currentMoment || Object.keys(videoUrls).length === 0) {
     return (
       <div className="bg-gray-900 rounded-xl aspect-video flex items-center justify-center">
@@ -868,7 +898,7 @@ export function VideoPlayer({
 
             {/* Map Overlay - only for non-PiP layouts */}
             {showMap && layout !== 'pip' && (
-              <div className="absolute w-[270px] h-[270px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto bottom-4 right-4">
+              <div className="absolute rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto bottom-4 right-4" style={{ width: mapSize, height: mapSize }}>
                 <Suspense fallback={
                   <div className="bg-gray-900 w-full h-full flex items-center justify-center">
                     <div className="text-gray-500 text-xs">Loading...</div>
@@ -883,7 +913,7 @@ export function VideoPlayer({
 
         {/* PiP External Map - positioned at video container level (right side black area) */}
         {showMap && layout === 'pip' && !layoutConfig.pip.corners.includes('map') && (
-          <div className="absolute bottom-4 right-4 w-[270px] h-[270px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto z-30">
+          <div className="absolute bottom-4 right-4 rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto z-30" style={{ width: mapSize, height: mapSize }}>
             <Suspense fallback={
               <div className="bg-gray-900 w-full h-full flex items-center justify-center">
                 <div className="text-gray-500 text-xs">Loading...</div>
@@ -1144,18 +1174,39 @@ export function VideoPlayer({
                 <IconBolt size={16} />
               </button>
             </Tooltip>
-            <Tooltip content="Map (M)" position="top">
-              <button
-                onClick={() => setShowMap(prev => !prev)}
-                className={`p-1.5 rounded transition-all ${
-                  showMap
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                }`}
-              >
-                <IconMapPin size={16} />
-              </button>
-            </Tooltip>
+            <div className="relative">
+              <Tooltip content="Map (M)" position="top">
+                <button
+                  onClick={() => setShowMap(prev => !prev)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setShowMapSizeControl(prev => !prev);
+                  }}
+                  className={`p-1.5 rounded transition-all ${
+                    showMap
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  }`}
+                >
+                  <IconMapPin size={16} />
+                </button>
+              </Tooltip>
+              {/* Map Size Control Popover */}
+              {showMapSizeControl && showMap && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 rounded-lg p-3 shadow-xl border border-gray-700 z-50 w-40">
+                  <div className="text-xs text-gray-400 mb-2">Map Size</div>
+                  <input
+                    type="range"
+                    min={MIN_MAP_SIZE}
+                    max={MAX_MAP_SIZE}
+                    value={mapSize}
+                    onChange={(e) => handleMapSizeChange(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="text-xs text-gray-500 mt-1 text-center">{mapSize}px</div>
+                </div>
+              )}
+            </div>
             <Tooltip content="Date/Time (D)" position="top">
               <button
                 onClick={() => setShowDateTime(prev => !prev)}
@@ -1212,6 +1263,21 @@ export function VideoPlayer({
 
             {/* Divider */}
             <div className="w-px h-4 bg-gray-600 mx-1" />
+
+            {/* Video Browser Button (only when folder imported) */}
+            {folderStructure && onOpenVideoBrowser && (
+              <Tooltip content="Browse videos by date" position="top">
+                <button
+                  onClick={onOpenVideoBrowser}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-all bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Calendar</span>
+                </button>
+              </Tooltip>
+            )}
 
             {/* Sequence Selector */}
             <button

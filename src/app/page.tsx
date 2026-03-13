@@ -4,7 +4,9 @@ import { useState, useCallback } from 'react';
 import { DropZone } from '@/components/DropZone';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { LoadingScreen } from '@/components/LoadingScreen';
+import { VideoBrowser } from '@/components/VideoBrowser';
 import { VideoSequence, ProcessingProgress } from '@/types/video';
+import { FolderStructure, parseFolderStructure, TimeSlot } from '@/types/folder';
 import { processFilesToMoments, detectSequences } from '@/lib/sequence-detector';
 
 export default function Home() {
@@ -16,9 +18,24 @@ export default function Home() {
     current: 0,
     total: 0,
   });
+  
+  // Folder import state
+  const [folderStructure, setFolderStructure] = useState<FolderStructure | null>(null);
+  const [showVideoBrowser, setShowVideoBrowser] = useState(false);
 
   const handleFilesAdded = useCallback(async (newFiles: File[]) => {
     if (newFiles.length === 0) return;
+    
+    // Check if this looks like a folder import (has directory structure)
+    const hasDirectoryStructure = newFiles.some(f => f.webkitRelativePath && f.webkitRelativePath.includes('/'));
+    
+    if (hasDirectoryStructure) {
+      // Parse folder structure
+      const structure = parseFolderStructure(newFiles);
+      setFolderStructure(structure);
+      setShowVideoBrowser(true);
+      return;
+    }
 
     // Start processing
     setIsProcessing(true);
@@ -55,10 +72,46 @@ export default function Home() {
       setIsProcessing(false);
     }
   }, []);
+  
+  const handleSelectTimeSlot = useCallback(async (timeSlot: TimeSlot) => {
+    const files = Object.values(timeSlot.files);
+    if (files.length === 0) return;
+    
+    setShowVideoBrowser(false);
+    setIsProcessing(true);
+    setProcessingProgress({
+      stage: 'scanning',
+      current: 0,
+      total: files.length,
+      message: 'Scanning files...',
+    });
+
+    try {
+      // Also include event.json from the same folder if available
+      const allFiles = [...files];
+      const eventJson = folderStructure?.allFiles.find(f => f.name === 'event.json');
+      if (eventJson) {
+        allFiles.push(eventJson);
+      }
+      
+      const { moments, events } = await processFilesToMoments(allFiles, setProcessingProgress);
+      const detectedSequences = detectSequences(moments, events);
+      
+      setSequences(detectedSequences);
+      if (detectedSequences.length > 0) {
+        setSelectedSequence(detectedSequences[0]);
+      }
+    } catch (error) {
+      console.error('Error processing videos:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [folderStructure]);
 
   const handleClear = useCallback(() => {
     setSequences([]);
     setSelectedSequence(null);
+    setFolderStructure(null);
   }, []);
 
   return (
@@ -295,6 +348,17 @@ export default function Home() {
             onSelectSequence={setSelectedSequence}
             onClear={handleClear}
             onAddFiles={handleFilesAdded}
+            folderStructure={folderStructure}
+            onOpenVideoBrowser={() => setShowVideoBrowser(true)}
+          />
+        )}
+        
+        {/* Video Browser Modal */}
+        {showVideoBrowser && folderStructure && (
+          <VideoBrowser
+            folderStructure={folderStructure}
+            onSelectTimeSlot={handleSelectTimeSlot}
+            onClose={() => setShowVideoBrowser(false)}
           />
         )}
       </main>

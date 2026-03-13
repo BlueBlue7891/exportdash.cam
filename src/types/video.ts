@@ -151,6 +151,33 @@ export function saveLayoutConfig(config: LayoutCameraConfig): void {
   }
 }
 
+/** Map size configuration */
+export const DEFAULT_MAP_SIZE = 270; // 270px default (1.5x of original 180px)
+export const MIN_MAP_SIZE = 150;
+export const MAX_MAP_SIZE = 400;
+export const MAP_SIZE_KEY = 'tesla-cam-map-size';
+
+export function loadMapSize(): number {
+  try {
+    const stored = localStorage.getItem(MAP_SIZE_KEY);
+    if (!stored) return DEFAULT_MAP_SIZE;
+    const size = parseInt(stored, 10);
+    if (isNaN(size)) return DEFAULT_MAP_SIZE;
+    return Math.max(MIN_MAP_SIZE, Math.min(MAX_MAP_SIZE, size));
+  } catch {
+    return DEFAULT_MAP_SIZE;
+  }
+}
+
+export function saveMapSize(size: number): void {
+  try {
+    const clampedSize = Math.max(MIN_MAP_SIZE, Math.min(MAX_MAP_SIZE, size));
+    localStorage.setItem(MAP_SIZE_KEY, String(clampedSize));
+  } catch {
+    // Silently fail if localStorage is full or unavailable
+  }
+}
+
 /** Trim points for video export */
 export interface TrimPoints {
   inPoint: number;   // Start time in seconds

@@ -182,16 +182,28 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
             {' '}→ select a dated folder and drop all clips
           </p>
         </div>
-        <label className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
-          <span>Browse Files</span>
-          <input
-            type="file"
-            accept="video/mp4,application/json"
-            multiple
-            onChange={handleFileInput}
-            className="hidden"
-          />
-        </label>
+        <div className="flex items-center gap-3 mt-4">
+          <label className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
+            <span>Browse Files</span>
+            <input
+              type="file"
+              accept="video/mp4,application/json"
+              multiple
+              onChange={handleFileInput}
+              className="hidden"
+            />
+          </label>
+          <label className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg cursor-pointer transition-colors border border-gray-600">
+            <span>Import Folder</span>
+            <input
+              type="file"
+              webkitdirectory=""
+              directory=""
+              onChange={handleFileInput}
+              className="hidden"
+            />
+          </label>
+        </div>
       </div>
     </div>
   );
