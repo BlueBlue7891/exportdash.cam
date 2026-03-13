@@ -5,7 +5,9 @@
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
       "Bash(npm run:*)",
-      "Bash(curl -s http://localhost:3000 -o /dev/null -w \"%{http_code}\")"
+      "Bash(curl -s http://localhost:3000 -o /dev/null -w \"%{http_code}\")",
+      "Bash(npx tauri:*)",
+      "Bash(rustc --version)"
     ]
   }
 }

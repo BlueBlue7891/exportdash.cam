@@ -197,8 +197,7 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
             <span>Import Folder</span>
             <input
               type="file"
-              webkitdirectory=""
-              directory=""
+              {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
               onChange={handleFileInput}
               className="hidden"
             />
