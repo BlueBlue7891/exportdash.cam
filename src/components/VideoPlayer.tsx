@@ -714,7 +714,7 @@ export function VideoPlayer({
               if (value === 'none' || value === selectedAngle) return null;
               const pos = cornerPositions[idx];
               if (value === 'map') {
-                if (!hasGps) return null;
+                // Map in PiP corner - always show if configured (even without GPS, will show empty state)
                 return (
                   <div key={`pip-${idx}-${value}`} className={`${pos} w-[18%] aspect-square rounded-lg overflow-hidden border border-white/20 shadow-lg pointer-events-auto`}>
                     <Suspense fallback={<div className="bg-gray-900 w-full h-full" />}>
@@ -812,7 +812,7 @@ export function VideoPlayer({
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col gap-2 ${
+      className={`relative flex flex-col gap-2 ${
         isFullscreen
           ? 'fixed inset-0 z-50 bg-black p-4'
           : 'max-w-[1800px] mx-auto h-[calc(100vh-2rem)]'
@@ -866,11 +866,9 @@ export function VideoPlayer({
               </div>
             )}
 
-            {/* Map Overlay - skip if map is already in a PiP corner */}
-            {showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map')) && (
-              <div className={`absolute w-[180px] h-[180px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto ${
-                layout === 'pip' ? 'top-3 right-3' : 'bottom-3 right-3'
-              }`}>
+            {/* Map Overlay - only for non-PiP layouts */}
+            {showMap && layout !== 'pip' && (
+              <div className="absolute w-[180px] h-[180px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto bottom-3 right-3">
                 <Suspense fallback={
                   <div className="bg-gray-900 w-full h-full flex items-center justify-center">
                     <div className="text-gray-500 text-xs">Loading...</div>
@@ -883,6 +881,19 @@ export function VideoPlayer({
           </div>
         </div>
       </div>
+
+      {/* PiP External Map - shown when no map in PiP corners, positioned at right side like Single view */}
+      {showMap && layout === 'pip' && !layoutConfig.pip.corners.includes('map') && (
+        <div className="absolute top-20 right-4 w-[180px] h-[180px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto z-30">
+          <Suspense fallback={
+            <div className="bg-gray-900 w-full h-full flex items-center justify-center">
+              <div className="text-gray-500 text-xs">Loading...</div>
+            </div>
+          }>
+            <MapView seiData={mapSeiData} />
+          </Suspense>
+        </div>
+      )}
 
       {/* Controls Area - Scrollable if needed */}
       <div className={`flex-1 overflow-y-auto space-y-2 min-h-0 ${isFullscreen ? '' : ''}`}>
