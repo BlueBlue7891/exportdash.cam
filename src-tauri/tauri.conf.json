@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "TeslaCam",
+  "productName": "ExportDashCam",
   "version": "0.1.0",
   "identifier": "com.exportdash.teslacam",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Tesla Cam",
+        "title": "ExportDash.Cam",
         "width": 1280,
         "height": 800,
         "resizable": true,
