@@ -571,7 +571,7 @@ export function VideoPlayer({
   const availableAngles = currentMoment.videos.map(v => v.angle);
 
   // Render a single video element
-  const renderVideo = (angle: string, isMain: boolean, className: string = '') => {
+  const renderVideo = (angle: string, isMain: boolean, className: string = '', showLabel: boolean = false) => {
     const url = videoUrls[angle];
     const isAvailable = availableAngles.includes(angle);
 
@@ -604,6 +604,12 @@ export function VideoPlayer({
         />
         {isMain && layout !== 'single' && layout !== 'pip' && (
           <div className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full" />
+        )}
+        {/* Angle label for small windows (non-main videos) */}
+        {showLabel && !isMain && (
+          <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] text-white/90 font-medium pointer-events-none">
+            {ANGLE_LABELS[angle] || angle}
+          </div>
         )}
       </div>
     );
@@ -686,7 +692,7 @@ export function VideoPlayer({
             key={idx}
             className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg pointer-events-none`}
           >
-            {renderVideo(value, false, 'w-full')}
+            {renderVideo(value, false, 'w-full', true)}
           </div>
         );
       };
@@ -728,7 +734,7 @@ export function VideoPlayer({
                   } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
                   onClick={() => isAvailable && handleAngleChange(angle)}
                 >
-                  {renderVideo(angle, isMain, 'w-full')}
+                  {renderVideo(angle, isMain, 'w-full', true)}
                 </div>
               );
             })}
@@ -762,7 +768,7 @@ export function VideoPlayer({
                       } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
                       onClick={() => isAvailable && handleAngleChange(angle)}
                     >
-                      {renderVideo(angle, isMain, 'w-full h-full')}
+                      {renderVideo(angle, isMain, 'w-full h-full', true)}
                     </div>
                   );
                 })}
