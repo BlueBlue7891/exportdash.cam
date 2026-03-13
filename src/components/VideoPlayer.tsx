@@ -608,7 +608,7 @@ export function VideoPlayer({
         {/* Angle label for all videos (blue for main, black for others) */}
         {showLabel && (
           <div className={`absolute bottom-1 ${moreLabelSpacing ? 'left-2' : 'left-1'} px-1.5 py-0.5 backdrop-blur-sm rounded text-[10px] text-white/90 font-medium pointer-events-none ${
-            isMain ? 'bg-blue-600/80' : 'bg-black/70'
+            isMain ? 'bg-blue-600/50' : 'bg-black/50'
           }`}>
             {ANGLE_LABELS[angle] || angle}
           </div>
