@@ -868,7 +868,7 @@ export function VideoPlayer({
 
             {/* Map Overlay - only for non-PiP layouts */}
             {showMap && layout !== 'pip' && (
-              <div className="absolute w-[180px] h-[180px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto bottom-3 right-3">
+              <div className="absolute w-[270px] h-[270px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto bottom-4 right-4">
                 <Suspense fallback={
                   <div className="bg-gray-900 w-full h-full flex items-center justify-center">
                     <div className="text-gray-500 text-xs">Loading...</div>
@@ -880,20 +880,20 @@ export function VideoPlayer({
             )}
           </div>
         </div>
-      </div>
 
-      {/* PiP External Map - shown when no map in PiP corners, positioned at right side like Single view */}
-      {showMap && layout === 'pip' && !layoutConfig.pip.corners.includes('map') && (
-        <div className="absolute top-20 right-4 w-[180px] h-[180px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto z-30">
-          <Suspense fallback={
-            <div className="bg-gray-900 w-full h-full flex items-center justify-center">
-              <div className="text-gray-500 text-xs">Loading...</div>
-            </div>
-          }>
-            <MapView seiData={mapSeiData} />
-          </Suspense>
-        </div>
-      )}
+        {/* PiP External Map - positioned at video container level (right side black area) */}
+        {showMap && layout === 'pip' && !layoutConfig.pip.corners.includes('map') && (
+          <div className="absolute bottom-4 right-4 w-[270px] h-[270px] rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto z-30">
+            <Suspense fallback={
+              <div className="bg-gray-900 w-full h-full flex items-center justify-center">
+                <div className="text-gray-500 text-xs">Loading...</div>
+              </div>
+            }>
+              <MapView seiData={mapSeiData} />
+            </Suspense>
+          </div>
+        )}
+      </div>
 
       {/* Controls Area - Scrollable if needed */}
       <div className={`flex-1 overflow-y-auto space-y-2 min-h-0 ${isFullscreen ? '' : ''}`}>
