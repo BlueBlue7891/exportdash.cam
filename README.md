@@ -1,4 +1,4 @@
-# ExportDash
+# ExportDashCam
 
 > Tesla dashcam viewer with seamless playback, live telemetry overlays, and video export.
 
@@ -17,6 +17,9 @@
 - **Event Timeline** — Visual timeline showing brake, gas, turn signals, and steering events
 - **Video Export** — Export clips with telemetry burned into the video
 - **100% Client-Side** — All processing happens in your browser, no uploads required
+- **Video Browser** — Browse and select specific videos from your TeslaCam folder
+- **Adjustable Map Size** — Right-click the map toggle to resize the map (180-330px)
+- **Desktop App** — Optional Tauri desktop application for Windows
 
 ## Deploy
 
@@ -60,6 +63,18 @@ docker compose up
 
 Open [http://localhost:8080](http://localhost:8080)
 
+### Desktop App (Windows)
+
+```bash
+# Build the Next.js frontend
+npm run build
+
+# Build Tauri desktop app
+npm run tauri build
+```
+
+The built application will be available at `src-tauri/target/release/`.
+
 ## How It Works
 
 Tesla dashcam videos contain embedded SEI (Supplemental Enhancement Information) metadata with telemetry data:
@@ -94,6 +109,7 @@ Clip 6: 10:45:00 (60s) ─→ New sequence (12min gap)
 - **Video:** Native HTML5 video with WebCodecs for export
 - **Maps:** Leaflet with OpenStreetMap
 - **Protobuf:** protobufjs for SEI metadata decoding
+- **Desktop:** Tauri v2 (optional)
 
 ## Keyboard Shortcuts
 
@@ -122,6 +138,7 @@ src/
 │   ├── TelemetryTimeline.tsx # Event timeline visualization
 │   ├── MapView.tsx       # GPS map overlay
 │   ├── VideoExporter.tsx # WebCodecs-based export
+│   ├── VideoBrowser.tsx  # Video folder browser
 │   ├── DropZone.tsx      # File/folder drop handling
 │   └── LoadingScreen.tsx # Processing progress UI
 ├── hooks/
@@ -129,8 +146,10 @@ src/
 ├── lib/
 │   ├── dashcam-mp4.ts    # MP4 parsing & SEI extraction
 │   └── sequence-detector.ts # Clip merging logic
-└── types/
-    └── video.ts          # TypeScript definitions
+├── types/
+│   ├── video.ts          # TypeScript definitions
+│   └── folder.ts         # Folder structure types
+└── src-tauri/            # Tauri desktop app (optional)
 ```
 
 ## Credits
