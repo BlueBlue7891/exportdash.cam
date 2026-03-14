@@ -75,7 +75,7 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
     >
       <div 
         ref={contentRef}
-        className="bg-gray-900/30 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
+        className="bg-gray-900/50 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
       >
         <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
         {(event.city || event.street) && (
