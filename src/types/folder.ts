@@ -2,11 +2,35 @@
  * Folder structure types for Tesla Dashcam folder import
  */
 
+/** Video source category from TeslaCam folder structure */
+export type VideoSource = 'recent' | 'saved' | 'sentry' | 'encrypted' | 'photobooth' | 'unknown';
+
+/** Source category labels */
+export const SOURCE_LABELS: Record<VideoSource, string> = {
+  recent: 'Recent',
+  saved: 'Saved',
+  sentry: 'Sentry',
+  encrypted: 'Encrypted',
+  photobooth: 'Photo',
+  unknown: 'Unknown',
+};
+
+/** Source category colors for UI */
+export const SOURCE_COLORS: Record<VideoSource, string> = {
+  recent: 'bg-blue-600/20 text-blue-400',
+  saved: 'bg-green-600/20 text-green-400',
+  sentry: 'bg-red-600/20 text-red-400',
+  encrypted: 'bg-purple-600/20 text-purple-400',
+  photobooth: 'bg-yellow-600/20 text-yellow-400',
+  unknown: 'bg-gray-600/20 text-gray-400',
+};
+
 /** Represents a single timestamp entry with all 6 camera videos */
 export interface TimeSlot {
   time: string;        // HH-MM-SS
   displayTime: string; // HH:MM:SS
   files: Record<string, File>; // angle -> File mapping
+  sources: VideoSource[]; // Source categories for this time slot
 }
 
 /** Represents a single date entry with multiple time slots */
@@ -22,16 +46,29 @@ export interface FolderStructure {
   allFiles: File[];
 }
 
+/** Detect video source from file path */
+function detectSource(file: File): VideoSource {
+  // Try multiple path sources: Tauri path, webkitRelativePath (browser folder import), or name
+  const path = (file as any).tauriPath || (file as any).webkitRelativePath || file.name;
+  const lowerPath = path.toLowerCase();
+  
+  if (lowerPath.includes('recentclips')) return 'recent';
+  if (lowerPath.includes('savedclips')) return 'saved';
+  if (lowerPath.includes('sentryclips')) return 'sentry';
+  if (lowerPath.includes('encryptedclips')) return 'encrypted';
+  if (lowerPath.includes('photobooth')) return 'photobooth';
+  return 'unknown';
+}
+
 /** Parse TeslaCam folder structure from files (batched for performance) */
 export function parseFolderStructure(files: File[]): FolderStructure {
-  const dateMap = new Map<string, Map<string, Map<string, File>>>();
+  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource> }>>();
   
   // Filter only video files first to reduce iteration
   const videoFiles = files.filter(f => f.name.endsWith('.mp4'));
   
   for (const file of videoFiles) {
     // Parse Tesla filename format: YYYY-MM-DD_HH-MM-SS-angle.mp4
-    // Use a more specific regex for better performance
     const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
     if (!match) continue;
     
@@ -39,6 +76,7 @@ export function parseFolderStructure(files: File[]): FolderStructure {
     const dateStr = `${year}-${month}-${day}`;
     const timeStr = `${hour}-${minute}-${second}`;
     const angleKey = angle.toLowerCase().replace(/-/g, '_');
+    const source = detectSource(file);
     
     // Fast path - avoid repeated lookups
     let timeMap = dateMap.get(dateStr);
@@ -47,13 +85,14 @@ export function parseFolderStructure(files: File[]): FolderStructure {
       dateMap.set(dateStr, timeMap);
     }
     
-    let angleMap = timeMap.get(timeStr);
-    if (!angleMap) {
-      angleMap = new Map();
-      timeMap.set(timeStr, angleMap);
+    let slotData = timeMap.get(timeStr);
+    if (!slotData) {
+      slotData = { files: new Map(), sources: new Set() };
+      timeMap.set(timeStr, slotData);
     }
     
-    angleMap.set(angleKey, file);
+    slotData.files.set(angleKey, file);
+    slotData.sources.add(source);
   }
   
   // Convert to sorted array structure
@@ -66,14 +105,13 @@ export function parseFolderStructure(files: File[]): FolderStructure {
     const sortedTimes = Array.from(timeMap.keys()).sort();
     
     for (const timeStr of sortedTimes) {
-      const angleMap = timeMap.get(timeStr)!;
-      // Convert Map to object using Object.fromEntries (faster than manual iteration)
-      const files: Record<string, File> = Object.fromEntries(angleMap);
+      const slotData = timeMap.get(timeStr)!;
       
       timeSlots.push({
         time: timeStr,
         displayTime: `${timeStr.slice(0, 2)}:${timeStr.slice(3, 5)}:${timeStr.slice(6, 8)}`,
-        files,
+        files: Object.fromEntries(slotData.files),
+        sources: Array.from(slotData.sources),
       });
     }
     
@@ -95,15 +133,14 @@ export async function parseFolderStructureAsync(
   files: File[],
   onProgress?: (current: number, total: number) => void
 ): Promise<FolderStructure> {
-  const dateMap = new Map<string, Map<string, Map<string, File>>>();
+  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource> }>>();
   const videoFiles = files.filter(f => f.name.endsWith('.mp4'));
   const total = videoFiles.length;
-  const BATCH_SIZE = 100; // Process 100 files at a time
+  const BATCH_SIZE = 100;
   
   for (let i = 0; i < total; i += BATCH_SIZE) {
     const batch = videoFiles.slice(i, i + BATCH_SIZE);
     
-    // Process batch
     for (const file of batch) {
       const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
       if (!match) continue;
@@ -112,6 +149,7 @@ export async function parseFolderStructureAsync(
       const dateStr = `${year}-${month}-${day}`;
       const timeStr = `${hour}-${minute}-${second}`;
       const angleKey = angle.toLowerCase().replace(/-/g, '_');
+      const source = detectSource(file);
       
       let timeMap = dateMap.get(dateStr);
       if (!timeMap) {
@@ -119,25 +157,23 @@ export async function parseFolderStructureAsync(
         dateMap.set(dateStr, timeMap);
       }
       
-      let angleMap = timeMap.get(timeStr);
-      if (!angleMap) {
-        angleMap = new Map();
-        timeMap.set(timeStr, angleMap);
+      let slotData = timeMap.get(timeStr);
+      if (!slotData) {
+        slotData = { files: new Map(), sources: new Set() };
+        timeMap.set(timeStr, slotData);
       }
       
-      angleMap.set(angleKey, file);
+      slotData.files.set(angleKey, file);
+      slotData.sources.add(source);
     }
     
-    // Report progress
     onProgress?.(Math.min(i + BATCH_SIZE, total), total);
     
-    // Yield to main thread
     if (i + BATCH_SIZE < total) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
   
-  // Convert to sorted array
   const dates: DateEntry[] = [];
   const sortedDates = Array.from(dateMap.keys()).sort();
   
@@ -147,13 +183,13 @@ export async function parseFolderStructureAsync(
     const sortedTimes = Array.from(timeMap.keys()).sort();
     
     for (const timeStr of sortedTimes) {
-      const angleMap = timeMap.get(timeStr)!;
-      const files: Record<string, File> = Object.fromEntries(angleMap);
+      const slotData = timeMap.get(timeStr)!;
       
       timeSlots.push({
         time: timeStr,
         displayTime: `${timeStr.slice(0, 2)}:${timeStr.slice(3, 5)}:${timeStr.slice(6, 8)}`,
-        files,
+        files: Object.fromEntries(slotData.files),
+        sources: Array.from(slotData.sources),
       });
     }
     

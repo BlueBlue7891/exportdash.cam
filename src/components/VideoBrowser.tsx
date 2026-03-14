@@ -1,7 +1,15 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { DateEntry, TimeSlot, hasAllCameras, getCameraCount } from '@/types/folder';
+import { 
+  DateEntry, 
+  TimeSlot, 
+  hasAllCameras, 
+  getCameraCount, 
+  SOURCE_LABELS, 
+  SOURCE_COLORS, 
+  VideoSource 
+} from '@/types/folder';
 
 interface VideoBrowserProps {
   folderStructure: {
@@ -11,20 +19,50 @@ interface VideoBrowserProps {
   onClose: () => void;
 }
 
+const ALL_SOURCES: VideoSource[] = ['recent', 'saved', 'sentry', 'encrypted', 'photobooth', 'unknown'];
+
 export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: VideoBrowserProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
-  // Find earliest date with videos
-  const earliestDate = useMemo(() => {
-    if (folderStructure.dates.length === 0) return null;
-    return folderStructure.dates[0].date; // Dates are already sorted
+  // Compute available sources and their counts
+  const sourceStats = useMemo(() => {
+    const stats = new Map<VideoSource, number>();
+    for (const source of ALL_SOURCES) {
+      stats.set(source, 0);
+    }
+    
+    for (const date of folderStructure.dates) {
+      for (const slot of date.timeSlots) {
+        for (const source of slot.sources) {
+          stats.set(source, (stats.get(source) || 0) + 1);
+        }
+      }
+    }
+    return stats;
   }, [folderStructure.dates]);
+  
+  // Filter dates based on selected sources
+  const filteredDates = useMemo(() => {
+    return folderStructure.dates.map(date => ({
+      ...date,
+      timeSlots: date.timeSlots.filter(slot => 
+        slot.sources.some(source => selectedSources.has(source))
+      )
+    })).filter(date => date.timeSlots.length > 0);
+  }, [folderStructure.dates, selectedSources]);
+  
+  // Find earliest date with videos (from filtered)
+  const earliestDate = useMemo(() => {
+    if (filteredDates.length === 0) return null;
+    return filteredDates[0].date;
+  }, [filteredDates]);
   
   // Parse earliest date for initial month
   const initialMonth = useMemo(() => {
     if (earliestDate) {
       const [year, month] = earliestDate.split('-').map(Number);
-      return { year, month: month - 1 }; // month is 0-indexed in JS Date
+      return { year, month: month - 1 };
     }
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -32,33 +70,31 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
 
-  // Get selected date entry
+  // Get selected date entry (from filtered)
   const selectedDateEntry = useMemo(() => {
     if (!selectedDate) return null;
-    return folderStructure.dates.find(d => d.date === selectedDate) || null;
-  }, [selectedDate, folderStructure.dates]);
+    return filteredDates.find(d => d.date === selectedDate) || null;
+  }, [selectedDate, filteredDates]);
 
-  // Parse dates with available videos
+  // Parse dates with available videos (filtered)
   const datesWithVideos = useMemo(() => {
-    return new Set(folderStructure.dates.map(d => d.date));
-  }, [folderStructure.dates]);
+    return new Set(filteredDates.map(d => d.date));
+  }, [filteredDates]);
 
   // Generate calendar days
   const calendarDays = useMemo(() => {
     const { year, month } = currentMonth;
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const startPadding = firstDay.getDay(); // 0 = Sunday
+    const startPadding = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
     
     const days: { day: number; dateStr: string; hasVideos: boolean }[] = [];
     
-    // Padding days
     for (let i = 0; i < startPadding; i++) {
       days.push({ day: 0, dateStr: '', hasVideos: false });
     }
     
-    // Actual days
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       days.push({
@@ -100,88 +136,171 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     }
   };
 
+  const toggleSource = (source: VideoSource) => {
+    setSelectedSources(prev => {
+      const next = new Set(prev);
+      if (next.has(source)) {
+        next.delete(source);
+      } else {
+        next.add(source);
+      }
+      return next;
+    });
+    // Clear selected date if it's no longer in filtered results
+    if (selectedDate && !filteredDates.find(d => d.date === selectedDate)) {
+      setSelectedDate(null);
+    }
+  };
+
+  const selectAllSources = () => {
+    setSelectedSources(new Set(ALL_SOURCES));
+  };
+
+  const clearAllSources = () => {
+    setSelectedSources(new Set());
+    setSelectedDate(null);
+  };
+
+  // Calculate total recordings after filter
+  const totalRecordings = useMemo(() => {
+    return filteredDates.reduce((sum, d) => sum + d.timeSlots.length, 0);
+  }, [filteredDates]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div 
-        className="bg-gray-900 rounded-xl w-[900px] max-h-[80vh] shadow-2xl border border-gray-700 overflow-hidden flex"
+        className="bg-gray-900 rounded-xl w-[1000px] max-h-[85vh] shadow-2xl border border-gray-700 overflow-hidden flex"
         onClick={e => e.stopPropagation()}
       >
-        {/* Left: Calendar */}
-        <div className="w-[400px] p-6 border-r border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <button
-              onClick={goToPreviousMonth}
-              className="p-1 rounded hover:bg-gray-800 text-gray-400"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <h3 className="text-lg font-semibold text-white">
-              {monthNames[currentMonth.month]} {currentMonth.year}
-            </h3>
-            <button
-              onClick={goToNextMonth}
-              className="p-1 rounded hover:bg-gray-800 text-gray-400"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Jump to earliest date button */}
-          {earliestDate && (
-            <div className="flex justify-center mb-3">
+        {/* Left: Calendar + Filters */}
+        <div className="w-[360px] flex flex-col border-r border-gray-700">
+          {/* Calendar Section */}
+          <div className="p-5 flex-shrink-0">
+            <div className="flex items-center justify-between mb-2">
               <button
-                onClick={jumpToEarliestDate}
-                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-600/10 transition-colors"
+                onClick={goToPreviousMonth}
+                className="p-1 rounded hover:bg-gray-800 text-gray-400"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Jump to earliest ({earliestDate})
+              </button>
+              <h3 className="text-lg font-semibold text-white">
+                {monthNames[currentMonth.month]} {currentMonth.year}
+              </h3>
+              <button
+                onClick={goToNextMonth}
+                className="p-1 rounded hover:bg-gray-800 text-gray-400"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
-          )}
 
-          {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} className="text-center text-xs text-gray-500 py-1">
-                {day}
+            {earliestDate && (
+              <div className="flex justify-center mb-3">
+                <button
+                  onClick={jumpToEarliestDate}
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-600/10 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                  Jump to earliest ({earliestDate})
+                </button>
               </div>
-            ))}
+            )}
+
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <div key={day} className="text-center text-xs text-gray-500 py-1">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((dayInfo, idx) => (
+                <button
+                  key={idx}
+                  disabled={!dayInfo.hasVideos}
+                  onClick={() => dayInfo.hasVideos && setSelectedDate(dayInfo.dateStr)}
+                  className={`
+                    aspect-square rounded-lg text-sm font-medium transition-all relative
+                    ${!dayInfo.day ? 'invisible' : ''}
+                    ${dayInfo.hasVideos 
+                      ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 cursor-pointer' 
+                      : 'text-gray-600 cursor-default'}
+                    ${selectedDate === dayInfo.dateStr ? 'ring-2 ring-blue-500 bg-blue-600/40' : ''}
+                  `}
+                >
+                  {dayInfo.day}
+                  {dayInfo.hasVideos && (
+                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-400 rounded-full" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {calendarDays.map((dayInfo, idx) => (
-              <button
-                key={idx}
-                disabled={!dayInfo.hasVideos}
-                onClick={() => dayInfo.hasVideos && setSelectedDate(dayInfo.dateStr)}
-                className={`
-                  aspect-square rounded-lg text-sm font-medium transition-all relative
-                  ${!dayInfo.day ? 'invisible' : ''}
-                  ${dayInfo.hasVideos 
-                    ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 cursor-pointer' 
-                    : 'text-gray-600 cursor-default'}
-                  ${selectedDate === dayInfo.dateStr ? 'ring-2 ring-blue-500 bg-blue-600/40' : ''}
-                `}
-              >
-                {dayInfo.day}
-                {dayInfo.hasVideos && (
-                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-400 rounded-full" />
-                )}
-              </button>
-            ))}
-          </div>
+          {/* Filter Section */}
+          <div className="flex-1 min-h-0 overflow-y-auto border-t border-gray-700 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium text-white">Filter by Source</h4>
+              <div className="flex gap-2">
+                <button
+                  onClick={selectAllSources}
+                  className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-600/10"
+                >
+                  All
+                </button>
+                <button
+                  onClick={clearAllSources}
+                  className="text-xs text-gray-500 hover:text-gray-400 px-2 py-1 rounded hover:bg-gray-800"
+                >
+                  None
+                </button>
+              </div>
+            </div>
 
-          <div className="mt-4 text-xs text-gray-500">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-600/20 rounded-full" />
-              <span>Has recordings</span>
+            <div className="space-y-2">
+              {ALL_SOURCES.map(source => {
+                const count = sourceStats.get(source) || 0;
+                const isSelected = selectedSources.has(source);
+                const isDisabled = count === 0;
+                
+                return (
+                  <label
+                    key={source}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                      isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-800'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={isDisabled}
+                      onChange={() => toggleSource(source)}
+                      className="w-4 h-4 rounded border-gray-600 text-blue-600 focus:ring-blue-600 bg-gray-800"
+                    />
+                    <span className={`w-2 h-2 rounded-full ${SOURCE_COLORS[source].split(' ')[0].replace('/20', '')}`} />
+                    <span className="flex-1 text-sm text-gray-300">
+                      {SOURCE_LABELS[source]}
+                    </span>
+                    <span className="text-xs text-gray-500 tabular-nums">
+                      {count}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-800">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Total recordings</span>
+                <span className="text-white font-medium">{totalRecordings}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -229,7 +348,15 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {timeSlot.sources.map((source) => (
+                            <span
+                              key={source}
+                              className={`px-2 py-0.5 text-[10px] rounded ${SOURCE_COLORS[source]}`}
+                            >
+                              {SOURCE_LABELS[source]}
+                            </span>
+                          ))}
                           {allCameras && (
                             <span className="px-2 py-0.5 bg-green-600/20 text-green-400 text-[10px] rounded">
                               Complete
@@ -251,7 +378,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <p className="text-sm">Select a date from the calendar</p>
-                  <p className="text-xs text-gray-600 mt-1">Dates with recordings are highlighted</p>
+                  <p className="text-xs text-gray-600 mt-1">Use filters to narrow down recordings</p>
                 </div>
               </div>
             )}
