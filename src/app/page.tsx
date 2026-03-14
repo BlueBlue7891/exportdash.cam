@@ -28,6 +28,20 @@ export default function Home() {
   const [folderStructure, setFolderStructure] = useState<FolderStructure | null>(null);
   const [showVideoBrowser, setShowVideoBrowser] = useState(false);
 
+  // Handle scan progress from DropZone
+  const handleScanProgress = useCallback((current: number, total: number) => {
+    // Only show processing if we have files to process
+    if (total > 0) {
+      setIsProcessing(true);
+      setProcessingProgress({
+        stage: 'scanning',
+        current,
+        total,
+        message: 'Scanning folder...',
+      });
+    }
+  }, []);
+
   const handleFilesAdded = useCallback(async (newFiles: File[]) => {
     if (newFiles.length === 0) return;
     
@@ -147,7 +161,7 @@ export default function Home() {
         {sequences.length === 0 ? (
           /* Empty State */
           <div className="max-w-4xl mx-auto">
-            <DropZone onFilesAdded={handleFilesAdded} hasVideos={false} />
+            <DropZone onFilesAdded={handleFilesAdded} hasVideos={false} onScanProgress={handleScanProgress} />
 
             {/* Features */}
             <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

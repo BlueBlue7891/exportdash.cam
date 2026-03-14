@@ -24,6 +24,15 @@ import {
 /** Gap threshold in seconds - clips within this gap are considered consecutive */
 const SEQUENCE_GAP_THRESHOLD_SECONDS = 65;
 
+/** Default duration for Tesla dashcam clips (60 seconds) */
+const DEFAULT_VIDEO_DURATION = 60;
+
+/** Batch size for async processing */
+const BATCH_SIZE = 50;
+
+/** Skip duration detection for faster processing (Tesla clips are always 60s) */
+const SKIP_DURATION_DETECTION = true;
+
 /** Get video duration using HTMLVideoElement */
 async function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
@@ -31,14 +40,22 @@ async function getVideoDuration(file: File): Promise<number> {
     const video = document.createElement('video');
     video.preload = 'metadata';
 
-    video.onloadedmetadata = () => {
+    // Set a timeout to avoid hanging on corrupted files
+    const timeout = setTimeout(() => {
       URL.revokeObjectURL(url);
-      resolve(video.duration && isFinite(video.duration) ? video.duration : 60);
+      resolve(DEFAULT_VIDEO_DURATION);
+    }, 5000); // 5 second timeout
+
+    video.onloadedmetadata = () => {
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      resolve(video.duration && isFinite(video.duration) ? video.duration : DEFAULT_VIDEO_DURATION);
     };
 
     video.onerror = () => {
+      clearTimeout(timeout);
       URL.revokeObjectURL(url);
-      resolve(60); // Default to 60 seconds if metadata fails
+      resolve(DEFAULT_VIDEO_DURATION);
     };
 
     video.src = url;
@@ -126,34 +143,77 @@ export async function processFilesToMoments(
   const groupEntries = Object.entries(groups);
   let processedCount = 0;
 
-  for (const [, groupFiles] of groupEntries) {
-    // Get a valid timestamp from any file in the group
-    const validTimestamp = groupFiles.find(f => f.timestamp)?.timestamp;
-    if (!validTimestamp) continue;
+  // Flatten all files for batch processing
+  const allGroupFiles: { file: File; angle: string | null; timestamp: Date | null; groupKey: string }[] = [];
+  for (const [groupKey, groupFiles] of groupEntries) {
+    for (const { file, angle, timestamp } of groupFiles) {
+      allGroupFiles.push({ file, angle, timestamp, groupKey });
+    }
+  }
 
-    // Process each video file in the group
-    const videos: CameraVideo[] = await Promise.all(
-      groupFiles.map(async ({ file, angle }) => {
-        processedCount++;
+  // Process files in batches to avoid blocking the main thread
+  const fileDurations = new Map<string, number>();
+  
+  // Fast path: Skip duration detection for known Tesla files (all 60s)
+  if (SKIP_DURATION_DETECTION) {
+    for (const { file } of allGroupFiles) {
+      fileDurations.set(file.name, DEFAULT_VIDEO_DURATION);
+      
+      processedCount++;
+      if (processedCount % 100 === 0 || processedCount === allGroupFiles.length) {
         onProgress?.({
           stage: 'metadata',
           current: processedCount,
           total: videoFiles.length,
-          message: `Processing ${file.name}...`,
+          message: `Processing files...`,
         });
+      }
+    }
+  } else {
+    // Slow path: Read actual duration from video metadata
+    for (let i = 0; i < allGroupFiles.length; i += BATCH_SIZE) {
+      const batch = allGroupFiles.slice(i, i + BATCH_SIZE);
+      
+      // Process batch concurrently
+      await Promise.all(
+        batch.map(async ({ file }) => {
+          const duration = await getVideoDuration(file);
+          fileDurations.set(file.name, duration);
+          
+          processedCount++;
+          onProgress?.({
+            stage: 'metadata',
+            current: processedCount,
+            total: videoFiles.length,
+            message: `Processing ${file.name}...`,
+          });
+        })
+      );
+      
+      // Yield to main thread between batches
+      if (i + BATCH_SIZE < allGroupFiles.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+  }
 
-        const duration = await getVideoDuration(file);
+  // Build moments from processed data
+  for (const [groupKey, groupFiles] of groupEntries) {
+    const validTimestamp = groupFiles.find(f => f.timestamp)?.timestamp;
+    if (!validTimestamp) continue;
 
-        return {
-          file,
-          angle: angle || 'unknown',
-          angleLabel: angle ? ANGLE_LABELS[angle] : 'Unknown',
-          duration,
-          durationFormatted: formatDuration(duration),
-          size: formatFileSize(file.size),
-        };
-      })
-    );
+    const videos: CameraVideo[] = groupFiles.map(({ file, angle }) => {
+      const duration = fileDurations.get(file.name) || DEFAULT_VIDEO_DURATION;
+      
+      return {
+        file,
+        angle: angle || 'unknown',
+        angleLabel: angle ? ANGLE_LABELS[angle] : 'Unknown',
+        duration,
+        durationFormatted: formatDuration(duration),
+        size: formatFileSize(file.size),
+      };
+    });
 
     // Sort videos by angle order
     videos.sort((a, b) => {
@@ -164,7 +224,7 @@ export async function processFilesToMoments(
 
     // Use front camera duration, or first available
     const frontVideo = videos.find(v => v.angle === 'front');
-    const momentDuration = frontVideo?.duration || videos[0]?.duration || 60;
+    const momentDuration = frontVideo?.duration || videos[0]?.duration || DEFAULT_VIDEO_DURATION;
 
     const date = validTimestamp.toISOString().split('T')[0];
     const time = validTimestamp.toTimeString().split(' ')[0];
