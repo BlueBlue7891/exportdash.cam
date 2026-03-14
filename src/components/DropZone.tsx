@@ -239,16 +239,19 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
             </svg>
           </div>
           <div className="text-center">
-            <p className="text-xl font-medium text-gray-200">Drop your TeslaCam clips here</p>
-            <p className="text-sm text-gray-500 mt-2">Drag & drop a folder containing video files</p>
+            <p className="text-xl font-medium text-gray-200">Import TeslaCam Recordings</p>
+            <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto leading-relaxed">
+              <span className="text-gray-400">Quick Load:</span> Drop a folder directly to load all clips as a sequence<br />
+              <span className="text-gray-400">Browse by Date:</span> Use "Open Folder" to explore recordings in calendar view
+            </p>
           </div>
           <div className="flex items-center gap-3 mt-4">
-            <label className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
+            <label className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg cursor-pointer transition-colors border border-gray-600">
               <span>Browse Files</span>
               <input type="file" accept="video/mp4,application/json" multiple onChange={handleFileInput} className="hidden" />
             </label>
-            <label className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg cursor-pointer transition-colors border border-gray-600">
-              <span>Import Folder</span>
+            <label className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
+              <span>Open Folder</span>
               <input type="file" {...{ webkitdirectory: '', directory: '' } as any} onChange={handleFileInput} className="hidden" />
             </label>
           </div>
