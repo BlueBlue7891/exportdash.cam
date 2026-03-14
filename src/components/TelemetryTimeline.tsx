@@ -761,7 +761,7 @@ export function TelemetryTimeline({
         {tracks.map((track) => (
           <div
             key={track.id}
-            className="relative h-3 bg-gray-700/50 rounded-sm mb-0.5 overflow-hidden"
+            className="relative h-3 bg-gray-700/50 rounded-sm mb-0.5 overflow-visible"
             title={track.label}
           >
             {track.segments.map((segment, idx) => {
@@ -772,17 +772,31 @@ export function TelemetryTimeline({
               const width = ((segEnd - segStart) / viewDuration) * 100;
               const opacity = segment.intensity !== undefined ? 0.4 + segment.intensity * 0.6 : 0.9;
 
+              const isLeftBlinker = track.id === 'left-blinker';
+              const isRightBlinker = track.id === 'right-blinker';
+              const showArrow = isLeftBlinker || isRightBlinker;
+
               return (
                 <div
                   key={idx}
-                  className="absolute top-0 bottom-0 rounded-sm"
+                  className="absolute top-0 bottom-0 rounded-sm flex items-center"
                   style={{
                     left: `${left}%`,
                     width: `${Math.max(width, 0.5)}%`,
                     backgroundColor: track.color,
                     opacity,
+                    justifyContent: 'center',
                   }}
-                />
+                >
+                  {showArrow && width > 1 && (
+                    <img
+                      src={isLeftBlinker ? '/arrow-left.svg' : '/arrow-right.svg'}
+                      alt={isLeftBlinker ? 'Left' : 'Right'}
+                      className="h-2 w-auto max-w-[80%] pointer-events-none"
+                      style={{ opacity: 0.9 }}
+                    />
+                  )}
+                </div>
               );
             })}
           </div>
