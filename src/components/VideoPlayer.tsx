@@ -1444,16 +1444,20 @@ export function VideoPlayer({
                           }`}
                         >
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">
+                            {/* Date on top (larger) */}
+                            <div className="text-sm font-medium text-white">
+                              {seq.dateRange}
+                            </div>
+                            {/* Time range below (smaller) */}
+                            <div className="text-xs text-gray-400 truncate">
                               {seq.moments[0].time}
                               {seq.clipCount > 1 && (
-                                <span className="text-gray-400"> - {seq.moments[seq.clipCount - 1].time}</span>
+                                <span className="text-gray-500"> - {seq.moments[seq.clipCount - 1].time}</span>
                               )}
                             </div>
+                            {/* Duration and clip count */}
                             <div className="text-xs text-gray-500 flex items-center gap-2">
-                              <span>{seq.dateRange}</span>
-                              <span>·</span>
-                              <span>{seq.durationFormatted}</span>
+                              <span>Duration: {seq.durationFormatted}</span>
                               {seq.clipCount > 1 && (
                                 <>
                                   <span>·</span>
@@ -1526,6 +1530,7 @@ export function VideoPlayer({
             onCameraSegmentsChange={setCameraSegments}
             selectedAngle={selectedAngle}
             availableAngles={availableAngles}
+            disableEventTooltip={showSequenceMenu}
           />
         )}
       </div>

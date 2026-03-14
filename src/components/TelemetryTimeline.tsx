@@ -70,7 +70,7 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
 
   return (
     <div 
-      className="fixed pointer-events-none z-[9999]"
+      className="fixed pointer-events-none z-10"
       style={{ left, top }}
     >
       <div 
@@ -116,6 +116,8 @@ interface TelemetryTimelineProps {
   onCameraSegmentsChange?: (segments: CameraSegment[]) => void;
   selectedAngle?: string;
   availableAngles?: string[];  // For drag-drop palette
+  // When true, hide event tooltip (e.g., when Video Files panel is open)
+  disableEventTooltip?: boolean;
 }
 
 interface EventSegment {
@@ -151,6 +153,7 @@ export function TelemetryTimeline({
   onCameraSegmentsChange,
   selectedAngle,
   availableAngles = [],
+  disableEventTooltip = false,
 }: TelemetryTimelineProps) {
   // Process telemetry data into timeline tracks
   const tracks = useMemo((): TrackData[] => {
@@ -708,8 +711,8 @@ export function TelemetryTimeline({
           );
         })}
 
-        {/* Event marker */}
-        {eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
+        {/* Event marker - hidden when Video Files panel is open */}
+        {!disableEventTooltip && eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
           <div
             ref={eventMarkerRef}
             className="absolute top-0 bottom-0 z-20 group"
