@@ -5,6 +5,101 @@ import { SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { TrimPoints, CameraSegment, ANGLE_COLORS, ANGLE_LABELS, TeslaEvent } from '@/types/video';
 import { Tooltip } from './Tooltip';
 
+// Event Tooltip Component with fixed positioning to avoid clipping
+interface EventTooltipProps {
+  event: TeslaEvent;
+  markerRect: DOMRect | null;
+}
+
+function EventTooltip({ event, markerRect }: EventTooltipProps) {
+  const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      setTooltipRect(contentRef.current.getBoundingClientRect());
+    }
+  }, []);
+
+  if (!markerRect) return null;
+
+  const tooltipWidth = tooltipRect?.width ?? 200;
+  const tooltipHeight = tooltipRect?.height ?? 60;
+  const padding = 8;
+  
+  // Diamond marker dimensions (w-3 h-3 = 12px side length)
+  // The diamond is a square rotated 45°, so its diagonal = side × √2
+  const diamondSide = 12; // w-3 = 0.75rem = 12px
+  const halfDiagonal = (diamondSide * Math.sqrt(2)) / 2; // ≈ 8.49px
+  
+  // Calculate marker center
+  const markerCenterX = markerRect.left + markerRect.width / 2;
+  const markerTipY = markerRect.top + markerRect.height / 2; // Center of the marker element
+  
+  // Determine horizontal alignment based on viewport edges
+  let left: number;
+  let align: 'left' | 'center' | 'right' = 'center';
+  
+  const wouldClipLeft = markerCenterX - tooltipWidth / 2 < padding;
+  const wouldClipRight = markerCenterX + tooltipWidth / 2 > window.innerWidth - padding;
+  
+  if (wouldClipLeft) {
+    // Left align: shift left by half diamond diagonal
+    left = Math.max(padding, markerRect.left - halfDiagonal);
+    align = 'left';
+  } else if (wouldClipRight) {
+    // Right align: shift right by half diamond diagonal
+    left = Math.min(window.innerWidth - tooltipWidth - padding, markerRect.right - tooltipWidth + halfDiagonal);
+    align = 'right';
+  } else {
+    // Center align
+    left = markerCenterX - tooltipWidth / 2;
+    align = 'center';
+  }
+  
+  // Position tooltip: shift up by half diamond diagonal to align arrow with diamond tip
+  // Arrow tip will be at: top + tooltipHeight - 4
+  // We want arrow tip to align with diamond tip (markerTipY - halfDiagonal)
+  const arrowOffset = 4; // -mt-1 = -4px
+  const diamondTipY = markerTipY - halfDiagonal; // Diamond's bottom tip
+  const top = diamondTipY - tooltipHeight + arrowOffset - 4; // Extra 4px gap
+
+  // Arrow position: point to the diamond center
+  const arrowX = markerCenterX - left;
+  const arrowPadding = 12;
+  const arrowLeft = {
+    left: Math.min(Math.max(arrowX, arrowPadding), tooltipWidth - arrowPadding),
+    center: tooltipWidth / 2,
+    right: Math.min(Math.max(arrowX, arrowPadding), tooltipWidth - arrowPadding),
+  };
+
+  return (
+    <div 
+      className="fixed pointer-events-none z-[9999]"
+      style={{ left, top }}
+    >
+      <div 
+        ref={contentRef}
+        className="bg-gray-900/95 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
+      >
+        <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
+        {(event.city || event.street) && (
+          <div className="text-gray-400 mt-0.5">
+            {[event.street, event.city].filter(Boolean).join(', ')}
+          </div>
+        )}
+        <div className="text-gray-500 mt-0.5 text-[10px]">
+          {event.timestamp.toLocaleTimeString()}
+        </div>
+      </div>
+      <div 
+        className="absolute w-2 h-2 bg-gray-900/95 border-r border-b border-orange-500/40 rotate-45 -bottom-1"
+        style={{ left: arrowLeft[align] - 4 }}
+      />
+    </div>
+  );
+}
+
 interface TelemetryTimelineProps {
   allSeiMessages: SeiWithFrameIndex[];
   fps: number;
@@ -188,6 +283,8 @@ export function TelemetryTimeline({
   }, [event, sequenceStartTime, duration]);
 
   const [showEventTooltip, setShowEventTooltip] = useState(false);
+  const [markerRect, setMarkerRect] = useState<DOMRect | null>(null);
+  const eventMarkerRef = useRef<HTMLDivElement>(null);
 
   // Notify parent when dragging state changes
   useEffect(() => {
@@ -619,9 +716,16 @@ export function TelemetryTimeline({
         {/* Event marker */}
         {eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
           <div
-            className="absolute top-0 bottom-0 z-[6] group"
+            ref={eventMarkerRef}
+            className="absolute top-0 bottom-0 z-[100] group"
             style={{ left: `${timeToPosition(eventAbsoluteTime)}%` }}
-            onMouseEnter={() => setShowEventTooltip(true)}
+            onMouseEnter={() => {
+              // Get marker position for fixed positioning
+              if (eventMarkerRef.current) {
+                setMarkerRect(eventMarkerRef.current.getBoundingClientRect());
+              }
+              setShowEventTooltip(true);
+            }}
             onMouseLeave={() => setShowEventTooltip(false)}
           >
             {/* Vertical line */}
@@ -632,20 +736,10 @@ export function TelemetryTimeline({
             </div>
             {/* Tooltip */}
             {showEventTooltip && event && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none z-[20]">
-                <div className="bg-gray-900 border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap">
-                  <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
-                  {(event.city || event.street) && (
-                    <div className="text-gray-400 mt-0.5">
-                      {[event.street, event.city].filter(Boolean).join(', ')}
-                    </div>
-                  )}
-                  <div className="text-gray-500 mt-0.5 text-[10px]">
-                    {event.timestamp.toLocaleTimeString()}
-                  </div>
-                </div>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-r border-b border-orange-500/40 rotate-45 -mt-1" />
-              </div>
+              <EventTooltip 
+                event={event} 
+                markerRect={markerRect}
+              />
             )}
           </div>
         )}
