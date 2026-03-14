@@ -21,20 +21,21 @@ interface VideoBrowserProps {
 
 const ALL_SOURCES: VideoSource[] = ['recent', 'saved', 'sentry', 'encrypted', 'photobooth', 'unknown'];
 
-const STORAGE_KEY = 'videoBrowserLastMonth';
+const STORAGE_KEY_MONTH = 'videoBrowserLastMonth';
+const STORAGE_KEY_DATE = 'videoBrowserLastDate';
 
 type MonthState = { year: number; month: number };
 
 export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: VideoBrowserProps) {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
   // Compute date range from folder structure
   const dateRange = useMemo(() => {
     if (folderStructure.dates.length === 0) return null;
-    const dates = folderStructure.dates.map(d => d.date).sort();
-    const earliest = dates[0];
-    const latest = dates[dates.length - 1];
+    // Sort dates to ensure correct order (dates are in YYYY-MM-DD format, string sort works)
+    const sortedDates = [...folderStructure.dates].sort((a, b) => a.date.localeCompare(b.date));
+    const earliest = sortedDates[0].date;
+    const latest = sortedDates[sortedDates.length - 1].date;
     const [earliestYear, earliestMonth] = earliest.split('-').map(Number);
     const [latestYear, latestMonth] = latest.split('-').map(Number);
     return {
@@ -72,21 +73,26 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   
 
   
-  // Parse initial month: prefer latest date (most recent), or from localStorage
-  const initialMonth = useMemo(() => {
+  // Parse initial month and date: from localStorage or default to latest
+  const { initialMonth, initialDate } = useMemo(() => {
     // Try to restore from localStorage first
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
+      const savedMonth = localStorage.getItem(STORAGE_KEY_MONTH);
+      const savedDate = localStorage.getItem(STORAGE_KEY_DATE);
+      
+      if (savedMonth && savedDate && dateRange) {
         try {
-          const parsed = JSON.parse(saved);
+          const parsedMonth = JSON.parse(savedMonth);
           // Validate the saved month is within valid range
-          if (dateRange) {
-            const savedTime = new Date(parsed.year, parsed.month).getTime();
-            const earliestTime = new Date(dateRange.earliest.year, dateRange.earliest.month).getTime();
-            const latestTime = new Date(dateRange.latest.year, dateRange.latest.month).getTime();
-            if (savedTime >= earliestTime && savedTime <= latestTime) {
-              return parsed;
+          const savedTime = new Date(parsedMonth.year, parsedMonth.month).getTime();
+          const earliestTime = new Date(dateRange.earliest.year, dateRange.earliest.month).getTime();
+          const latestTime = new Date(dateRange.latest.year, dateRange.latest.month).getTime();
+          
+          if (savedTime >= earliestTime && savedTime <= latestTime) {
+            // Validate saved date exists in folder structure
+            const dateExists = folderStructure.dates.some(d => d.date === savedDate);
+            if (dateExists) {
+              return { initialMonth: parsedMonth, initialDate: savedDate };
             }
           }
         } catch {
@@ -94,22 +100,33 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
         }
       }
     }
+    
     // Default to latest date (most recent)
     if (dateRange) {
-      return { year: dateRange.latest.year, month: dateRange.latest.month };
+      return { 
+        initialMonth: { year: dateRange.latest.year, month: dateRange.latest.month },
+        initialDate: dateRange.latest.date
+      };
     }
     const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
-  }, [dateRange]);
+    return { 
+      initialMonth: { year: now.getFullYear(), month: now.getMonth() },
+      initialDate: null
+    };
+  }, [dateRange, folderStructure.dates]);
   
   const [currentMonth, setCurrentMonth] = useState<MonthState>(initialMonth);
+  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate);
   
-  // Save current month to localStorage when changed
+  // Save current month and date to localStorage when changed
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentMonth));
+      localStorage.setItem(STORAGE_KEY_MONTH, JSON.stringify(currentMonth));
+      if (selectedDate) {
+        localStorage.setItem(STORAGE_KEY_DATE, selectedDate);
+      }
     }
-  }, [currentMonth]);
+  }, [currentMonth, selectedDate]);
 
   // Get selected date entry (from filtered)
   const selectedDateEntry = useMemo(() => {

@@ -104,17 +104,57 @@ export interface FolderStructure {
   allFiles: File[];
 }
 
-/** Detect video source from file path */
+/** Get directory from file path (handles both / and \ separators) */
+function getFileDirectory(file: File): string {
+  const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+  // Handle both Windows (\) and Unix (/) path separators
+  const lastSlash = path.lastIndexOf('/');
+  const lastBackslash = path.lastIndexOf('\\');
+  const lastSep = Math.max(lastSlash, lastBackslash);
+  return lastSep > 0 ? path.substring(0, lastSep) : '';
+}
+
+/** Get parent directory name (the folder directly containing the file's folder) */
+function getParentFolderName(file: File): string {
+  const dir = getFileDirectory(file); // e.g., "TeslaCam\SentryClips\2026-02-13_14-06-00"
+  if (!dir) return '';
+  
+  // Normalize to forward slashes
+  const normalized = dir.replace(/\\/g, '/');
+  // Split into parts
+  const parts = normalized.split('/').filter(p => p);
+  
+  // If we have at least 2 parts, return the parent of the last folder
+  // e.g., ["TeslaCam", "SentryClips", "2026-02-13_14-06-00"] -> "SentryClips"
+  if (parts.length >= 2) {
+    return parts[parts.length - 2].toLowerCase();
+  }
+  
+  return '';
+}
+
+/** Detect video source from file path or parent folder name */
 function detectSource(file: File): VideoSource {
   // Try multiple path sources: Tauri path, webkitRelativePath (browser folder import), or name
   const path = (file as any).tauriPath || (file as any).webkitRelativePath || file.name;
   const lowerPath = path.toLowerCase();
   
+  // Check full path first
   if (lowerPath.includes('recentclips')) return 'recent';
   if (lowerPath.includes('savedclips')) return 'saved';
   if (lowerPath.includes('sentryclips')) return 'sentry';
   if (lowerPath.includes('encryptedclips')) return 'encrypted';
   if (lowerPath.includes('photobooth')) return 'photobooth';
+  
+  // Check parent folder name (for subfolder imports like "2026-02-13_14-06-00")
+  // Parent would be "SentryClips" or "SavedClips"
+  const parentName = getParentFolderName(file);
+  if (parentName.includes('recentclips')) return 'recent';
+  if (parentName.includes('savedclips')) return 'saved';
+  if (parentName.includes('sentryclips')) return 'sentry';
+  if (parentName.includes('encryptedclips')) return 'encrypted';
+  if (parentName.includes('photobooth')) return 'photobooth';
+  
   return 'unknown';
 }
 
@@ -122,12 +162,14 @@ function detectSource(file: File): VideoSource {
 function inferSourceFromReason(reason?: string): VideoSource | null {
   if (!reason) return null;
   const lowerReason = reason.toLowerCase();
-  // Sentry-related reasons
+  // Sentry-related reasons (sentry_aware_*, sentry_panic_*, sentry_ion, etc.)
   if (lowerReason.includes('sentry_')) return 'sentry';
   // Manual save reasons (user_interaction)
   if (lowerReason.includes('user_interaction_')) return 'saved';
   // Emergency/Autopilot reasons also go to saved
   if (lowerReason.includes('emergency') || lowerReason.includes('collision') || lowerReason.includes('braking')) return 'saved';
+  // Dashcam clip requests (these are typically from saved clips)
+  if (lowerReason.includes('dashcam_clip_request')) return 'saved';
   return null;
 }
 
@@ -135,8 +177,8 @@ function inferSourceFromReason(reason?: string): VideoSource | null {
 export async function parseFolderStructure(files: File[]): Promise<FolderStructure> {
   const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean; reason?: string; city?: string; street?: string }>>();
   
-  // Collect event.json data by directory: { timeSeconds, reason, city, street }
-  const eventJsonData = new Map<string, { timeSeconds: number; reason: string; city?: string; street?: string }>();
+  // Collect event.json data by directory: { timeSeconds, reason, rawReason, city, street }
+  const eventJsonData = new Map<string, { timeSeconds: number; reason: string; rawReason: string; city?: string; street?: string }>();
   
   // Filter video files and event.json
   const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
@@ -144,11 +186,11 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
   // First pass: parse all event.json files
   const jsonFiles = videoFiles.filter(f => f.name === 'event.json');
   for (const file of jsonFiles) {
-    const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-    const dir = path.substring(0, path.lastIndexOf('/'));
+    const dir = getFileDirectory(file);
     
     let eventSeconds: number | undefined;
     let reason = '';
+    let rawReason = '';  // Original reason for source inference
     let city: string | undefined;
     let street: string | undefined;
     
@@ -160,6 +202,7 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
         eventSeconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       }
       if (data.reason) {
+        rawReason = data.reason;
         reason = getEventReasonLabel(data.reason);
       }
       if (data.city) {
@@ -170,7 +213,7 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
       }
     } catch (e) {
       // Fallback: parse from folder name
-      const folderName = dir.substring(dir.lastIndexOf('/') + 1);
+      const folderName = dir ? dir.replace(/\\/g, '/').split('/').pop() || '' : '';
       const match = folderName.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})/);
       if (match) {
         const [, hour, minute, second] = match;
@@ -179,7 +222,7 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     }
     
     if (eventSeconds !== undefined) {
-      eventJsonData.set(dir, { timeSeconds: eventSeconds, reason, city, street });
+      eventJsonData.set(dir, { timeSeconds: eventSeconds, reason, rawReason, city, street });
     }
   }
   
@@ -196,8 +239,7 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     const timeStr = `${hour}-${minute}-${second}`;
     const startSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
     
-    const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    const fileDir = getFileDirectory(file);
     
     if (!dirVideoSlots.has(fileDir)) {
       dirVideoSlots.set(fileDir, []);
@@ -240,18 +282,35 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     const timeStr = `${hour}-${minute}-${second}`;
     const angleKey = angle.toLowerCase().replace(/-/g, '_');
     
-    // Get file path and directory
-    const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    // Get file directory
+    const fileDir = getFileDirectory(file);
     
     let source = detectSource(file);
     
-    // If path detection fails, try to infer from event.json reason
+    // If path detection fails, try to infer from event.json raw reason
     if (source === 'unknown') {
       const eventData = eventJsonData.get(fileDir);
-      if (eventData?.reason) {
-        const inferred = inferSourceFromReason(eventData.reason);
+      if (eventData?.rawReason) {
+        const inferred = inferSourceFromReason(eventData.rawReason);
         if (inferred) source = inferred;
+      }
+    }
+    
+    // If still unknown, try to infer from the full directory path
+    // This handles the case when user selects a subfolder like "2026-02-13_14-06-00"
+    // and we need to check if the directory itself contains type hints
+    if (source === 'unknown') {
+      // Try to get source from the directory path using available path info
+      const tauriPath = (file as any).tauriPath as string | undefined;
+      if (tauriPath) {
+        // For Tauri: tauriPath is the full absolute path, check parent directories
+        const normalizedPath = tauriPath.replace(/\\/g, '/').toLowerCase();
+        // Check the full path for type indicators
+        if (normalizedPath.includes('sentryclips')) source = 'sentry';
+        else if (normalizedPath.includes('savedclips')) source = 'saved';
+        else if (normalizedPath.includes('recentclips')) source = 'recent';
+        else if (normalizedPath.includes('encryptedclips')) source = 'encrypted';
+        else if (normalizedPath.includes('photobooth')) source = 'photobooth';
       }
     }
     
@@ -298,11 +357,28 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     for (const timeStr of sortedTimes) {
       const slotData = timeMap.get(timeStr)!;
       
+      // Fix: if source is unknown and we have event reason, infer source from reason
+      let sources = Array.from(slotData.sources);
+      if (sources.includes('unknown') && slotData.reason) {
+        // Try to find a non-unknown source, or infer from event reason
+        const nonUnknownSources = sources.filter(s => s !== 'unknown');
+        if (nonUnknownSources.length === 0) {
+          // All sources are unknown, try to infer from event reason
+          // Map Chinese reason label back to source
+          const reasonLower = slotData.reason.toLowerCase();
+          if (reasonLower.includes('sentry')) {
+            sources = ['sentry'];
+          } else if (reasonLower.includes('手动') || reasonLower.includes('鸣笛') || reasonLower.includes('紧急') || reasonLower.includes('制动') || reasonLower.includes('碰撞')) {
+            sources = ['saved'];
+          }
+        }
+      }
+      
       timeSlots.push({
         time: timeStr,
         displayTime: `${timeStr.slice(0, 2)}:${timeStr.slice(3, 5)}:${timeStr.slice(6, 8)}`,
         files: Object.fromEntries(slotData.files),
-        sources: Array.from(slotData.sources),
+        sources,
         hasGps: slotData.hasGps,
         eventReason: slotData.reason,
         city: slotData.city,
@@ -330,8 +406,8 @@ export async function parseFolderStructureAsync(
 ): Promise<FolderStructure> {
   const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean }>>();
   
-  // Collect event.json timestamps by directory
-  const eventJsonTimes = new Map<string, number>();
+  // Collect event.json data by directory: { timeSeconds, rawReason }
+  const eventJsonData = new Map<string, { timeSeconds: number; rawReason: string }>();
   
   const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
   
@@ -339,10 +415,10 @@ export async function parseFolderStructureAsync(
   // Read actual JSON content for precise timestamp
   const jsonFiles = videoFiles.filter(f => f.name === 'event.json');
   for (const file of jsonFiles) {
-    const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-    const dir = path.substring(0, path.lastIndexOf('/'));
+    const dir = getFileDirectory(file);
     
     let eventSeconds: number | undefined;
+    let rawReason = '';
     
     try {
       // Try to read actual timestamp from JSON content
@@ -352,9 +428,12 @@ export async function parseFolderStructureAsync(
         const d = new Date(data.timestamp);
         eventSeconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       }
+      if (data.reason) {
+        rawReason = data.reason;
+      }
     } catch (e) {
       // Fallback: parse from folder name
-      const folderName = dir.substring(dir.lastIndexOf('/') + 1);
+      const folderName = dir ? dir.replace(/\\/g, '/').split('/').pop() || '' : '';
       const match = folderName.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})/);
       if (match) {
         const [, hour, minute, second] = match;
@@ -363,7 +442,7 @@ export async function parseFolderStructureAsync(
     }
     
     if (eventSeconds !== undefined) {
-      eventJsonTimes.set(dir, eventSeconds);
+      eventJsonData.set(dir, { timeSeconds: eventSeconds, rawReason });
     }
   }
   
@@ -380,8 +459,7 @@ export async function parseFolderStructureAsync(
     const timeStr = `${hour}-${minute}-${second}`;
     const startSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
     
-    const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    const fileDir = getFileDirectory(file);
     
     if (!dirVideoSlots.has(fileDir)) {
       dirVideoSlots.set(fileDir, []);
@@ -392,8 +470,9 @@ export async function parseFolderStructureAsync(
   // Find which time slot contains the event for each directory
   const eventSlotMap = new Map<string, string>();
   for (const [dir, slots] of dirVideoSlots) {
-    const eventSeconds = eventJsonTimes.get(dir);
-    if (eventSeconds === undefined) continue;
+    const eventData = eventJsonData.get(dir);
+    if (!eventData) continue;
+    const eventSeconds = eventData.timeSeconds;
     
     slots.sort((a, b) => a.startSeconds - b.startSeconds);
     
@@ -420,10 +499,32 @@ export async function parseFolderStructureAsync(
       const dateStr = `${year}-${month}-${day}`;
       const timeStr = `${hour}-${minute}-${second}`;
       const angleKey = angle.toLowerCase().replace(/-/g, '_');
-      const source = detectSource(file);
       
-      const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-      const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+      const fileDir = getFileDirectory(file);
+      let source = detectSource(file);
+      
+      // If path detection fails, try to infer from event.json raw reason
+      if (source === 'unknown') {
+        const eventData = eventJsonData.get(fileDir);
+        if (eventData?.rawReason) {
+          const inferred = inferSourceFromReason(eventData.rawReason);
+          if (inferred) source = inferred;
+        }
+      }
+      
+      // If still unknown, try to infer from the full directory path (Tauri only)
+      if (source === 'unknown') {
+        const tauriPath = (file as any).tauriPath as string | undefined;
+        if (tauriPath) {
+          const normalizedPath = tauriPath.replace(/\\/g, '/').toLowerCase();
+          if (normalizedPath.includes('sentryclips')) source = 'sentry';
+          else if (normalizedPath.includes('savedclips')) source = 'saved';
+          else if (normalizedPath.includes('recentclips')) source = 'recent';
+          else if (normalizedPath.includes('encryptedclips')) source = 'encrypted';
+          else if (normalizedPath.includes('photobooth')) source = 'photobooth';
+        }
+      }
+      
       const hasGps = eventSlotMap.get(fileDir) === timeStr;
       
       let timeMap = dateMap.get(dateStr);
