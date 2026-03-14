@@ -1,6 +1,9 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { readFile, readDir } from '@tauri-apps/plugin-fs';
+import { resolve } from '@tauri-apps/api/path';
 
 interface DropZoneProps {
   onFilesAdded: (files: File[]) => void;
@@ -10,14 +13,128 @@ interface DropZoneProps {
 export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
+  // Check if running in Tauri (需要在 useEffect 中检查，避免 SSR 问题)
+
+  // 防止重复设置拖放监听器
+  const dragDropSetupRef = useRef(false);
+  // 防止重复处理同一个文件
+  const processingFileRef = useRef<string | null>(null);
+
+  // Handle Tauri drag events (Tauri 2.0 API)
+  useEffect(() => {
+    // 在 useEffect 中检查 Tauri 环境
+    const checkTauri = async () => {
+      if (typeof window === 'undefined') return false;
+
+      // 方式1: 检查 __TAURI__
+      if ('__TAURI__' in window) {
+        return true;
+      }
+
+      // 方式2: 尝试获取 webview
+      try {
+        const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+        getCurrentWebview();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (dragDropSetupRef.current) return;
+    dragDropSetupRef.current = true;
+
+    let unlisten: (() => void) | undefined;
+
+    checkTauri().then(async (isTauriEnv) => {
+      if (!isTauriEnv) return;
+
+      try {
+        const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+        const webview = getCurrentWebview();
+
+        unlisten = await webview.onDragDropEvent(async (event) => {
+          const { type, paths } = event.payload;
+
+          if (type === 'enter' || type === 'over') {
+            setIsDragging(true);
+          } else if (type === 'leave') {
+            setIsDragging(false);
+          } else if (type === 'drop') {
+            setIsDragging(false);
+
+            const files: File[] = [];
+
+            for (const path of paths) {
+              if (processingFileRef.current === path) {
+                continue;
+              }
+              processingFileRef.current = path;
+
+              try {
+                const contents = await readFile(path);
+                const name = path.split(/[/\\]/).pop() || 'unknown';
+                if (name.toLowerCase().endsWith('.mp4') || name.toLowerCase() === 'event.json') {
+                  const blob = new Blob([contents], { type: name.endsWith('.mp4') ? 'video/mp4' : 'application/json' });
+                  files.push(new File([blob], name));
+                }
+              } catch {
+                try {
+                  const entries = await readDir(path);
+                  for (const entry of entries) {
+                    const fullPath = await resolve(path, entry.name);
+                    const entryName = entry.name;
+                    if (entryName.toLowerCase().endsWith('.mp4') || entryName.toLowerCase() === 'event.json') {
+                      try {
+                        const contents = await readFile(fullPath);
+                        const blob = new Blob([contents], { type: entryName.endsWith('.mp4') ? 'video/mp4' : 'application/json' });
+                        files.push(new File([blob], entryName));
+                      } catch (e) {
+                        console.error('Error reading file:', fullPath, e);
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.error('Error reading directory:', path, e);
+                }
+              }
+
+              setTimeout(() => {
+                if (processingFileRef.current === path) {
+                  processingFileRef.current = null;
+                }
+              }, 500);
+            }
+
+            if (files.length > 0) {
+              onFilesAdded(files);
+            }
+          }
+        });
+      } catch (error) {
+        console.error('[Tauri DragDrop] Setup error:', error);
+      }
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    // 非 Tauri 环境才处理
+    if (typeof window === 'undefined' || !('__TAURI__' in window)) {
+      setIsDragging(true);
+    }
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
+    // 非 Tauri 环境才处理
+    if (typeof window === 'undefined' || !('__TAURI__' in window)) {
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDrop = useCallback(

@@ -5,19 +5,22 @@
   "identifier": "com.exportdash.teslacam",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3001",
-    "beforeDevCommand": "npm run dev"
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "ExportDash.Cam",
         "width": 1280,
         "height": 800,
         "resizable": true,
         "fullscreen": false,
         "minWidth": 800,
-        "minHeight": 600
+        "minHeight": 600,
+        "dragDropEnabled": true
       }
     ],
     "security": {
