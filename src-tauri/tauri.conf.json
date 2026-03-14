@@ -40,7 +40,11 @@
           "fs:allow-read-file",
           "fs:default",
           "core:event:allow-listen",
-          "core:event:default"
+          "core:event:default",
+          {
+            "identifier": "fs:scope",
+            "allow": [{ "path": "**" }]
+          }
         ]
       }]
     }

@@ -192,24 +192,58 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                       'July', 'August', 'September', 'October', 'November', 'December'];
 
+  // Get all months that have video data
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    for (const date of folderStructure.dates) {
+      const [year, month] = date.date.split('-');
+      months.add(`${year}-${month}`);
+    }
+    return Array.from(months).sort();
+  }, [folderStructure.dates]);
+
+  // Find the next/previous month with data
+  const findNearestMonth = (current: MonthState, direction: -1 | 1): MonthState | null => {
+    const currentKey = `${current.year}-${String(current.month + 1).padStart(2, '0')}`;
+    const currentIndex = availableMonths.indexOf(currentKey);
+    
+    if (currentIndex === -1) {
+      // Current month not in list, find nearest
+      for (let i = direction === 1 ? 0 : availableMonths.length - 1; 
+           direction === 1 ? i < availableMonths.length : i >= 0; 
+           i += direction) {
+        const [y, m] = availableMonths[i].split('-').map(Number);
+        const monthValue = y * 12 + (m - 1);
+        const currentValue = current.year * 12 + current.month;
+        if (direction === 1 ? monthValue > currentValue : monthValue < currentValue) {
+          return { year: y, month: m - 1 };
+        }
+      }
+      return null;
+    }
+    
+    const newIndex = currentIndex + direction;
+    if (newIndex >= 0 && newIndex < availableMonths.length) {
+      const [y, m] = availableMonths[newIndex].split('-').map(Number);
+      return { year: y, month: m - 1 };
+    }
+    return null;
+  };
+
   const goToPreviousMonth = () => {
     if (isAtEarliest) return;
-    setCurrentMonth((prev: MonthState) => {
-      if (prev.month === 0) {
-        return { year: prev.year - 1, month: 11 };
-      }
-      return { ...prev, month: prev.month - 1 };
-    });
+    const newMonth = findNearestMonth(currentMonth, -1);
+    if (newMonth) {
+      setCurrentMonth(newMonth);
+    }
   };
 
   const goToNextMonth = () => {
     if (isAtLatest) return;
-    setCurrentMonth((prev: MonthState) => {
-      if (prev.month === 11) {
-        return { year: prev.year + 1, month: 0 };
-      }
-      return { ...prev, month: prev.month - 1 };
-    });
+    const newMonth = findNearestMonth(currentMonth, 1);
+    if (newMonth) {
+      setCurrentMonth(newMonth);
+    }
   };
 
   const goToEarliestMonth = () => {

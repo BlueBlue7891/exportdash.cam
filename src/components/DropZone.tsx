@@ -221,7 +221,7 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
     try {
       // Use Tauri's dialog API if available
       const { open } = await import('@tauri-apps/plugin-dialog');
-      const { readDir } = await import('@tauri-apps/plugin-fs');
+      const { readDir, readFile } = await import('@tauri-apps/plugin-fs');
       const { convertFileSrc } = await import('@tauri-apps/api/core');
       
       // Open multiple directories
@@ -269,12 +269,12 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
       if (fileEntries.length === 0) return;
       
       // Create File objects with Tauri URLs
-      // Create a custom File-like object with webkitRelativePath
+      // For event.json, we need to read the actual content
+      // For video files, we just need the path (content will be read via Tauri URL)
       const files: any[] = [];
       for (const { path, name, type } of fileEntries) {
         try {
           const assetUrl = convertFileSrc(path);
-          const file = new File([], name, { type });
           
           // Calculate relative path for folder structure detection
           const pathParts = path.replace(/\\/g, '/').split('/');
@@ -282,6 +282,16 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
           const relativePath = teslaCamIndex >= 0 
             ? pathParts.slice(teslaCamIndex).join('/')
             : pathParts.slice(-3).join('/');
+          
+          // For event.json, read actual content so text() method works
+          let fileContent: BlobPart[] = [];
+          if (name === 'event.json') {
+            const content = await readFile(path);
+            fileContent = [new Uint8Array(content)];
+          }
+          
+          // Create File with content for event.json, empty for video files
+          const file = new File(fileContent, name, { type });
           
           // Create a wrapper that behaves like a File but with extra properties
           const fileWrapper = {

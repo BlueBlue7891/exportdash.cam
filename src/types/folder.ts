@@ -198,7 +198,19 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
       const text = await file.text();
       const data = JSON.parse(text);
       if (data.timestamp) {
-        const d = new Date(data.timestamp);
+        // Parse timestamp as local time (Tesla event.json uses local time without timezone)
+        const timestamp = data.timestamp;
+        let d: Date;
+        if (timestamp.includes('T')) {
+          // ISO format: 2026-02-13T14:05:01
+          // Parse manually to avoid timezone issues
+          const [datePart, timePart] = timestamp.split('T');
+          const [year, month, day] = datePart.split('-').map(Number);
+          const [hour, minute, second] = timePart.split(':').map(Number);
+          d = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+          d = new Date(timestamp);
+        }
         eventSeconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       }
       if (data.reason) {
@@ -226,8 +238,8 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     }
   }
   
-  // Collect all video time slots per directory
-  const dirVideoSlots = new Map<string, { timeStr: string; startSeconds: number }[]>();
+  // Collect all video time slots per directory (unique time slots only, ignoring camera angles)
+  const dirVideoSlots = new Map<string, Map<string, { timeStr: string; startSeconds: number }>>();
   
   for (const file of videoFiles) {
     if (file.name === 'event.json') continue;
@@ -242,20 +254,24 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     const fileDir = getFileDirectory(file);
     
     if (!dirVideoSlots.has(fileDir)) {
-      dirVideoSlots.set(fileDir, []);
+      dirVideoSlots.set(fileDir, new Map());
     }
-    dirVideoSlots.get(fileDir)!.push({ timeStr, startSeconds });
+    // Use timeStr as key to deduplicate (same timestamp from different cameras)
+    dirVideoSlots.get(fileDir)!.set(timeStr, { timeStr, startSeconds });
   }
   
   // Find which time slot contains the event for each directory
   // Map: dir -> { timeStr, reason, city, street }
   const eventSlotMap = new Map<string, { timeStr: string; reason: string; city?: string; street?: string }>();
-  for (const [dir, slots] of dirVideoSlots) {
+  for (const [dir, slotsMap] of dirVideoSlots) {
     const eventData = eventJsonData.get(dir);
     if (!eventData) continue;
     
-    slots.sort((a, b) => a.startSeconds - b.startSeconds);
+    // Convert map to array and sort by start time
+    const slots = Array.from(slotsMap.values()).sort((a, b) => a.startSeconds - b.startSeconds);
     
+    // Find the slot that contains the event timestamp
+    // A 60-second clip starting at time T contains timestamps in [T, T+60)
     for (const slot of slots) {
       if (eventData.timeSeconds >= slot.startSeconds && eventData.timeSeconds < slot.startSeconds + 60) {
         eventSlotMap.set(dir, { 
@@ -425,7 +441,19 @@ export async function parseFolderStructureAsync(
       const text = await file.text();
       const data = JSON.parse(text);
       if (data.timestamp) {
-        const d = new Date(data.timestamp);
+        // Parse timestamp as local time (Tesla event.json uses local time without timezone)
+        const timestamp = data.timestamp;
+        let d: Date;
+        if (timestamp.includes('T')) {
+          // ISO format: 2026-02-13T14:05:01
+          // Parse manually to avoid timezone issues
+          const [datePart, timePart] = timestamp.split('T');
+          const [year, month, day] = datePart.split('-').map(Number);
+          const [hour, minute, second] = timePart.split(':').map(Number);
+          d = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+          d = new Date(timestamp);
+        }
         eventSeconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       }
       if (data.reason) {
@@ -446,8 +474,8 @@ export async function parseFolderStructureAsync(
     }
   }
   
-  // Collect all video time slots per directory
-  const dirVideoSlots = new Map<string, { timeStr: string; startSeconds: number }[]>();
+  // Collect all video time slots per directory (unique time slots only, ignoring camera angles)
+  const dirVideoSlots = new Map<string, Map<string, { timeStr: string; startSeconds: number }>>();
   
   for (const file of videoFiles) {
     if (file.name === 'event.json') continue;
@@ -462,20 +490,23 @@ export async function parseFolderStructureAsync(
     const fileDir = getFileDirectory(file);
     
     if (!dirVideoSlots.has(fileDir)) {
-      dirVideoSlots.set(fileDir, []);
+      dirVideoSlots.set(fileDir, new Map());
     }
-    dirVideoSlots.get(fileDir)!.push({ timeStr, startSeconds });
+    // Use timeStr as key to deduplicate (same timestamp from different cameras)
+    dirVideoSlots.get(fileDir)!.set(timeStr, { timeStr, startSeconds });
   }
   
   // Find which time slot contains the event for each directory
   const eventSlotMap = new Map<string, string>();
-  for (const [dir, slots] of dirVideoSlots) {
+  for (const [dir, slotsMap] of dirVideoSlots) {
     const eventData = eventJsonData.get(dir);
     if (!eventData) continue;
     const eventSeconds = eventData.timeSeconds;
     
-    slots.sort((a, b) => a.startSeconds - b.startSeconds);
+    // Convert map to array and sort by start time
+    const slots = Array.from(slotsMap.values()).sort((a, b) => a.startSeconds - b.startSeconds);
     
+    // Find the slot that contains the event timestamp
     for (const slot of slots) {
       if (eventSeconds >= slot.startSeconds && eventSeconds < slot.startSeconds + 60) {
         eventSlotMap.set(dir, slot.timeStr);
