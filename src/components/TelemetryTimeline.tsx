@@ -712,7 +712,7 @@ export function TelemetryTimeline({
         {eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
           <div
             ref={eventMarkerRef}
-            className="absolute top-0 bottom-0 z-[100] group"
+            className="absolute top-0 bottom-0 z-20 group"
             style={{ left: `${timeToPosition(eventAbsoluteTime)}%` }}
             onMouseEnter={() => {
               // Get marker position for fixed positioning
