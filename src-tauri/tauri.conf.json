@@ -28,7 +28,21 @@
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
-      }
+      },
+      "capabilities": [{
+        "identifier": "default",
+        "description": "Default capabilities",
+        "windows": ["main"],
+        "permissions": [
+          "dialog:allow-open",
+          "dialog:default",
+          "fs:allow-read-dir",
+          "fs:allow-read-file",
+          "fs:default",
+          "core:event:allow-listen",
+          "core:event:default"
+        ]
+      }]
     }
   },
   "bundle": {

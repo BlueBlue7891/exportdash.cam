@@ -8,9 +8,18 @@ interface DropZoneProps {
   onScanProgress?: (current: number, total: number) => void;
 }
 
+// Check if running in Tauri
+const isTauri = () => typeof window !== 'undefined' && 
+  (('__TAURI__' in window) || (window as any).__TAURI_INTERNALS__);
+
 export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const isTauriSetupRef = useRef(false);
+  const [hasTauri, setHasTauri] = useState(false);
+  
+  useEffect(() => {
+    setHasTauri(isTauri());
+  }, []);
 
   // Tauri drag-drop setup
   useEffect(() => {
@@ -204,6 +213,109 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
     },
     [onFilesAdded]
   );
+  
+  // Tauri: Open multiple folders using native dialog
+  const handleOpenFoldersTauri = useCallback(async () => {
+    if (!hasTauri) return;
+    
+    try {
+      // Use Tauri's dialog API if available
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const { readDir } = await import('@tauri-apps/plugin-fs');
+      const { convertFileSrc } = await import('@tauri-apps/api/core');
+      
+      // Open multiple directories
+      const selected = await open({
+        directory: true,
+        multiple: true,
+        title: 'Select TeslaCam Folders'
+      });
+      
+      if (!selected || (Array.isArray(selected) && selected.length === 0)) return;
+      
+      const paths = Array.isArray(selected) ? selected : [selected];
+      
+      // Scan for video files
+      onScanProgress?.(0, paths.length);
+      const fileEntries: { path: string; name: string; type: string }[] = [];
+      
+      const scanDirectory = async (dirPath: string) => {
+        try {
+          const entries = await readDir(dirPath);
+          for (const entry of entries) {
+            const fullPath = dirPath.replace(/\\/g, '/') + '/' + entry.name;
+            const lower = entry.name.toLowerCase();
+            
+            if (entry.isDirectory) {
+              await scanDirectory(fullPath);
+            } else if (lower.endsWith('.mp4') || lower === 'event.json') {
+              fileEntries.push({
+                path: fullPath,
+                name: entry.name,
+                type: lower.endsWith('.mp4') ? 'video/mp4' : 'application/json'
+              });
+            }
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      };
+      
+      for (let i = 0; i < paths.length; i++) {
+        await scanDirectory(paths[i]);
+        onScanProgress?.(i + 1, paths.length);
+      }
+      
+      if (fileEntries.length === 0) return;
+      
+      // Create File objects with Tauri URLs
+      // Create a custom File-like object with webkitRelativePath
+      const files: any[] = [];
+      for (const { path, name, type } of fileEntries) {
+        try {
+          const assetUrl = convertFileSrc(path);
+          const file = new File([], name, { type });
+          
+          // Calculate relative path for folder structure detection
+          const pathParts = path.replace(/\\/g, '/').split('/');
+          const teslaCamIndex = pathParts.findIndex(p => p.toLowerCase().includes('teslacam'));
+          const relativePath = teslaCamIndex >= 0 
+            ? pathParts.slice(teslaCamIndex).join('/')
+            : pathParts.slice(-3).join('/');
+          
+          // Create a wrapper that behaves like a File but with extra properties
+          const fileWrapper = {
+            ...file,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            lastModified: file.lastModified,
+            webkitRelativePath: relativePath,
+            tauriUrl: assetUrl,
+            tauriPath: path,
+            // Bind File methods to the original file
+            slice: file.slice.bind(file),
+            stream: file.stream.bind(file),
+            text: file.text.bind(file),
+            arrayBuffer: file.arrayBuffer.bind(file),
+            [Symbol.toStringTag]: 'File'
+          };
+          
+          files.push(fileWrapper);
+        } catch (e) {
+          console.error('Convert error:', path, e);
+        }
+      }
+      
+      if (files.length > 0) {
+        onFilesAdded(files);
+      }
+    } catch (error) {
+      console.error('Tauri folder select error:', error);
+      // Fallback: show alert to use drag-drop instead
+      alert('Please drag and drop folders to import multiple folders, or use Open Folder for single folder.');
+    }
+  }, [hasTauri, onFilesAdded, onScanProgress]);
 
   const dropZoneClasses = hasVideos
     ? `border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
@@ -251,10 +363,19 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
               <span>Browse Files</span>
               <input type="file" accept="video/mp4,application/json" multiple onChange={handleFileInput} className="hidden" />
             </label>
-            <label className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
-              <span>Open Folder</span>
-              <input type="file" {...{ webkitdirectory: 'true', directory: 'true', multiple: true } as any} onChange={handleFileInput} className="hidden" />
-            </label>
+            {hasTauri ? (
+              <button 
+                onClick={handleOpenFoldersTauri}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors"
+              >
+                Open Folder(s)
+              </button>
+            ) : (
+              <label className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
+                <span>Open Folder</span>
+                <input type="file" {...{ webkitdirectory: 'true', directory: 'true' } as any} onChange={handleFileInput} className="hidden" />
+              </label>
+            )}
           </div>
         </div>
       )}

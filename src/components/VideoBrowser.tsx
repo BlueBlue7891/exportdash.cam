@@ -261,8 +261,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   const initialSelectionRef = useRef<Set<string>>(new Set());
   // Track if we're in "subtract mode" for drag (when starting drag on selected item)
   const isSubtractModeRef = useRef(false);
-  // Track if Ctrl/Cmd is held during drag
-  const isCtrlHeldRef = useRef(false);
+  // Track if we actually dragged (moved to another item)
+  const hasDraggedRef = useRef(false);
   
   // Double click handler - select only this item
   const handleDoubleClick = useCallback((id: string, index: number) => {
@@ -272,8 +272,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   
   // Single click handler - toggle selection (add or remove)
   const handleRowClick = useCallback((id: string, index: number, e: React.MouseEvent) => {
-    // Ignore if it was a drag operation
-    if (isDragging) return;
+    // If we dragged, don't process click
+    if (hasDraggedRef.current) return;
     
     const isAlreadySelected = selectedTimeSlots.has(id);
     
@@ -288,9 +288,9 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
       return next;
     });
     setLastSelectedIndex(index);
-  }, [selectedTimeSlots, isDragging]);
+  }, [selectedTimeSlots]);
   
-  // Mouse down handler - starts drag for multi-select
+  // Mouse down handler - prepare for potential drag
   const handleRowMouseDown = useCallback((id: string, index: number, e: React.MouseEvent) => {
     // Don't start drag on double-click
     if (e.detail > 1) return;
@@ -298,41 +298,27 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     e.preventDefault();
     
     const isAlreadySelected = selectedTimeSlots.has(id);
-    isCtrlHeldRef.current = e.ctrlKey || e.metaKey;
     
     setIsDragging(true);
     dragStartRef.current = index;
+    hasDraggedRef.current = false;
     setLastSelectedIndex(index);
     
-    // Determine mode: 
-    // - If Ctrl is held: always add mode
-    // - Otherwise: subtract mode if starting on selected item, add mode if starting on unselected
-    isSubtractModeRef.current = !isCtrlHeldRef.current && isAlreadySelected;
+    // Determine mode: subtract mode if starting on selected item
+    isSubtractModeRef.current = isAlreadySelected;
     
-    // Store initial selection
+    // Store initial selection for drag operation
     initialSelectionRef.current = new Set(selectedTimeSlots);
-    
-    // Immediate feedback: toggle the clicked item
-    if (!isSubtractModeRef.current && !isAlreadySelected) {
-      // Add mode: add the clicked item
-      setSelectedTimeSlots(prev => {
-        const next = new Set(prev);
-        next.add(id);
-        return next;
-      });
-    } else if (isSubtractModeRef.current && isAlreadySelected) {
-      // Subtract mode: remove the clicked item
-      setSelectedTimeSlots(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
   }, [selectedTimeSlots]);
   
   // Mouse enter handler during drag - add/remove items in drag range
   const handleRowMouseEnter = useCallback((id: string, index: number) => {
     if (isDragging && dragStartRef.current !== null) {
+      // Mark that we actually dragged (not just clicked)
+      if (index !== dragStartRef.current) {
+        hasDraggedRef.current = true;
+      }
+      
       const start = Math.min(dragStartRef.current, index);
       const end = Math.max(dragStartRef.current, index);
       
@@ -372,6 +358,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     const handleGlobalMouseUp = () => {
       setIsDragging(false);
       dragStartRef.current = null;
+      // Reset hasDragged after a short delay so click handler can check it
+      setTimeout(() => {
+        hasDraggedRef.current = false;
+      }, 50);
     };
     
     if (isDragging) {
