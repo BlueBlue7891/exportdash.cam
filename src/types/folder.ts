@@ -64,10 +64,12 @@ function detectSource(file: File): VideoSource {
 export function parseFolderStructure(files: File[]): FolderStructure {
   const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource> }>>();
   
-  // Filter only video files first to reduce iteration
-  const videoFiles = files.filter(f => f.name.endsWith('.mp4'));
+  // Filter video files and event.json
+  const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
   
   for (const file of videoFiles) {
+    // Skip event.json here - it's handled separately
+    if (file.name === 'event.json') continue;
     // Parse Tesla filename format: YYYY-MM-DD_HH-MM-SS-angle.mp4
     const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
     if (!match) continue;
@@ -134,14 +136,17 @@ export async function parseFolderStructureAsync(
   onProgress?: (current: number, total: number) => void
 ): Promise<FolderStructure> {
   const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource> }>>();
-  const videoFiles = files.filter(f => f.name.endsWith('.mp4'));
+  const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
   const total = videoFiles.length;
   const BATCH_SIZE = 100;
   
   for (let i = 0; i < total; i += BATCH_SIZE) {
     const batch = videoFiles.slice(i, i + BATCH_SIZE);
     
-    for (const file of batch) {
+    // Filter out event.json from batch processing
+    const videoBatch = batch.filter(f => f.name !== 'event.json');
+    
+    for (const file of videoBatch) {
       const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
       if (!match) continue;
       

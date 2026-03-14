@@ -126,17 +126,45 @@ export default function Home() {
     try {
       // Also include event.json from the same folder if available
       const allFiles = [...files];
-      const eventJson = folderStructure?.allFiles.find(f => f.name === 'event.json');
+      
+      // Get the directory path from the first video file
+      const firstVideo = files[0];
+      const videoPath = (firstVideo as any).webkitRelativePath || (firstVideo as any).tauriPath || '';
+      // Normalize path separators for Windows
+      const normalizedVideoPath = videoPath.replace(/\\/g, '/');
+      const videoDir = normalizedVideoPath.substring(0, normalizedVideoPath.lastIndexOf('/'));
+      
+      console.log('[Page] Video path:', videoPath);
+      console.log('[Page] Video dir:', videoDir);
+      console.log('[Page] All files count:', folderStructure?.allFiles.length);
+      console.log('[Page] Event.json files:', folderStructure?.allFiles.filter(f => f.name === 'event.json').map(f => (f as any).webkitRelativePath || (f as any).tauriPath || 'no-path'));
+      
+      // Find event.json in the same directory
+      const eventJson = folderStructure?.allFiles.find(f => {
+        if (f.name !== 'event.json') return false;
+        const eventPath = (f as any).webkitRelativePath || (f as any).tauriPath || '';
+        const normalizedEventPath = eventPath.replace(/\\/g, '/');
+        const eventDir = normalizedEventPath.substring(0, normalizedEventPath.lastIndexOf('/'));
+        console.log('[Page] Checking event.json:', eventPath, '-> dir:', eventDir, 'vs videoDir:', videoDir);
+        return eventDir === videoDir;
+      });
+      
       if (eventJson) {
+        console.log('[Page] Found matching event.json:', eventJson.name, 'in', videoDir);
         allFiles.push(eventJson);
+      } else {
+        console.log('[Page] No matching event.json found in:', videoDir);
       }
       
       const { moments, events } = await processFilesToMoments(allFiles, setProcessingProgress);
+      console.log('[Page] Parsed events:', events.length, events.map(e => ({ city: e.city, lat: e.est_lat, lng: e.est_lon })));
+      
       const detectedSequences = detectSequences(moments, events);
       
       setSequences(detectedSequences);
       if (detectedSequences.length > 0) {
         setSelectedSequence(detectedSequences[0]);
+        console.log('[Page] Selected sequence event:', detectedSequences[0].event);
       }
     } catch (error) {
       console.error('Error processing videos:', error);
