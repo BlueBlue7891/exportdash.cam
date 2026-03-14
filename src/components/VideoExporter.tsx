@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { IconDownload, IconPlayerStop, IconLoader2, IconCheck } from '@tabler/icons-react';
 import { SeiData, SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { Output, Mp4OutputFormat, BufferTarget, VideoSampleSource, VideoSample } from 'mediabunny';
@@ -559,6 +560,7 @@ export function VideoExporter({
     const tempVideo = document.createElement('video');
     tempVideo.muted = true;
     tempVideo.playsInline = true;
+    tempVideo.crossOrigin = 'anonymous';
     let currentBlobUrl: string | null = null;
 
     // Extra video elements for multi-angle layouts (pip/triple)
@@ -568,24 +570,44 @@ export function VideoExporter({
       const el = document.createElement('video');
       el.muted = true;
       el.playsInline = true;
+      el.crossOrigin = 'anonymous';
       extraVideos[angle] = { el, blobUrl: null, loadedClipIdx: -1 };
       return extraVideos[angle];
     };
 
     // Helper to load a video file into a specific video element
-    const loadVideoInto = (videoEl: HTMLVideoElement, file: File, prevUrl: string | null): Promise<string> => {
+    // Handles both standard File objects and Tauri file URLs
+    const loadVideoInto = (videoEl: HTMLVideoElement, file: File, tauriUrl: string | undefined, prevUrl: string | null): Promise<string> => {
       return new Promise((resolve, reject) => {
-        if (prevUrl) URL.revokeObjectURL(prevUrl);
-        const url = URL.createObjectURL(file);
+        // Only revoke URL if it was created by createObjectURL (not Tauri asset URL)
+        if (prevUrl && !prevUrl.startsWith('asset://') && !prevUrl.startsWith('http')) {
+          try {
+            URL.revokeObjectURL(prevUrl);
+          } catch {
+            // Ignore errors from revoking non-object URLs
+          }
+        }
+        
+        // Use Tauri URL if available, otherwise create object URL from File
+        const url = tauriUrl || URL.createObjectURL(file);
+        
+        const onError = () => {
+          console.error(`Failed to load video: ${file.name}, url: ${url?.substring(0, 100)}`);
+          reject(new Error(`Failed to load ${file.name}`));
+        };
+        
+        videoEl.onerror = onError;
+        videoEl.onloadedmetadata = () => {
+          videoEl.onerror = null;
+          resolve(url);
+        };
         videoEl.src = url;
-        videoEl.onloadedmetadata = () => resolve(url);
-        videoEl.onerror = () => reject(new Error(`Failed to load ${file.name}`));
       });
     };
 
     // Helper to load a video file (main video)
-    const loadVideo = async (file: File): Promise<void> => {
-      currentBlobUrl = await loadVideoInto(tempVideo, file, currentBlobUrl);
+    const loadVideo = async (file: File, tauriUrl?: string): Promise<void> => {
+      currentBlobUrl = await loadVideoInto(tempVideo, file, tauriUrl, currentBlobUrl);
     };
 
     // Helper to seek a video element
@@ -607,7 +629,7 @@ export function VideoExporter({
       // Get first clip to determine dimensions
       const firstMoment = sequence.moments[0];
       const firstVideo = firstMoment.videos.find(v => v.angle === selectedAngle) || firstMoment.videos[0];
-      await loadVideo(firstVideo.file);
+      await loadVideo(firstVideo.file, firstVideo.url);
 
       const srcWidth = tempVideo.videoWidth || 1280;
       const srcHeight = tempVideo.videoHeight || 720;
@@ -631,13 +653,18 @@ export function VideoExporter({
         if (pillarVideo) {
           const pv = document.createElement('video');
           pv.muted = true;
-          const pvUrl = URL.createObjectURL(pillarVideo.file);
+          pv.crossOrigin = 'anonymous';
+          // Use Tauri URL if available, otherwise create object URL
+          const pvUrl = pillarVideo.url || URL.createObjectURL(pillarVideo.file);
           await new Promise<void>((resolve) => {
             pv.onloadedmetadata = () => { pillarW = pv.videoWidth; pillarH = pv.videoHeight; resolve(); };
             pv.onerror = () => resolve();
             pv.src = pvUrl;
           });
-          URL.revokeObjectURL(pvUrl);
+          // Only revoke if it was an object URL
+          if (!pillarVideo.url) {
+            URL.revokeObjectURL(pvUrl);
+          }
         }
         // 3 videos side by side, each at same height
         const cellW = pillarW;
@@ -791,7 +818,7 @@ export function VideoExporter({
             const video = moment.videos.find(v => v.angle === angle) || moment.videos[0];
 
             if (ev.loadedClipIdx !== clipIdx) {
-              ev.blobUrl = await loadVideoInto(ev.el, video.file, ev.blobUrl);
+              ev.blobUrl = await loadVideoInto(ev.el, video.file, video.url, ev.blobUrl);
               ev.loadedClipIdx = clipIdx;
             }
             await seekVideoEl(ev.el, localTime);
@@ -819,7 +846,7 @@ export function VideoExporter({
           const needReload = currentLoadedClipIdx !== clipIdx || currentLoadedAngle !== frameAngle;
           if (needReload) {
             const video = moment.videos.find(v => v.angle === frameAngle) || moment.videos[0];
-            await loadVideo(video.file);
+            await loadVideo(video.file, video.url);
             currentLoadedClipIdx = clipIdx;
             currentLoadedAngle = video.angle;
           }
@@ -832,7 +859,7 @@ export function VideoExporter({
             const video = moment.videos.find(v => v.angle === angle);
             if (!video) continue;
             if (ev.loadedClipIdx !== clipIdx) {
-              ev.blobUrl = await loadVideoInto(ev.el, video.file, ev.blobUrl);
+              ev.blobUrl = await loadVideoInto(ev.el, video.file, video.url, ev.blobUrl);
               ev.loadedClipIdx = clipIdx;
             }
             await seekVideoEl(ev.el, localTime);
@@ -918,7 +945,7 @@ export function VideoExporter({
           const needReload = currentLoadedClipIdx !== clipIdx || currentLoadedAngle !== frameAngle;
           if (needReload) {
             const video = moment.videos.find(v => v.angle === frameAngle) || moment.videos[0];
-            await loadVideo(video.file);
+            await loadVideo(video.file, video.url);
             currentLoadedClipIdx = clipIdx;
             currentLoadedAngle = video.angle;
           }
@@ -1006,9 +1033,13 @@ export function VideoExporter({
       setStatus(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setIsExporting(false);
     } finally {
-      // Cleanup
-      if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl);
+      // Cleanup - only revoke if it's an object URL (not Tauri asset URL)
+      if (currentBlobUrl && !currentBlobUrl.startsWith('asset://') && !currentBlobUrl.startsWith('http')) {
+        try {
+          URL.revokeObjectURL(currentBlobUrl);
+        } catch {
+          // Ignore errors
+        }
       }
       tempVideo.src = '';
     }
@@ -1051,8 +1082,8 @@ export function VideoExporter({
         </button>
       </Tooltip>
 
-      {(isExporting || isComplete) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      {(isExporting || isComplete) && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-gray-900 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl border border-gray-700">
             <div className="text-center">
               {/* Icon - spinning loader or success check */}
@@ -1154,7 +1185,8 @@ export function VideoExporter({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
