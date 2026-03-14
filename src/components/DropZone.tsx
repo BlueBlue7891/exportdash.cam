@@ -240,9 +240,10 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
           </div>
           <div className="text-center">
             <p className="text-xl font-medium text-gray-200">Import TeslaCam Recordings</p>
-            <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto leading-relaxed">
-              <span className="text-gray-400">Quick Load:</span> Drop a folder directly to load all clips as a sequence<br />
-              <span className="text-gray-400">Browse by Date:</span> Use "Open Folder" to explore recordings in calendar view
+            <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+              <span className="text-gray-400">Quick Load</span> — drop clips or a folder to import instantly<br />
+              <span className="text-gray-400">Select Clips</span> — click <span className="text-gray-300 font-medium">Browse Files</span> to pick multiple clips<br />
+              <span className="text-gray-400">Browse by Date</span> — click <span className="text-gray-300 font-medium">Open Folder</span> to explore via <span className="text-gray-300 font-medium">calendar</span>
             </p>
           </div>
           <div className="flex items-center gap-3 mt-4">
