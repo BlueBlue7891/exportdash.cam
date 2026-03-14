@@ -191,22 +191,25 @@ export function VideoPlayer({
   );
 
   // Map SEI data with event.json GPS fallback
-  const mapSeiData = useMemo(() => {
+  const { mapSeiData, isEventJsonGps } = useMemo(() => {
     const hasSeiGps = seiData?.latitude_deg && seiData?.longitude_deg && seiData.latitude_deg !== 0 && seiData.longitude_deg !== 0;
     const hasEventGps = sequence?.event?.est_lat && sequence?.event?.est_lon;
     
     if (hasSeiGps) {
       console.log('[VideoPlayer] Using SEI GPS:', seiData?.latitude_deg, seiData?.longitude_deg);
-      return seiData;
+      return { mapSeiData: seiData, isEventJsonGps: false };
     }
     if (hasEventGps) {
       console.log('[VideoPlayer] Using event.json GPS fallback:', sequence?.event?.est_lat, sequence?.event?.est_lon);
-      return { ...(seiData || {}), latitude_deg: sequence!.event!.est_lat, longitude_deg: sequence!.event!.est_lon } as typeof seiData;
+      return { 
+        mapSeiData: { ...(seiData || {}), latitude_deg: sequence!.event!.est_lat, longitude_deg: sequence!.event!.est_lon } as typeof seiData,
+        isEventJsonGps: true 
+      };
     }
     if (seiData) {
       console.log('[VideoPlayer] SEI has no GPS. Available fields:', Object.keys(seiData).filter(k => (seiData as any)[k] !== undefined && (seiData as any)[k] !== 0));
     }
-    return seiData;
+    return { mapSeiData: seiData, isEventJsonGps: false };
   }, [seiData, sequence?.event]);
 
   // Reset state when sequence changes
@@ -778,7 +781,7 @@ export function VideoPlayer({
                 return (
                   <div key={`pip-${idx}-${value}`} className={`${pos} w-[18%] aspect-square rounded-lg overflow-hidden border border-white/20 shadow-lg pointer-events-auto`}>
                     <Suspense fallback={<div className="bg-gray-900 w-full h-full" />}>
-                      <MapView seiData={mapSeiData} />
+                      <MapView seiData={mapSeiData} eventReason={sequence?.event?.reasonLabel} isEventJsonGps={isEventJsonGps} city={sequence?.event?.city} street={sequence?.event?.street} />
                     </Suspense>
                   </div>
                 );
@@ -939,7 +942,7 @@ export function VideoPlayer({
                     <div className="text-gray-500 text-xs">Loading...</div>
                   </div>
                 }>
-                  <MapView seiData={mapSeiData} />
+                  <MapView seiData={mapSeiData} eventReason={sequence?.event?.reasonLabel} isEventJsonGps={isEventJsonGps} city={sequence?.event?.city} street={sequence?.event?.street} />
                 </Suspense>
               </div>
             )}
@@ -954,7 +957,7 @@ export function VideoPlayer({
                 <div className="text-gray-500 text-xs">Loading...</div>
               </div>
             }>
-              <MapView seiData={mapSeiData} />
+              <MapView seiData={mapSeiData} eventReason={sequence?.event?.reasonLabel} isEventJsonGps={isEventJsonGps} city={sequence?.event?.city} street={sequence?.event?.street} />
             </Suspense>
           </div>
         )}

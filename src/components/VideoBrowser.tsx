@@ -389,6 +389,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                             </div>
                             <div className="text-xs text-gray-500">
                               {allCameras ? 'All 6 cameras' : `${cameraCount} camera${cameraCount > 1 ? 's' : ''}`}
+                              {(timeSlot.city || timeSlot.street) && (
+                                <span className="ml-2 text-gray-400">
+                                  {timeSlot.city}{timeSlot.city && timeSlot.street ? ' · ' : ''}{timeSlot.street}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -400,6 +405,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                               </svg>
                               GPS
+                            </span>
+                          )}
+                          {timeSlot.eventReason && (
+                            <span className="px-2 py-0.5 bg-amber-600/20 text-amber-400 text-[10px] rounded">
+                              {timeSlot.eventReason}
                             </span>
                           )}
                           {timeSlot.sources.map((source) => (

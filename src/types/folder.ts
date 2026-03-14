@@ -25,6 +25,60 @@ export const SOURCE_COLORS: Record<VideoSource, string> = {
   unknown: 'bg-gray-600/20 text-gray-400',
 };
 
+/** Event reason mapping to Chinese labels */
+export const EVENT_REASON_LABELS: Record<string, string> = {
+  user_interaction_dashcam_icon_tapped: '手动保存',
+  user_interaction_dashcam_multifunction_selected: '手动保存',
+  user_interaction_dashcam_launcher_action_tapped: '手动保存',
+  user_interaction_honk: '鸣笛保存',
+  sentry_aware_object_detection: 'Sentry: 检测到物体',
+  sentry_aware_accel: 'Sentry: 加速度异常',
+  sentry_aware_intrusion: 'Sentry: 入侵检测',
+  sentry_aware_proximity: 'Sentry: 接近检测',
+  sentry_ion: 'Sentry 模式开启',
+  sentry_ioff: 'Sentry 模式关闭',
+  dashcam_clip_request: '行车记录仪片段',
+  emergency_braking: '紧急制动',
+  forward_collision_warning: '前向碰撞警告',
+  auto_emergency_braking: '自动紧急制动',
+  ap_forward_collision: 'Autopilot: 前向碰撞',
+};
+
+/** Get Chinese label for event reason
+ * Supports patterns like:
+ * - sentry_panic_accel_0.903371 -> Sentry: 加速度异常 (0.90g)
+ * - sentry_aware_object_detection -> Sentry: 检测到物体
+ */
+export function getEventReasonLabel(reason: string): string {
+  // Check exact match first
+  if (EVENT_REASON_LABELS[reason]) {
+    return EVENT_REASON_LABELS[reason];
+  }
+  
+  // Handle sentry_panic_accel_* pattern (e.g., sentry_panic_accel_0.903371)
+  const panicAccelMatch = reason.match(/^sentry_panic_accel_([\d.]+)$/);
+  if (panicAccelMatch) {
+    const gForce = parseFloat(panicAccelMatch[1]);
+    return `Sentry: 加速度异常 (${gForce.toFixed(2)}g)`;
+  }
+  
+  // Handle sentry_panic_* patterns
+  if (reason.startsWith('sentry_panic_')) {
+    const panicType = reason.replace('sentry_panic_', '');
+    const panicLabels: Record<string, string> = {
+      accel: '加速度异常',
+      intrusion: '入侵检测',
+      proximity: '接近检测',
+      object: '物体检测',
+    };
+    const label = panicLabels[panicType] || panicType;
+    return `Sentry: ${label}`;
+  }
+  
+  // Fallback: format reason string
+  return reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 /** Represents a single timestamp entry with all 6 camera videos */
 export interface TimeSlot {
   time: string;        // HH-MM-SS
@@ -32,6 +86,9 @@ export interface TimeSlot {
   files: Record<string, File>; // angle -> File mapping
   sources: VideoSource[]; // Source categories for this time slot
   hasGps?: boolean;    // Whether this time slot has associated GPS data
+  eventReason?: string; // Event reason label (e.g., '手动保存', 'Sentry: 检测到物体')
+  city?: string;       // City from event.json
+  street?: string;     // Street from event.json
 }
 
 /** Represents a single date entry with multiple time slots */
@@ -63,30 +120,40 @@ function detectSource(file: File): VideoSource {
 
 /** Parse TeslaCam folder structure from files (batched for performance) */
 export async function parseFolderStructure(files: File[]): Promise<FolderStructure> {
-  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean }>>();
+  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean; reason?: string; city?: string; street?: string }>>();
   
-  // Collect event.json timestamps by directory (seconds since midnight)
-  const eventJsonTimes = new Map<string, number>();
+  // Collect event.json data by directory: { timeSeconds, reason, city, street }
+  const eventJsonData = new Map<string, { timeSeconds: number; reason: string; city?: string; street?: string }>();
   
   // Filter video files and event.json
   const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
   
-  // First pass: parse all event.json files to get their timestamps
-  // Read actual JSON content for precise timestamp, fallback to folder name
+  // First pass: parse all event.json files
   const jsonFiles = videoFiles.filter(f => f.name === 'event.json');
   for (const file of jsonFiles) {
     const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
     const dir = path.substring(0, path.lastIndexOf('/'));
     
     let eventSeconds: number | undefined;
+    let reason = '';
+    let city: string | undefined;
+    let street: string | undefined;
     
     try {
-      // Try to read actual timestamp from JSON content for precision
       const text = await file.text();
       const data = JSON.parse(text);
       if (data.timestamp) {
         const d = new Date(data.timestamp);
         eventSeconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+      }
+      if (data.reason) {
+        reason = getEventReasonLabel(data.reason);
+      }
+      if (data.city) {
+        city = data.city;
+      }
+      if (data.street) {
+        street = data.street;
       }
     } catch (e) {
       // Fallback: parse from folder name
@@ -99,12 +166,11 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     }
     
     if (eventSeconds !== undefined) {
-      eventJsonTimes.set(dir, eventSeconds);
+      eventJsonData.set(dir, { timeSeconds: eventSeconds, reason, city, street });
     }
   }
   
-  // Collect all video time slots per directory to find which one contains the event
-  // Map: dir -> array of { timeStr, startSeconds }
+  // Collect all video time slots per directory
   const dirVideoSlots = new Map<string, { timeStr: string; startSeconds: number }[]>();
   
   for (const file of videoFiles) {
@@ -127,20 +193,22 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
   }
   
   // Find which time slot contains the event for each directory
-  // Map: dir -> timeStr that contains event
-  const eventSlotMap = new Map<string, string>();
+  // Map: dir -> { timeStr, reason, city, street }
+  const eventSlotMap = new Map<string, { timeStr: string; reason: string; city?: string; street?: string }>();
   for (const [dir, slots] of dirVideoSlots) {
-    const eventSeconds = eventJsonTimes.get(dir);
-    if (eventSeconds === undefined) continue;
+    const eventData = eventJsonData.get(dir);
+    if (!eventData) continue;
     
-    // Sort slots by start time
     slots.sort((a, b) => a.startSeconds - b.startSeconds);
     
-    // Find the slot that contains the event time
-    // Video covers [start, start + 60), find where event falls into
     for (const slot of slots) {
-      if (eventSeconds >= slot.startSeconds && eventSeconds < slot.startSeconds + 60) {
-        eventSlotMap.set(dir, slot.timeStr);
+      if (eventData.timeSeconds >= slot.startSeconds && eventData.timeSeconds < slot.startSeconds + 60) {
+        eventSlotMap.set(dir, { 
+          timeStr: slot.timeStr, 
+          reason: eventData.reason,
+          city: eventData.city,
+          street: eventData.street
+        });
         break;
       }
     }
@@ -163,7 +231,11 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     // Check if this specific time slot contains the event
     const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
     const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-    const hasGps = eventSlotMap.get(fileDir) === timeStr;
+    const eventInfo = eventSlotMap.get(fileDir);
+    const hasGps = eventInfo?.timeStr === timeStr;
+    const eventReason = hasGps ? eventInfo?.reason : undefined;
+    const eventCity = hasGps ? eventInfo?.city : undefined;
+    const eventStreet = hasGps ? eventInfo?.street : undefined;
     
     // Fast path - avoid repeated lookups
     let timeMap = dateMap.get(dateStr);
@@ -174,14 +246,19 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     
     let slotData = timeMap.get(timeStr);
     if (!slotData) {
-      slotData = { files: new Map(), sources: new Set(), hasGps };
+      slotData = { files: new Map(), sources: new Set(), hasGps, reason: eventReason, city: eventCity, street: eventStreet };
       timeMap.set(timeStr, slotData);
     }
     
     slotData.files.set(angleKey, file);
     slotData.sources.add(source);
     // If any file in this slot has GPS, mark the slot as having GPS
-    if (hasGps) slotData.hasGps = true;
+    if (hasGps) {
+      slotData.hasGps = true;
+      slotData.reason = eventReason;
+      slotData.city = eventCity;
+      slotData.street = eventStreet;
+    }
   }
   
   // Convert to sorted array structure
@@ -202,6 +279,9 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
         files: Object.fromEntries(slotData.files),
         sources: Array.from(slotData.sources),
         hasGps: slotData.hasGps,
+        eventReason: slotData.reason,
+        city: slotData.city,
+        street: slotData.street,
       });
     }
     

@@ -69,27 +69,56 @@ export interface TeslaEvent {
   camera?: string;
 }
 
-/** Human-readable labels for Tesla event reasons */
+/** Human-readable labels for Tesla event reasons (Chinese) */
 export const REASON_LABELS: Record<string, string> = {
-  user_interaction_dashcam_multifunction_selected: 'Manual Save',
-  user_interaction_dashcam_icon_tapped: 'Manual Save',
-  user_interaction_honk: 'Honk Save',
-  sentry_aware_object_detection: 'Sentry: Object Detected',
-  sentry_aware_accel: 'Sentry: Acceleration',
-  sentry_aware_intrusion: 'Sentry: Intrusion',
-  sentry_aware_proximity: 'Sentry: Proximity',
-  sentry_ion: 'Sentry Mode',
-  sentry_ioff: 'Sentry Off',
-  dashcam_clip_request: 'Dashcam Clip',
-  emergency_braking: 'Emergency Braking',
-  forward_collision_warning: 'Forward Collision Warning',
-  auto_emergency_braking: 'Auto Emergency Braking',
-  ap_forward_collision: 'Autopilot: Forward Collision',
+  user_interaction_dashcam_multifunction_selected: '手动保存',
+  user_interaction_dashcam_icon_tapped: '手动保存',
+  user_interaction_dashcam_launcher_action_tapped: '手动保存',
+  user_interaction_honk: '鸣笛保存',
+  sentry_aware_object_detection: 'Sentry: 检测到物体',
+  sentry_aware_accel: 'Sentry: 加速度异常',
+  sentry_aware_intrusion: 'Sentry: 入侵检测',
+  sentry_aware_proximity: 'Sentry: 接近检测',
+  sentry_ion: 'Sentry 模式开启',
+  sentry_ioff: 'Sentry 模式关闭',
+  dashcam_clip_request: '行车记录仪片段',
+  emergency_braking: '紧急制动',
+  forward_collision_warning: '前向碰撞警告',
+  auto_emergency_braking: '自动紧急制动',
+  ap_forward_collision: 'Autopilot: 前向碰撞',
 };
 
-/** Get human-readable label for an event reason */
+/** Get human-readable label for an event reason
+ * Supports patterns like:
+ * - sentry_panic_accel_0.903371 -> Sentry: 加速度异常 (0.90g)
+ */
 export function getReasonLabel(reason: string): string {
-  return REASON_LABELS[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  // Check exact match first
+  if (REASON_LABELS[reason]) {
+    return REASON_LABELS[reason];
+  }
+  
+  // Handle sentry_panic_accel_* pattern (e.g., sentry_panic_accel_0.903371)
+  const panicAccelMatch = reason.match(/^sentry_panic_accel_([\d.]+)$/);
+  if (panicAccelMatch) {
+    const gForce = parseFloat(panicAccelMatch[1]);
+    return `Sentry: 加速度异常 (${gForce.toFixed(2)}g)`;
+  }
+  
+  // Handle sentry_panic_* patterns
+  if (reason.startsWith('sentry_panic_')) {
+    const panicType = reason.replace('sentry_panic_', '');
+    const panicLabels: Record<string, string> = {
+      accel: '加速度异常',
+      intrusion: '入侵检测',
+      proximity: '接近检测',
+      object: '物体检测',
+    };
+    const label = panicLabels[panicType] || panicType;
+    return `Sentry: ${label}`;
+  }
+  
+  return reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 /** Angle constants and utilities */

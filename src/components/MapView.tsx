@@ -7,11 +7,15 @@ import { wgs84ToGcj02, gcj02ToWgs84, isInChina, isOutOfChina, distance } from '@
 interface MapViewProps {
   seiData: SeiData | null;
   heading?: number;
+  eventReason?: string;  // event.json reason label for GPS source display
+  isEventJsonGps?: boolean;  // true if GPS is from event.json (not native video SEI)
+  city?: string;         // City from event.json
+  street?: string;       // Street from event.json
 }
 
 type MapProvider = 'amap' | 'osm';
 
-export function MapView({ seiData, heading }: MapViewProps) {
+export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, street }: MapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -23,11 +27,10 @@ export function MapView({ seiData, heading }: MapViewProps) {
   const rawLng = seiData?.longitude_deg;
   const headingDeg = heading ?? seiData?.heading_deg ?? 0;
   
-  // 判断 GPS 是否来自视频原生 SEI（有速度、档位等数据）
-  // 还是来自 event.json 回退（只有 lat/lng）
-  const hasNativeVideoGps = seiData?.vehicle_speed_mps !== undefined || 
-                            seiData?.gear_state !== undefined ||
-                            seiData?.autopilot_state !== undefined;
+  // 判断 GPS 是否来自视频原生 SEI
+  // isEventJsonGps=true: GPS 来自 event.json 回退
+  // isEventJsonGps=false/undefined: GPS 来自视频原生 SEI
+  const hasNativeVideoGps = !isEventJsonGps;
 
   // 根据位置判断使用哪种地图，并进行坐标转换
   const { lat, lng, isChina, offset } = (() => {
@@ -224,8 +227,13 @@ export function MapView({ seiData, heading }: MapViewProps) {
                 估计位置: {lat?.toFixed(5)}, {lng?.toFixed(5)}
               </div>
               <div className="text-[8px] text-white/70">
-                来自 event.json (事件触发时刻)
+                来自 event.json ({eventReason || '事件触发时刻'})
               </div>
+              {(city || street) && (
+                <div className="text-[8px] text-white/60 truncate">
+                  {city}{city && street ? ' · ' : ''}{street}
+                </div>
+              )}
             </>
           ) : isChina && mapProvider === 'amap' ? (
             // 视频包含原生 GPS 数据 + 高德地图
