@@ -31,6 +31,7 @@ export interface TimeSlot {
   displayTime: string; // HH:MM:SS
   files: Record<string, File>; // angle -> File mapping
   sources: VideoSource[]; // Source categories for this time slot
+  hasGps?: boolean;    // Whether this time slot has associated GPS data
 }
 
 /** Represents a single date entry with multiple time slots */
@@ -62,14 +63,77 @@ function detectSource(file: File): VideoSource {
 
 /** Parse TeslaCam folder structure from files (batched for performance) */
 export function parseFolderStructure(files: File[]): FolderStructure {
-  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource> }>>();
+  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean }>>();
+  
+  // Collect event.json timestamps by directory (seconds since midnight)
+  const eventJsonTimes = new Map<string, number>();
   
   // Filter video files and event.json
   const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
   
+  // First pass: parse all event.json files to get their timestamps
   for (const file of videoFiles) {
-    // Skip event.json here - it's handled separately
+    if (file.name === 'event.json') {
+      const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+      const dir = path.substring(0, path.lastIndexOf('/'));
+      // Extract timestamp from parent folder name (e.g., "2026-02-13_18-25-51")
+      const folderName = dir.substring(dir.lastIndexOf('/') + 1);
+      const match = folderName.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})/);
+      if (match) {
+        const [, hour, minute, second] = match;
+        const eventSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
+        eventJsonTimes.set(dir, eventSeconds);
+      }
+    }
+  }
+  
+  // Collect all video time slots per directory to find which one contains the event
+  // Map: dir -> array of { timeStr, startSeconds }
+  const dirVideoSlots = new Map<string, { timeStr: string; startSeconds: number }[]>();
+  
+  for (const file of videoFiles) {
     if (file.name === 'event.json') continue;
+    
+    const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
+    if (!match) continue;
+    
+    const [, year, month, day, hour, minute, second] = match;
+    const timeStr = `${hour}-${minute}-${second}`;
+    const startSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
+    
+    const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    
+    if (!dirVideoSlots.has(fileDir)) {
+      dirVideoSlots.set(fileDir, []);
+    }
+    dirVideoSlots.get(fileDir)!.push({ timeStr, startSeconds });
+  }
+  
+  // Find which time slot contains the event for each directory
+  // Map: dir -> timeStr that contains event
+  const eventSlotMap = new Map<string, string>();
+  for (const [dir, slots] of dirVideoSlots) {
+    const eventSeconds = eventJsonTimes.get(dir);
+    if (eventSeconds === undefined) continue;
+    
+    // Sort slots by start time
+    slots.sort((a, b) => a.startSeconds - b.startSeconds);
+    
+    // Find the slot that contains the event time
+    // Video covers [start, start + 60), find where event falls into
+    for (const slot of slots) {
+      if (eventSeconds >= slot.startSeconds && eventSeconds < slot.startSeconds + 60) {
+        eventSlotMap.set(dir, slot.timeStr);
+        break;
+      }
+    }
+  }
+  
+  // Second pass: process video files and mark hasGps
+  for (const file of videoFiles) {
+    if (file.name === 'event.json') continue;
+    
     // Parse Tesla filename format: YYYY-MM-DD_HH-MM-SS-angle.mp4
     const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
     if (!match) continue;
@@ -80,6 +144,11 @@ export function parseFolderStructure(files: File[]): FolderStructure {
     const angleKey = angle.toLowerCase().replace(/-/g, '_');
     const source = detectSource(file);
     
+    // Check if this specific time slot contains the event
+    const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    const hasGps = eventSlotMap.get(fileDir) === timeStr;
+    
     // Fast path - avoid repeated lookups
     let timeMap = dateMap.get(dateStr);
     if (!timeMap) {
@@ -89,12 +158,14 @@ export function parseFolderStructure(files: File[]): FolderStructure {
     
     let slotData = timeMap.get(timeStr);
     if (!slotData) {
-      slotData = { files: new Map(), sources: new Set() };
+      slotData = { files: new Map(), sources: new Set(), hasGps };
       timeMap.set(timeStr, slotData);
     }
     
     slotData.files.set(angleKey, file);
     slotData.sources.add(source);
+    // If any file in this slot has GPS, mark the slot as having GPS
+    if (hasGps) slotData.hasGps = true;
   }
   
   // Convert to sorted array structure
@@ -114,6 +185,7 @@ export function parseFolderStructure(files: File[]): FolderStructure {
         displayTime: `${timeStr.slice(0, 2)}:${timeStr.slice(3, 5)}:${timeStr.slice(6, 8)}`,
         files: Object.fromEntries(slotData.files),
         sources: Array.from(slotData.sources),
+        hasGps: slotData.hasGps,
       });
     }
     
@@ -135,15 +207,71 @@ export async function parseFolderStructureAsync(
   files: File[],
   onProgress?: (current: number, total: number) => void
 ): Promise<FolderStructure> {
-  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource> }>>();
+  const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean }>>();
+  
+  // Collect event.json timestamps by directory
+  const eventJsonTimes = new Map<string, number>();
+  
   const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
+  
+  // First pass: parse all event.json files
+  for (const file of videoFiles) {
+    if (file.name === 'event.json') {
+      const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+      const dir = path.substring(0, path.lastIndexOf('/'));
+      const folderName = dir.substring(dir.lastIndexOf('/') + 1);
+      const match = folderName.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})/);
+      if (match) {
+        const [, hour, minute, second] = match;
+        const eventSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
+        eventJsonTimes.set(dir, eventSeconds);
+      }
+    }
+  }
+  
+  // Collect all video time slots per directory
+  const dirVideoSlots = new Map<string, { timeStr: string; startSeconds: number }[]>();
+  
+  for (const file of videoFiles) {
+    if (file.name === 'event.json') continue;
+    
+    const match = file.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+?)\.mp4$/i);
+    if (!match) continue;
+    
+    const [, year, month, day, hour, minute, second] = match;
+    const timeStr = `${hour}-${minute}-${second}`;
+    const startSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
+    
+    const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    
+    if (!dirVideoSlots.has(fileDir)) {
+      dirVideoSlots.set(fileDir, []);
+    }
+    dirVideoSlots.get(fileDir)!.push({ timeStr, startSeconds });
+  }
+  
+  // Find which time slot contains the event for each directory
+  const eventSlotMap = new Map<string, string>();
+  for (const [dir, slots] of dirVideoSlots) {
+    const eventSeconds = eventJsonTimes.get(dir);
+    if (eventSeconds === undefined) continue;
+    
+    slots.sort((a, b) => a.startSeconds - b.startSeconds);
+    
+    for (const slot of slots) {
+      if (eventSeconds >= slot.startSeconds && eventSeconds < slot.startSeconds + 60) {
+        eventSlotMap.set(dir, slot.timeStr);
+        break;
+      }
+    }
+  }
+  
   const total = videoFiles.length;
   const BATCH_SIZE = 100;
   
   for (let i = 0; i < total; i += BATCH_SIZE) {
     const batch = videoFiles.slice(i, i + BATCH_SIZE);
-    
-    // Filter out event.json from batch processing
     const videoBatch = batch.filter(f => f.name !== 'event.json');
     
     for (const file of videoBatch) {
@@ -156,6 +284,10 @@ export async function parseFolderStructureAsync(
       const angleKey = angle.toLowerCase().replace(/-/g, '_');
       const source = detectSource(file);
       
+      const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+      const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+      const hasGps = eventSlotMap.get(fileDir) === timeStr;
+      
       let timeMap = dateMap.get(dateStr);
       if (!timeMap) {
         timeMap = new Map();
@@ -164,12 +296,13 @@ export async function parseFolderStructureAsync(
       
       let slotData = timeMap.get(timeStr);
       if (!slotData) {
-        slotData = { files: new Map(), sources: new Set() };
+        slotData = { files: new Map(), sources: new Set(), hasGps };
         timeMap.set(timeStr, slotData);
       }
       
       slotData.files.set(angleKey, file);
       slotData.sources.add(source);
+      if (hasGps) slotData.hasGps = true;
     }
     
     onProgress?.(Math.min(i + BATCH_SIZE, total), total);
@@ -195,6 +328,7 @@ export async function parseFolderStructureAsync(
         displayTime: `${timeStr.slice(0, 2)}:${timeStr.slice(3, 5)}:${timeStr.slice(6, 8)}`,
         files: Object.fromEntries(slotData.files),
         sources: Array.from(slotData.sources),
+        hasGps: slotData.hasGps,
       });
     }
     

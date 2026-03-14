@@ -208,23 +208,23 @@ export function MapView({ seiData, heading }: MapViewProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <p>No GPS data in video</p>
-            <p className="text-xs text-gray-600 mt-1">Some regions don't include GPS in dashcam footage</p>
+            <p>无 GPS 数据</p>
+            <p className="text-xs text-gray-600 mt-1">视频无 GPS 或 event.json 时间戳不匹配</p>
           </div>
         </div>
       )}
 
       {/* Coordinates overlay */}
       {isMapReady && hasValidCoords && (
-        <div className="absolute bottom-1 left-1 bg-black/60 rounded px-1.5 py-0.5 text-[9px] font-mono z-[1000] flex flex-col gap-0.5 max-w-[220px]">
+        <div className="absolute bottom-1 left-1 bg-black/60 rounded px-1.5 py-0.5 text-[9px] font-mono z-[1000] flex flex-col gap-0.5 max-w-[240px]">
           {!hasNativeVideoGps ? (
             // 使用 event.json 回退（视频无原生 GPS）
             <>
               <div className="text-yellow-400">
                 估计位置: {lat?.toFixed(5)}, {lng?.toFixed(5)}
               </div>
-              <div className="text-[8px] text-gray-500">
-                来自 event.json (视频无 GPS)
+              <div className="text-[8px] text-white/70">
+                来自 event.json (事件触发时刻)
               </div>
             </>
           ) : isChina && mapProvider === 'amap' ? (
@@ -234,7 +234,7 @@ export function MapView({ seiData, heading }: MapViewProps) {
                 高德: {lat?.toFixed(5)}, {lng?.toFixed(5)} 
                 {headingDeg > 0 && <span className="text-green-600 ml-1">{Math.round(headingDeg)}°</span>}
               </div>
-              <div className="text-[8px] text-gray-500">
+              <div className="text-[8px] text-white/70">
                 GPS: {rawLat?.toFixed(5)}, {rawLng?.toFixed(5)} (偏移: {offset.toFixed(0)}m)
               </div>
             </>
