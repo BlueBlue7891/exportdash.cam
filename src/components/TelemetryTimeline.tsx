@@ -26,15 +26,12 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
   const tooltipWidth = tooltipRect?.width ?? 200;
   const tooltipHeight = tooltipRect?.height ?? 60;
   const padding = 8;
-  
-  // Diamond marker dimensions (w-3 h-3 = 12px side length)
-  // The diamond is a square rotated 45°, so its diagonal = side × √2
-  const diamondSide = 12; // w-3 = 0.75rem = 12px
-  const halfDiagonal = (diamondSide * Math.sqrt(2)) / 2; // ≈ 8.49px
+  const shiftOffset = 24; // 24px shift for left/right alignment
   
   // Calculate marker center
   const markerCenterX = markerRect.left + markerRect.width / 2;
-  const markerTipY = markerRect.top + markerRect.height / 2; // Center of the marker element
+  // The diamond tip is visually near the top of the marker element
+  const markerTipY = markerRect.top + 4; // Approximate tip position
   
   // Determine horizontal alignment based on viewport edges
   let left: number;
@@ -44,12 +41,12 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
   const wouldClipRight = markerCenterX + tooltipWidth / 2 > window.innerWidth - padding;
   
   if (wouldClipLeft) {
-    // Left align: shift left by half diamond diagonal
-    left = Math.max(padding, markerRect.left - halfDiagonal);
+    // Left align: shift left by 10px
+    left = Math.max(padding, markerCenterX - tooltipWidth + shiftOffset);
     align = 'left';
   } else if (wouldClipRight) {
-    // Right align: shift right by half diamond diagonal
-    left = Math.min(window.innerWidth - tooltipWidth - padding, markerRect.right - tooltipWidth + halfDiagonal);
+    // Right align: shift right by 10px
+    left = Math.min(window.innerWidth - tooltipWidth - padding, markerCenterX - shiftOffset);
     align = 'right';
   } else {
     // Center align
@@ -57,14 +54,12 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
     align = 'center';
   }
   
-  // Position tooltip: shift up by half diamond diagonal to align arrow with diamond tip
-  // Arrow tip will be at: top + tooltipHeight - 4
-  // We want arrow tip to align with diamond tip (markerTipY - halfDiagonal)
-  const arrowOffset = 4; // -mt-1 = -4px
-  const diamondTipY = markerTipY - halfDiagonal; // Diamond's bottom tip
-  const top = diamondTipY - tooltipHeight + arrowOffset - 4; // Extra 4px gap
+  // Position tooltip arrow to align with diamond tip
+  // Arrow tip is at: top + tooltipHeight - 4 (arrow offset)
+  // We want this to equal markerTipY - shiftOffset (shift up by 10px)
+  const top = markerTipY - shiftOffset - tooltipHeight + 2; // +4 for arrow, -2 for fine tuning
 
-  // Arrow position: point to the diamond center
+  // Arrow position: point to the diamond
   const arrowX = markerCenterX - left;
   const arrowPadding = 12;
   const arrowLeft = {
@@ -80,7 +75,7 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
     >
       <div 
         ref={contentRef}
-        className="bg-gray-900/95 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
+        className="bg-gray-900/30 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
       >
         <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
         {(event.city || event.street) && (
