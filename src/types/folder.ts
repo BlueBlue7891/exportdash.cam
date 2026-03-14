@@ -118,6 +118,19 @@ function detectSource(file: File): VideoSource {
   return 'unknown';
 }
 
+/** Infer source from event.json reason when path detection fails */
+function inferSourceFromReason(reason?: string): VideoSource | null {
+  if (!reason) return null;
+  const lowerReason = reason.toLowerCase();
+  // Sentry-related reasons
+  if (lowerReason.includes('sentry_')) return 'sentry';
+  // Manual save reasons (user_interaction)
+  if (lowerReason.includes('user_interaction_')) return 'saved';
+  // Emergency/Autopilot reasons also go to saved
+  if (lowerReason.includes('emergency') || lowerReason.includes('collision') || lowerReason.includes('braking')) return 'saved';
+  return null;
+}
+
 /** Parse TeslaCam folder structure from files (batched for performance) */
 export async function parseFolderStructure(files: File[]): Promise<FolderStructure> {
   const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean; reason?: string; city?: string; street?: string }>>();
@@ -226,11 +239,23 @@ export async function parseFolderStructure(files: File[]): Promise<FolderStructu
     const dateStr = `${year}-${month}-${day}`;
     const timeStr = `${hour}-${minute}-${second}`;
     const angleKey = angle.toLowerCase().replace(/-/g, '_');
-    const source = detectSource(file);
     
-    // Check if this specific time slot contains the event
+    // Get file path and directory
     const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || '';
     const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    
+    let source = detectSource(file);
+    
+    // If path detection fails, try to infer from event.json reason
+    if (source === 'unknown') {
+      const eventData = eventJsonData.get(fileDir);
+      if (eventData?.reason) {
+        const inferred = inferSourceFromReason(eventData.reason);
+        if (inferred) source = inferred;
+      }
+    }
+    
+    // Check if this specific time slot contains the event
     const eventInfo = eventSlotMap.get(fileDir);
     const hasGps = eventInfo?.timeStr === timeStr;
     const eventReason = hasGps ? eventInfo?.reason : undefined;

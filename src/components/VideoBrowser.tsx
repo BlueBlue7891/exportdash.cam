@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   DateEntry, 
   TimeSlot, 
@@ -21,9 +21,27 @@ interface VideoBrowserProps {
 
 const ALL_SOURCES: VideoSource[] = ['recent', 'saved', 'sentry', 'encrypted', 'photobooth', 'unknown'];
 
+const STORAGE_KEY = 'videoBrowserLastMonth';
+
+type MonthState = { year: number; month: number };
+
 export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: VideoBrowserProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
+  
+  // Compute date range from folder structure
+  const dateRange = useMemo(() => {
+    if (folderStructure.dates.length === 0) return null;
+    const dates = folderStructure.dates.map(d => d.date).sort();
+    const earliest = dates[0];
+    const latest = dates[dates.length - 1];
+    const [earliestYear, earliestMonth] = earliest.split('-').map(Number);
+    const [latestYear, latestMonth] = latest.split('-').map(Number);
+    return {
+      earliest: { year: earliestYear, month: earliestMonth - 1, date: earliest },
+      latest: { year: latestYear, month: latestMonth - 1, date: latest },
+    };
+  }, [folderStructure.dates]);
   
   // Compute available sources and their counts
   const sourceStats = useMemo(() => {
@@ -52,23 +70,46 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     })).filter(date => date.timeSlots.length > 0);
   }, [folderStructure.dates, selectedSources]);
   
-  // Find earliest date with videos (from filtered)
-  const earliestDate = useMemo(() => {
-    if (filteredDates.length === 0) return null;
-    return filteredDates[0].date;
-  }, [filteredDates]);
+
   
-  // Parse earliest date for initial month
+  // Parse initial month: prefer latest date (most recent), or from localStorage
   const initialMonth = useMemo(() => {
-    if (earliestDate) {
-      const [year, month] = earliestDate.split('-').map(Number);
-      return { year, month: month - 1 };
+    // Try to restore from localStorage first
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          // Validate the saved month is within valid range
+          if (dateRange) {
+            const savedTime = new Date(parsed.year, parsed.month).getTime();
+            const earliestTime = new Date(dateRange.earliest.year, dateRange.earliest.month).getTime();
+            const latestTime = new Date(dateRange.latest.year, dateRange.latest.month).getTime();
+            if (savedTime >= earliestTime && savedTime <= latestTime) {
+              return parsed;
+            }
+          }
+        } catch {
+          // Invalid saved data, ignore
+        }
+      }
+    }
+    // Default to latest date (most recent)
+    if (dateRange) {
+      return { year: dateRange.latest.year, month: dateRange.latest.month };
     }
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
-  }, [earliestDate]);
+  }, [dateRange]);
   
-  const [currentMonth, setCurrentMonth] = useState(initialMonth);
+  const [currentMonth, setCurrentMonth] = useState<MonthState>(initialMonth);
+  
+  // Save current month to localStorage when changed
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentMonth));
+    }
+  }, [currentMonth]);
 
   // Get selected date entry (from filtered)
   const selectedDateEntry = useMemo(() => {
@@ -122,7 +163,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                       'July', 'August', 'September', 'October', 'November', 'December'];
 
   const goToPreviousMonth = () => {
-    setCurrentMonth(prev => {
+    if (isAtEarliest) return;
+    setCurrentMonth((prev: MonthState) => {
       if (prev.month === 0) {
         return { year: prev.year - 1, month: 11 };
       }
@@ -131,7 +173,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   };
 
   const goToNextMonth = () => {
-    setCurrentMonth(prev => {
+    if (isAtLatest) return;
+    setCurrentMonth((prev: MonthState) => {
       if (prev.month === 11) {
         return { year: prev.year + 1, month: 0 };
       }
@@ -139,13 +182,26 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     });
   };
 
-  const jumpToEarliestDate = () => {
-    if (earliestDate) {
-      const [year, month] = earliestDate.split('-').map(Number);
-      setCurrentMonth({ year, month: month - 1 });
-      setSelectedDate(earliestDate);
+  const goToEarliestMonth = () => {
+    if (dateRange) {
+      setCurrentMonth({ year: dateRange.earliest.year, month: dateRange.earliest.month });
+      setSelectedDate(dateRange.earliest.date);
     }
   };
+
+  const goToLatestMonth = () => {
+    if (dateRange) {
+      setCurrentMonth({ year: dateRange.latest.year, month: dateRange.latest.month });
+      setSelectedDate(dateRange.latest.date);
+    }
+  };
+
+  // Check if at boundaries (convert to comparable number: year * 12 + month)
+  const currentMonthValue = currentMonth.year * 12 + currentMonth.month;
+  const earliestMonthValue = dateRange ? dateRange.earliest.year * 12 + dateRange.earliest.month : 0;
+  const latestMonthValue = dateRange ? dateRange.latest.year * 12 + dateRange.latest.month : 0;
+  const isAtEarliest = dateRange ? currentMonthValue <= earliestMonthValue : false;
+  const isAtLatest = dateRange ? currentMonthValue >= latestMonthValue : false;
 
   const toggleSource = (source: VideoSource) => {
     setSelectedSources(prev => {
@@ -188,40 +244,73 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
           {/* Calendar Section */}
           <div className="p-5 flex-shrink-0">
             <div className="flex items-center justify-between mb-2">
+              {/* Jump to earliest button */}
+              <button
+                onClick={goToEarliestMonth}
+                disabled={isAtEarliest}
+                className={`p-1 rounded transition-colors ${
+                  isAtEarliest 
+                    ? 'text-gray-700 cursor-not-allowed' 
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                }`}
+                title="Jump to earliest"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </button>
+              
+              {/* Previous month button */}
               <button
                 onClick={goToPreviousMonth}
-                className="p-1 rounded hover:bg-gray-800 text-gray-400"
+                disabled={isAtEarliest}
+                className={`p-1 rounded transition-colors ${
+                  isAtEarliest 
+                    ? 'text-gray-700 cursor-not-allowed' 
+                    : 'text-gray-400 hover:bg-gray-800'
+                }`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
+              
+              {/* Month/Year display */}
               <h3 className="text-lg font-semibold text-white">
                 {monthNames[currentMonth.month]} {currentMonth.year}
               </h3>
+              
+              {/* Next month button */}
               <button
                 onClick={goToNextMonth}
-                className="p-1 rounded hover:bg-gray-800 text-gray-400"
+                disabled={isAtLatest}
+                className={`p-1 rounded transition-colors ${
+                  isAtLatest 
+                    ? 'text-gray-700 cursor-not-allowed' 
+                    : 'text-gray-400 hover:bg-gray-800'
+                }`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
+              
+              {/* Jump to latest button */}
+              <button
+                onClick={goToLatestMonth}
+                disabled={isAtLatest}
+                className={`p-1 rounded transition-colors ${
+                  isAtLatest 
+                    ? 'text-gray-700 cursor-not-allowed' 
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                }`}
+                title="Jump to latest"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
-
-            {earliestDate && (
-              <div className="flex justify-center mb-3">
-                <button
-                  onClick={jumpToEarliestDate}
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-600/10 transition-colors"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                  </svg>
-                  Jump to earliest ({earliestDate})
-                </button>
-              </div>
-            )}
 
             <div className="grid grid-cols-7 gap-1 mb-2">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
