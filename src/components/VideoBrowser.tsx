@@ -17,6 +17,9 @@ interface VideoBrowserProps {
   };
   onSelectTimeSlot: (timeSlot: TimeSlot | TimeSlot[]) => void;
   onClose: () => void;
+  // External selection state (persisted across opens)
+  selectedTimeSlotIds: Set<string>;
+  onSelectionChange: (ids: Set<string>) => void;
 }
 
 const ALL_SOURCES: VideoSource[] = ['recent', 'saved', 'sentry', 'encrypted', 'photobooth', 'unknown'];
@@ -29,11 +32,11 @@ type MonthState = { year: number; month: number };
 // Complete badge color - distinct from Saved (green)
 const COMPLETE_BADGE_COLOR = 'bg-teal-600/20 text-teal-400';
 
-export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: VideoBrowserProps) {
+export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange }: VideoBrowserProps) {
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
-  // New: Selected time slots for batch operations
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState<Set<string>>(new Set());
+  // Use external selection state
+  const selectedTimeSlots = selectedTimeSlotIds;
   const [isDragging, setIsDragging] = useState(false);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const dragStartRef = useRef<number | null>(null);
@@ -140,11 +143,19 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   // Flatten time slots for the selected date with index
   const timeSlotsWithIndex = useMemo(() => {
     if (!selectedDateEntry) return [];
-    return selectedDateEntry.timeSlots.map((slot, index) => ({
-      ...slot,
-      index,
-      id: `${selectedDateEntry.date}_${slot.time}`
-    }));
+    return selectedDateEntry.timeSlots.map((slot, index) => {
+      // Parse timestamp for comparison with selectedSequence
+      const [year, month, day] = selectedDateEntry.date.split('-').map(Number);
+      const [hour, minute, second] = slot.time.split('-').map(Number);
+      const timestamp = new Date(year, month - 1, day, hour, minute, second);
+      
+      return {
+        ...slot,
+        index,
+        id: `${selectedDateEntry.date}_${slot.time}`,
+        timestamp
+      };
+    });
   }, [selectedDateEntry]);
 
   // Parse dates with available videos and their source types
@@ -298,11 +309,20 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   // Track if we actually dragged (moved to another item)
   const hasDraggedRef = useRef(false);
   
+  // Helper to update selection (uses external handler) - defined early for use in handlers
+  const updateSelection = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    if (typeof updater === 'function') {
+      onSelectionChange(updater(new Set(selectedTimeSlots)));
+    } else {
+      onSelectionChange(updater);
+    }
+  }, [selectedTimeSlots, onSelectionChange]);
+  
   // Double click handler - select only this item
   const handleDoubleClick = useCallback((id: string, index: number) => {
-    setSelectedTimeSlots(new Set([id]));
+    updateSelection(new Set([id]));
     setLastSelectedIndex(index);
-  }, []);
+  }, [updateSelection]);
   
   // Single click handler - toggle selection (add or remove)
   const handleRowClick = useCallback((id: string, index: number, e: React.MouseEvent) => {
@@ -312,7 +332,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     const isAlreadySelected = selectedTimeSlots.has(id);
     
     // Toggle: if selected, remove; if not selected, add
-    setSelectedTimeSlots(prev => {
+    updateSelection(prev => {
       const next = new Set(prev);
       if (isAlreadySelected) {
         next.delete(id);
@@ -343,7 +363,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     
     // Store initial selection for drag operation
     initialSelectionRef.current = new Set(selectedTimeSlots);
-  }, [selectedTimeSlots]);
+  }, [selectedTimeSlots, onSelectionChange]);
   
   // Mouse enter handler during drag - add/remove items in drag range
   const handleRowMouseEnter = useCallback((id: string, index: number) => {
@@ -356,7 +376,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
       const start = Math.min(dragStartRef.current, index);
       const end = Math.max(dragStartRef.current, index);
       
-      setSelectedTimeSlots(() => {
+      const newSelection = (() => {
         if (isSubtractModeRef.current) {
           // Subtract mode: remove items in drag range from initial selection
           const next = new Set(initialSelectionRef.current);
@@ -374,9 +394,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
           }
           return next;
         }
-      });
+      })();
+      updateSelection(newSelection);
     }
-  }, [isDragging, timeSlotsWithIndex]);
+  }, [isDragging, timeSlotsWithIndex, updateSelection]);
   
   // Legacy handlers for compatibility
   const handleMouseDown = handleRowMouseDown;
@@ -407,22 +428,41 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   // Select all / Clear all time slots
   const selectAllTimeSlots = useCallback(() => {
     const allIds = timeSlotsWithIndex.map(slot => slot.id);
-    setSelectedTimeSlots(new Set(allIds));
-  }, [timeSlotsWithIndex]);
+    updateSelection(new Set(allIds));
+  }, [timeSlotsWithIndex, updateSelection]);
 
   const clearAllTimeSlots = useCallback(() => {
-    setSelectedTimeSlots(new Set());
+    updateSelection(new Set());
     setLastSelectedIndex(null);
-  }, []);
+  }, [updateSelection]);
 
-  // Import selected time slots
+  // Build a map of all time slots across all dates for cross-date import
+  const allTimeSlotsMap = useMemo(() => {
+    const map = new Map<string, TimeSlot>();
+    for (const date of filteredDates) {
+      for (const slot of date.timeSlots) {
+        const id = `${date.date}_${slot.time}`;
+        map.set(id, slot);
+      }
+    }
+    return map;
+  }, [filteredDates]);
+
+  // Import selected time slots (from ALL dates, not just current date)
   const handleImport = useCallback(() => {
-    const selectedSlots = timeSlotsWithIndex.filter(slot => selectedTimeSlots.has(slot.id));
+    // Collect selected slots from ALL dates using the map
+    const selectedSlots: TimeSlot[] = [];
+    for (const id of selectedTimeSlots) {
+      const slot = allTimeSlotsMap.get(id);
+      if (slot) {
+        selectedSlots.push(slot);
+      }
+    }
     if (selectedSlots.length >= 1) {
       // Pass array of selected slots for batch import
       onSelectTimeSlot(selectedSlots);
     }
-  }, [selectedTimeSlots, timeSlotsWithIndex, onSelectTimeSlot]);
+  }, [selectedTimeSlots, allTimeSlotsMap, onSelectTimeSlot]);
 
   // Calculate total recordings after filter
   const totalRecordings = useMemo(() => {
@@ -430,6 +470,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   }, [filteredDates]);
 
   const selectedCount = selectedTimeSlots.size;
+  
+  // Check if a time slot is currently imported (in selectedTimeSlots)
+  const isTimeSlotImported = useCallback((slotId: string) => {
+    return selectedTimeSlots.has(slotId);
+  }, [selectedTimeSlots]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -669,6 +714,9 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                   const cameraCount = getCameraCount(timeSlot);
                   const isSelected = selectedTimeSlots.has(timeSlot.id);
                   
+                  // Check if this time slot is already imported (in the persistent selection)
+                  const isImported = isTimeSlotImported(timeSlot.id);
+                  
                   return (
                     <div
                       key={timeSlot.id}
@@ -682,9 +730,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                       onMouseUp={handleMouseUp}
                       className={`
                         group w-full p-3 rounded-lg text-left transition-all border cursor-pointer
-                        ${isSelected 
-                          ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/30' 
-                          : 'bg-gray-800 border-gray-700 hover:border-gray-600'}
+                        ${isImported
+                          ? 'bg-green-600/20 border-green-500/50 ring-1 ring-green-500/30' 
+                          : isSelected 
+                            ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/30' 
+                            : 'bg-gray-800 border-gray-700 hover:border-gray-600'}
                       `}
                     >
                       <div className="flex items-center justify-between">
@@ -694,12 +744,14 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                           <div 
                             className={`
                               w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0
-                              ${isSelected 
-                                ? 'bg-blue-500 border-blue-500 opacity-100' 
-                                : 'border-gray-500 bg-gray-900/50 opacity-0 group-hover:opacity-100'}
+                              ${isImported
+                                ? 'bg-green-500 border-green-500 opacity-100'
+                                : isSelected 
+                                  ? 'bg-blue-500 border-blue-500 opacity-100' 
+                                  : 'border-gray-500 bg-gray-900/50 opacity-0 group-hover:opacity-100'}
                             `}
                           >
-                            {isSelected && (
+                            {(isSelected || isImported) && (
                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                               </svg>
@@ -708,11 +760,15 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                           
                           {/* Play icon */}
                           <div className={`w-10 h-10 rounded flex items-center justify-center transition-colors ${
-                            isSelected ? 'bg-blue-600/30' : 'bg-gray-700'
+                            isImported 
+                              ? 'bg-green-600/30'
+                              : isSelected 
+                                ? 'bg-blue-600/30' 
+                                : 'bg-gray-700'
                           }`}>
-                            <svg className={`w-5 h-5 ${isSelected ? 'text-blue-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <svg className={`w-5 h-5 ${isImported ? 'text-green-400' : isSelected ? 'text-blue-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
                           
@@ -733,6 +789,14 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                         
                         {/* Right: Badges */}
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {isImported && (
+                            <span className="px-2 py-0.5 bg-green-600/20 text-green-400 text-[10px] rounded flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Imported
+                            </span>
+                          )}
                           {timeSlot.hasGps && (
                             <span className="px-2 py-0.5 bg-cyan-600/20 text-cyan-400 text-[10px] rounded flex items-center gap-1">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

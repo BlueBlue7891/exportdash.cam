@@ -27,6 +27,8 @@ export default function Home() {
   // Folder import state
   const [folderStructure, setFolderStructure] = useState<FolderStructure | null>(null);
   const [showVideoBrowser, setShowVideoBrowser] = useState(false);
+  // Persist selected time slots across calendar opens (keyed by date_time)
+  const [selectedTimeSlotIds, setSelectedTimeSlotIds] = useState<Set<string>>(new Set());
 
   // Handle scan progress from DropZone
   const handleScanProgress = useCallback((current: number, total: number) => {
@@ -150,6 +152,7 @@ export default function Home() {
     
     if (allFiles.length === 0) return;
     
+    // Close browser before processing
     setShowVideoBrowser(false);
     setIsProcessing(true);
     setProcessingProgress({
@@ -178,6 +181,7 @@ export default function Home() {
     setSequences([]);
     setSelectedSequence(null);
     setFolderStructure(null);
+    setSelectedTimeSlotIds(new Set());
   }, []);
 
   return (
@@ -415,6 +419,8 @@ export default function Home() {
             folderStructure={folderStructure}
             onSelectTimeSlot={handleSelectTimeSlot}
             onClose={() => setShowVideoBrowser(false)}
+            selectedTimeSlotIds={selectedTimeSlotIds}
+            onSelectionChange={setSelectedTimeSlotIds}
           />
         )}
       </main>
