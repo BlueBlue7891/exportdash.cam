@@ -20,6 +20,10 @@ interface VideoBrowserProps {
   // External selection state (persisted across opens)
   selectedTimeSlotIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
+  // Already imported time slots (green status)
+  importedTimeSlotIds: Set<string>;
+  // Clear all videos from player
+  onClear: () => void;
 }
 
 const ALL_SOURCES: VideoSource[] = ['recent', 'saved', 'sentry', 'encrypted', 'photobooth', 'unknown'];
@@ -32,7 +36,7 @@ type MonthState = { year: number; month: number };
 // Complete badge color - distinct from Saved (green)
 const COMPLETE_BADGE_COLOR = 'bg-teal-600/20 text-teal-400';
 
-export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange }: VideoBrowserProps) {
+export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange, importedTimeSlotIds, onClear }: VideoBrowserProps) {
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
   // Use external selection state
@@ -434,7 +438,9 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
   const clearAllTimeSlots = useCallback(() => {
     updateSelection(new Set());
     setLastSelectedIndex(null);
-  }, [updateSelection]);
+    // Also clear videos from player
+    onClear();
+  }, [updateSelection, onClear]);
 
   // Build a map of all time slots across all dates for cross-date import
   const allTimeSlotsMap = useMemo(() => {
@@ -471,10 +477,18 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
 
   const selectedCount = selectedTimeSlots.size;
   
-  // Check if a time slot is currently imported (in selectedTimeSlots)
-  const isTimeSlotImported = useCallback((slotId: string) => {
+  // Check if a time slot is currently selected (blue)
+  const isTimeSlotSelected = useCallback((slotId: string) => {
     return selectedTimeSlots.has(slotId);
   }, [selectedTimeSlots]);
+  
+  // Check if a time slot has been imported to player (green)
+  const isTimeSlotImported = useCallback((slotId: string) => {
+    return importedTimeSlotIds.has(slotId);
+  }, [importedTimeSlotIds]);
+  
+  // Check if any videos have been imported (for File button color)
+  const hasImportedVideos = importedTimeSlotIds.size > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -712,10 +726,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                 {timeSlotsWithIndex.map((timeSlot, idx) => {
                   const allCameras = hasAllCameras(timeSlot);
                   const cameraCount = getCameraCount(timeSlot);
-                  const isSelected = selectedTimeSlots.has(timeSlot.id);
-                  
-                  // Check if this time slot is already imported (in the persistent selection)
+                  const isSelected = isTimeSlotSelected(timeSlot.id);
                   const isImported = isTimeSlotImported(timeSlot.id);
+                  
+                  // Determine visual state: imported (green) takes precedence over selected (blue)
                   
                   return (
                     <div
@@ -736,11 +750,12 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                             ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/30' 
                             : 'bg-gray-800 border-gray-700 hover:border-gray-600'}
                       `}
+                      title={isImported ? 'Imported to player' : isSelected ? 'Selected for import' : ''}
                     >
                       <div className="flex items-center justify-between">
                         {/* Left: Checkbox + Info */}
                         <div className="flex items-center gap-3">
-                          {/* Circular Checkbox - visible on hover or when selected */}
+                          {/* Circular Checkbox - visible on hover or when selected/imported */}
                           <div 
                             className={`
                               w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0

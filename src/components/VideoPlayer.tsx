@@ -1402,11 +1402,15 @@ export function VideoPlayer({
             {/* Sequence Selector */}
             <button
               onClick={() => setShowSequenceMenu(true)}
-              className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-all bg-gray-700 text-gray-300 hover:bg-gray-600"
+              className={`flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${
+                sequences.length > 0
+                  ? 'bg-green-600/20 text-green-400 border border-green-500/30 hover:bg-green-600/30'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
             >
               <IconList size={14} />
               <span>
-                {sequences.length > 1 ? `${sequences.indexOf(sequence) + 1}/${sequences.length}` : 'Files'}
+                {sequences.length > 1 ? `${sequences.indexOf(sequence) + 1}/${sequences.length}` : sequences.length === 1 ? '1/1' : 'Files'}
               </span>
             </button>
 
