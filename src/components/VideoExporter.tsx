@@ -451,7 +451,7 @@ export function VideoExporter({
   };
 
   // Draw mini map with actual map tiles
-  const drawMiniMap = async (
+  const drawMiniMap = (
     ctx: CanvasRenderingContext2D,
     seiData: SeiData | null,
     width: number,
@@ -487,14 +487,15 @@ export function VideoExporter({
     ctx.roundRect(x, y, mapSize, mapSize, 8 * scale);
     ctx.clip();
 
-    // Load and draw tiles (3x3 grid around center)
+    // Draw tiles from cache (3x3 grid around center) - synchronous, skip if not cached
     const tileSize = 256;
     const centerX = x + mapSize / 2;
     const centerY = y + mapSize / 2;
 
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
-        const tileImg = await loadMapTile(tile.x + dx, tile.y + dy, zoom);
+        const key = `${zoom}/${tile.x + dx}/${tile.y + dy}`;
+        const tileImg = tileCache.get(key);
         if (tileImg) {
           const tileX = centerX - offset.px + dx * tileSize;
           const tileY = centerY - offset.py + dy * tileSize;
@@ -981,7 +982,7 @@ export function VideoExporter({
           drawDateTime(ctx, width, height, dynamicDate, dynamicTime, showTelemetry);
         }
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {
-          await drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
+          drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
         }
 
         // Frame timestamp is relative to export start (0-based for exported video)
