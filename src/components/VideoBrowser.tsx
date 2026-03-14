@@ -38,9 +38,16 @@ const COMPLETE_BADGE_COLOR = 'bg-teal-600/20 text-teal-400';
 export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange, onClear }: VideoBrowserProps) {
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
-  // Use external selection state
-  const selectedTimeSlots = selectedTimeSlotIds;
+  // Draft selection state - independent from imported state
+  // This allows user to play with selections without affecting imported videos
+  const [draftSelection, setDraftSelection] = useState<Set<string>>(new Set(selectedTimeSlotIds));
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Sync draft with external state when component opens/mounts or external state changes
+  // This ensures that when reopening the browser, it shows the previously imported selections
+  useEffect(() => {
+    setDraftSelection(new Set(selectedTimeSlotIds));
+  }, [selectedTimeSlotIds]);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const dragStartRef = useRef<number | null>(null);
   const timeSlotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -312,14 +319,14 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
   // Track if we actually dragged (moved to another item)
   const hasDraggedRef = useRef(false);
   
-  // Helper to update selection (uses external handler) - defined early for use in handlers
+  // Helper to update draft selection - only affects current browser session
   const updateSelection = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
     if (typeof updater === 'function') {
-      onSelectionChange(updater(new Set(selectedTimeSlots)));
+      setDraftSelection(updater(new Set(draftSelection)));
     } else {
-      onSelectionChange(updater);
+      setDraftSelection(updater);
     }
-  }, [selectedTimeSlots, onSelectionChange]);
+  }, [draftSelection]);
   
   // Double click handler - select only this item
   const handleDoubleClick = useCallback((id: string, index: number) => {
@@ -332,7 +339,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
     // If we dragged, don't process click
     if (hasDraggedRef.current) return;
     
-    const isAlreadySelected = selectedTimeSlots.has(id);
+    const isAlreadySelected = draftSelection.has(id);
     
     // Toggle: if selected, remove; if not selected, add
     updateSelection(prev => {
@@ -345,7 +352,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
       return next;
     });
     setLastSelectedIndex(index);
-  }, [selectedTimeSlots]);
+  }, [draftSelection, updateSelection]);
   
   // Mouse down handler - prepare for potential drag
   const handleRowMouseDown = useCallback((id: string, index: number, e: React.MouseEvent) => {
@@ -354,7 +361,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
     
     e.preventDefault();
     
-    const isAlreadySelected = selectedTimeSlots.has(id);
+    const isAlreadySelected = draftSelection.has(id);
     
     setIsDragging(true);
     dragStartRef.current = index;
@@ -365,8 +372,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
     isSubtractModeRef.current = isAlreadySelected;
     
     // Store initial selection for drag operation
-    initialSelectionRef.current = new Set(selectedTimeSlots);
-  }, [selectedTimeSlots, onSelectionChange]);
+    initialSelectionRef.current = new Set(draftSelection);
+  }, [draftSelection]);
   
   // Mouse enter handler during drag - add/remove items in drag range
   const handleRowMouseEnter = useCallback((id: string, index: number) => {
@@ -437,7 +444,12 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
   const clearAllTimeSlots = useCallback(() => {
     updateSelection(new Set());
     setLastSelectedIndex(null);
-    // Also clear videos from player
+  }, [updateSelection]);
+
+  // Discard all selections and close browser (return to home)
+  const discardSelections = useCallback(() => {
+    updateSelection(new Set());
+    setLastSelectedIndex(null);
     onClear();
   }, [updateSelection, onClear]);
 
@@ -457,29 +469,41 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
   const handleImport = useCallback(() => {
     // Collect selected slots from ALL dates using the map
     const selectedSlots: TimeSlot[] = [];
-    for (const id of selectedTimeSlots) {
+    for (const id of draftSelection) {
       const slot = allTimeSlotsMap.get(id);
       if (slot) {
         selectedSlots.push(slot);
       }
     }
     if (selectedSlots.length >= 1) {
+      // Sync draft to external state (marks these as imported)
+      onSelectionChange(new Set(draftSelection));
       // Pass array of selected slots for batch import
       onSelectTimeSlot(selectedSlots);
     }
-  }, [selectedTimeSlots, allTimeSlotsMap, onSelectTimeSlot]);
+  }, [draftSelection, allTimeSlotsMap, onSelectTimeSlot, onSelectionChange]);
 
   // Calculate total recordings after filter
   const totalRecordings = useMemo(() => {
     return filteredDates.reduce((sum, d) => sum + d.timeSlots.length, 0);
   }, [filteredDates]);
 
-  const selectedCount = selectedTimeSlots.size;
+  const selectedCount = draftSelection.size;
   
-  // Check if a time slot is selected (also indicates it has been imported)
+  // Check if draft selection matches imported state (no changes made)
+  const hasImportedSelections = selectedTimeSlotIds.size > 0;
+  const isSelectionUnchanged = useMemo(() => {
+    if (draftSelection.size !== selectedTimeSlotIds.size) return false;
+    for (const id of draftSelection) {
+      if (!selectedTimeSlotIds.has(id)) return false;
+    }
+    return true;
+  }, [draftSelection, selectedTimeSlotIds]);
+  
+  // Check if a time slot is selected in current draft
   const isTimeSlotSelected = useCallback((slotId: string) => {
-    return selectedTimeSlots.has(slotId);
-  }, [selectedTimeSlots]);
+    return draftSelection.has(slotId);
+  }, [draftSelection]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -704,7 +728,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   onClick={clearAllTimeSlots}
                   className="text-xs text-gray-500 hover:text-gray-400 px-2 py-1 rounded hover:bg-gray-800"
                 >
-                  Clear
+                  Clear Selected
                 </button>
               </div>
             )}
@@ -831,30 +855,40 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
             )}
           </div>
           
-          {/* Bottom action bar */}
-          {selectedCount > 0 && (
-            <div className="p-4 border-t border-gray-700 bg-gray-800/50">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-400">
-                  {selectedCount} item{selectedCount > 1 ? 's' : ''} selected
-                </span>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={clearAllTimeSlots}
-                    className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleImport}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    Import {selectedCount > 1 ? `(${selectedCount})` : ''}
-                  </button>
-                </div>
+          {/* Bottom action bar - always visible */}
+          <div className="p-4 border-t border-gray-700 bg-gray-800/50">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-400">
+                {selectedCount > 0 
+                  ? `${selectedCount} item${selectedCount > 1 ? 's' : ''} selected` 
+                  : 'No items selected'}
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={discardSelections}
+                  className="px-4 py-2 text-sm text-red-400 hover:text-red-300 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Discard
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={selectedCount === 0 || isSelectionUnchanged}
+                  className={`px-6 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                    isSelectionUnchanged && hasImportedSelections
+                      ? 'bg-green-600 cursor-default'
+                      : 'bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
+                  }`}
+                >
+                  {isSelectionUnchanged && hasImportedSelections
+                    ? 'Imported' 
+                    : `Import ${selectedCount > 1 ? `(${selectedCount})` : ''}`}
+                </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
