@@ -1231,10 +1231,10 @@ export function VideoPlayer({
               <Tooltip content="Configure layout" position="top">
                 <button
                   onClick={() => setShowLayoutConfig(prev => !prev)}
-                  className={`p-1.5 rounded text-xs font-medium transition-all ${
+                  className={`p-1.5 rounded-lg text-xs font-medium transition-all shadow-sm ${
                     showLayoutConfig
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                      ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-blue-500/30 ring-2 ring-blue-400/50'
+                      : 'bg-gradient-to-br from-gray-700 to-gray-800 text-cyan-400 hover:from-gray-600 hover:to-gray-700 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
                   }`}
                 >
                   <IconSettings2 size={14} />

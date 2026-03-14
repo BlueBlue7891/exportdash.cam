@@ -144,11 +144,13 @@ export interface LayoutCameraConfig {
 export const PIP_SPECIAL_OPTIONS = ['none', 'map'] as const;
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutCameraConfig = {
-  pip: { corners: ['left_repeater', 'none', 'right_repeater', 'back', 'map'] },
+  // PiP: Left/Right on top, L Pillar/Rear/R Pillar on bottom
+  pip: { corners: ['left_pillar', 'back', 'right_pillar', 'left_repeater', 'right_repeater'] },
   triple: { cameras: ['left_pillar', 'front', 'right_pillar'] },
+  // All 6: Top row - Left, Front, Right; Bottom row - L Pillar, Rear, R Pillar
   all: {
-    topRow: ['left_repeater', 'left_pillar', 'front'],
-    bottomRow: ['right_repeater', 'right_pillar', 'back'],
+    topRow: ['left_repeater', 'front', 'right_repeater'],
+    bottomRow: ['left_pillar', 'back', 'right_pillar'],
   },
 };
 
