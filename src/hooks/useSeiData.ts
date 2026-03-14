@@ -95,7 +95,18 @@ export function useSeiData(
 
           try {
             console.log(`[SEI] Processing moment ${momentIdx}: ${videoFile.name}`);
-            const arrayBuffer = await videoFile.arrayBuffer();
+            // Handle both Tauri and browser files
+            let arrayBuffer: ArrayBuffer;
+            const tauriPath = (videoFile as any).tauriPath;
+            if (tauriPath) {
+              // Tauri file - read via native API
+              const { readFile } = await import('@tauri-apps/plugin-fs');
+              const content = await readFile(tauriPath);
+              arrayBuffer = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength);
+            } else {
+              // Browser file - use File API
+              arrayBuffer = await videoFile.arrayBuffer();
+            }
             const mp4 = new DashcamMP4(arrayBuffer);
 
             // Get FPS from first valid video

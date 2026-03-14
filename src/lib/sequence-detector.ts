@@ -64,10 +64,23 @@ async function getVideoDuration(file: File): Promise<number> {
   });
 }
 
+/** Read file content - handles both browser and Tauri files */
+async function readFileContent(file: File): Promise<Uint8Array> {
+  const tauriPath = (file as any).tauriPath;
+  if (tauriPath) {
+    // Tauri file - use native readFile
+    const { readFile } = await import('@tauri-apps/plugin-fs');
+    return await readFile(tauriPath);
+  }
+  // Browser file - use File API
+  return new Uint8Array(await file.arrayBuffer());
+}
+
 /** Parse an event.json file into a TeslaEvent */
 async function parseEventJson(file: File): Promise<TeslaEvent | null> {
   try {
-    const text = await file.text();
+    const content = await readFileContent(file);
+    const text = new TextDecoder().decode(content);
     const data = JSON.parse(text);
     if (!data.timestamp || !data.reason) return null;
 

@@ -44,30 +44,43 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
 
             console.log('[DropZone] Dropped paths:', paths.length);
 
-            // PHASE 1: Scan for video files (fast, no reading)
+            // PHASE 1: Scan for video files recursively (fast, no reading)
             const fileEntries: { path: string; name: string; type: string }[] = [];
+            
+            // Recursive directory scanner
+            const scanDirectory = async (dirPath: string) => {
+              try {
+                const entries = await readDir(dirPath);
+                for (const entry of entries) {
+                  const fullPath = dirPath.replace(/\\/g, '/') + '/' + entry.name;
+                  const lower = entry.name.toLowerCase();
+                  
+                  if (entry.isDirectory) {
+                    // Recursively scan subdirectories
+                    await scanDirectory(fullPath);
+                  } else if (lower.endsWith('.mp4') || lower === 'event.json') {
+                    fileEntries.push({
+                      path: fullPath,
+                      name: entry.name,
+                      type: lower.endsWith('.mp4') ? 'video/mp4' : 'application/json'
+                    });
+                  }
+                }
+              } catch (e) {
+                // Not a directory or permission error - ignore
+              }
+            };
             
             for (const path of paths) {
               const name = path.split(/[/\\]/).pop() || '';
               const lower = name.toLowerCase();
               
               if (lower.endsWith('.mp4') || lower === 'event.json') {
+                // Direct file drop
                 fileEntries.push({ path, name, type: lower.endsWith('.mp4') ? 'video/mp4' : 'application/json' });
               } else {
-                // Try as directory
-                try {
-                  const entries = await readDir(path);
-                  for (const entry of entries) {
-                    const el = entry.name.toLowerCase();
-                    if (el.endsWith('.mp4') || el === 'event.json') {
-                      fileEntries.push({
-                        path: path.replace(/\\/g, '/') + '/' + entry.name,
-                        name: entry.name,
-                        type: el.endsWith('.mp4') ? 'video/mp4' : 'application/json'
-                      });
-                    }
-                  }
-                } catch {}
+                // Scan directory recursively
+                await scanDirectory(path);
               }
             }
 
