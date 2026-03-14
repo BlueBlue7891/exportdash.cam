@@ -62,7 +62,7 @@ function detectSource(file: File): VideoSource {
 }
 
 /** Parse TeslaCam folder structure from files (batched for performance) */
-export function parseFolderStructure(files: File[]): FolderStructure {
+export async function parseFolderStructure(files: File[]): Promise<FolderStructure> {
   const dateMap = new Map<string, Map<string, { files: Map<string, File>; sources: Set<VideoSource>; hasGps: boolean }>>();
   
   // Collect event.json timestamps by directory (seconds since midnight)
@@ -72,18 +72,34 @@ export function parseFolderStructure(files: File[]): FolderStructure {
   const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
   
   // First pass: parse all event.json files to get their timestamps
-  for (const file of videoFiles) {
-    if (file.name === 'event.json') {
-      const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-      const dir = path.substring(0, path.lastIndexOf('/'));
-      // Extract timestamp from parent folder name (e.g., "2026-02-13_18-25-51")
+  // Read actual JSON content for precise timestamp, fallback to folder name
+  const jsonFiles = videoFiles.filter(f => f.name === 'event.json');
+  for (const file of jsonFiles) {
+    const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+    const dir = path.substring(0, path.lastIndexOf('/'));
+    
+    let eventSeconds: number | undefined;
+    
+    try {
+      // Try to read actual timestamp from JSON content for precision
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (data.timestamp) {
+        const d = new Date(data.timestamp);
+        eventSeconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+      }
+    } catch (e) {
+      // Fallback: parse from folder name
       const folderName = dir.substring(dir.lastIndexOf('/') + 1);
       const match = folderName.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})/);
       if (match) {
         const [, hour, minute, second] = match;
-        const eventSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
-        eventJsonTimes.set(dir, eventSeconds);
+        eventSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
       }
+    }
+    
+    if (eventSeconds !== undefined) {
+      eventJsonTimes.set(dir, eventSeconds);
     }
   }
   
@@ -215,17 +231,34 @@ export async function parseFolderStructureAsync(
   const videoFiles = files.filter(f => f.name.endsWith('.mp4') || f.name === 'event.json');
   
   // First pass: parse all event.json files
-  for (const file of videoFiles) {
-    if (file.name === 'event.json') {
-      const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
-      const dir = path.substring(0, path.lastIndexOf('/'));
+  // Read actual JSON content for precise timestamp
+  const jsonFiles = videoFiles.filter(f => f.name === 'event.json');
+  for (const file of jsonFiles) {
+    const path = (file as any).webkitRelativePath || (file as any).tauriPath || '';
+    const dir = path.substring(0, path.lastIndexOf('/'));
+    
+    let eventSeconds: number | undefined;
+    
+    try {
+      // Try to read actual timestamp from JSON content
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (data.timestamp) {
+        const d = new Date(data.timestamp);
+        eventSeconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+      }
+    } catch (e) {
+      // Fallback: parse from folder name
       const folderName = dir.substring(dir.lastIndexOf('/') + 1);
       const match = folderName.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})/);
       if (match) {
         const [, hour, minute, second] = match;
-        const eventSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
-        eventJsonTimes.set(dir, eventSeconds);
+        eventSeconds = parseInt(hour) * 3600 + parseInt(minute) * 60 + parseInt(second);
       }
+    }
+    
+    if (eventSeconds !== undefined) {
+      eventJsonTimes.set(dir, eventSeconds);
     }
   }
   

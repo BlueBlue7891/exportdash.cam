@@ -393,14 +393,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                          {timeSlot.sources.map((source) => (
-                            <span
-                              key={source}
-                              className={`px-2 py-0.5 text-[10px] rounded ${SOURCE_COLORS[source]}`}
-                            >
-                              {SOURCE_LABELS[source]}
-                            </span>
-                          ))}
                           {timeSlot.hasGps && (
                             <span className="px-2 py-0.5 bg-cyan-600/20 text-cyan-400 text-[10px] rounded flex items-center gap-1">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -410,6 +402,14 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                               GPS
                             </span>
                           )}
+                          {timeSlot.sources.map((source) => (
+                            <span
+                              key={source}
+                              className={`px-2 py-0.5 text-[10px] rounded ${SOURCE_COLORS[source]}`}
+                            >
+                              {SOURCE_LABELS[source]}
+                            </span>
+                          ))}
                           {allCameras && (
                             <span className="px-2 py-0.5 bg-green-600/20 text-green-400 text-[10px] rounded">
                               Complete
