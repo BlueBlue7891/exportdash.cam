@@ -259,56 +259,108 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
 
   // Store the initial selection state when drag starts
   const initialSelectionRef = useRef<Set<string>>(new Set());
+  // Track if we're in "subtract mode" for drag (when starting drag on selected item)
+  const isSubtractModeRef = useRef(false);
+  // Track if Ctrl/Cmd is held during drag
+  const isCtrlHeldRef = useRef(false);
   
-  // Time slot selection handlers
-  const handleMouseDown = useCallback((id: string, index: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    const isCtrlClick = e.ctrlKey || e.metaKey;
+  // Double click handler - select only this item
+  const handleDoubleClick = useCallback((id: string, index: number) => {
+    setSelectedTimeSlots(new Set([id]));
+    setLastSelectedIndex(index);
+  }, []);
+  
+  // Single click handler - toggle selection (add or remove)
+  const handleRowClick = useCallback((id: string, index: number, e: React.MouseEvent) => {
+    // Ignore if it was a drag operation
+    if (isDragging) return;
+    
     const isAlreadySelected = selectedTimeSlots.has(id);
+    
+    // Toggle: if selected, remove; if not selected, add
+    setSelectedTimeSlots(prev => {
+      const next = new Set(prev);
+      if (isAlreadySelected) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    setLastSelectedIndex(index);
+  }, [selectedTimeSlots, isDragging]);
+  
+  // Mouse down handler - starts drag for multi-select
+  const handleRowMouseDown = useCallback((id: string, index: number, e: React.MouseEvent) => {
+    // Don't start drag on double-click
+    if (e.detail > 1) return;
+    
+    e.preventDefault();
+    
+    const isAlreadySelected = selectedTimeSlots.has(id);
+    isCtrlHeldRef.current = e.ctrlKey || e.metaKey;
     
     setIsDragging(true);
     dragStartRef.current = index;
     setLastSelectedIndex(index);
     
-    if (isCtrlClick) {
-      // Ctrl/Cmd click: toggle single item without clearing others
+    // Determine mode: 
+    // - If Ctrl is held: always add mode
+    // - Otherwise: subtract mode if starting on selected item, add mode if starting on unselected
+    isSubtractModeRef.current = !isCtrlHeldRef.current && isAlreadySelected;
+    
+    // Store initial selection
+    initialSelectionRef.current = new Set(selectedTimeSlots);
+    
+    // Immediate feedback: toggle the clicked item
+    if (!isSubtractModeRef.current && !isAlreadySelected) {
+      // Add mode: add the clicked item
       setSelectedTimeSlots(prev => {
         const next = new Set(prev);
-        if (next.has(id)) {
-          next.delete(id);
-        } else {
-          next.add(id);
-        }
+        next.add(id);
         return next;
       });
-    } else {
-      // Normal click: single selection, clear others
-      // But if clicking on already selected item, just keep selection for potential drag
-      if (!isAlreadySelected) {
-        setSelectedTimeSlots(new Set([id]));
-      }
-      // Store current selection for drag add operation
-      initialSelectionRef.current = new Set(selectedTimeSlots);
+    } else if (isSubtractModeRef.current && isAlreadySelected) {
+      // Subtract mode: remove the clicked item
+      setSelectedTimeSlots(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }, [selectedTimeSlots]);
-
-  const handleMouseEnter = useCallback((id: string, index: number) => {
+  
+  // Mouse enter handler during drag - add/remove items in drag range
+  const handleRowMouseEnter = useCallback((id: string, index: number) => {
     if (isDragging && dragStartRef.current !== null) {
       const start = Math.min(dragStartRef.current, index);
       const end = Math.max(dragStartRef.current, index);
       
       setSelectedTimeSlots(() => {
-        // Start with the initial selection when drag began
-        const next = new Set(initialSelectionRef.current);
-        // Add all slots in the drag range
-        for (let i = start; i <= end; i++) {
-          const slotId = timeSlotsWithIndex[i]?.id;
-          if (slotId) next.add(slotId);
+        if (isSubtractModeRef.current) {
+          // Subtract mode: remove items in drag range from initial selection
+          const next = new Set(initialSelectionRef.current);
+          for (let i = start; i <= end; i++) {
+            const slotId = timeSlotsWithIndex[i]?.id;
+            if (slotId) next.delete(slotId);
+          }
+          return next;
+        } else {
+          // Add mode: add items in drag range to initial selection
+          const next = new Set(initialSelectionRef.current);
+          for (let i = start; i <= end; i++) {
+            const slotId = timeSlotsWithIndex[i]?.id;
+            if (slotId) next.add(slotId);
+          }
+          return next;
         }
-        return next;
       });
     }
   }, [isDragging, timeSlotsWithIndex]);
+  
+  // Legacy handlers for compatibility
+  const handleMouseDown = handleRowMouseDown;
+  const handleMouseEnter = handleRowMouseEnter;
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -599,8 +651,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                       ref={el => {
                         if (el) timeSlotRefs.current.set(timeSlot.id, el);
                       }}
-                      onMouseDown={(e) => handleMouseDown(timeSlot.id, idx, e)}
-                      onMouseEnter={() => handleMouseEnter(timeSlot.id, idx)}
+                      onClick={(e) => handleRowClick(timeSlot.id, idx, e)}
+                      onDoubleClick={() => handleDoubleClick(timeSlot.id, idx)}
+                      onMouseDown={(e) => handleRowMouseDown(timeSlot.id, idx, e)}
+                      onMouseEnter={() => handleRowMouseEnter(timeSlot.id, idx)}
                       onMouseUp={handleMouseUp}
                       className={`
                         group w-full p-3 rounded-lg text-left transition-all border cursor-pointer
@@ -615,25 +669,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                           {/* Circular Checkbox - visible on hover or when selected */}
                           <div 
                             className={`
-                              w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer
+                              w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0
                               ${isSelected 
                                 ? 'bg-blue-500 border-blue-500 opacity-100' 
                                 : 'border-gray-500 bg-gray-900/50 opacity-0 group-hover:opacity-100'}
                             `}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Toggle this item without affecting others (Ctrl+click behavior)
-                              setSelectedTimeSlots(prev => {
-                                const next = new Set(prev);
-                                if (next.has(timeSlot.id)) {
-                                  next.delete(timeSlot.id);
-                                } else {
-                                  next.add(timeSlot.id);
-                                }
-                                return next;
-                              });
-                            }}
-                            onMouseDown={(e) => e.stopPropagation()}
                           >
                             {isSelected && (
                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

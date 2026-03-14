@@ -253,7 +253,7 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
             </label>
             <label className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
               <span>Open Folder</span>
-              <input type="file" {...{ webkitdirectory: '', directory: '' } as any} onChange={handleFileInput} className="hidden" />
+              <input type="file" {...{ webkitdirectory: 'true', directory: 'true', multiple: true } as any} onChange={handleFileInput} className="hidden" />
             </label>
           </div>
         </div>
