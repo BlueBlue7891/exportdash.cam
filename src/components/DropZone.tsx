@@ -18,27 +18,20 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
     isTauriSetupRef.current = true;
 
     const setupTauri = async () => {
-      // Detect Tauri environment
       const hasTauri = typeof window !== 'undefined' && 
-        (('__TAURI__' in window) || 
-         (window as any).__TAURI_INTERNALS__ ||
-         (window as any).isTauri);
+        (('__TAURI__' in window) || (window as any).__TAURI_INTERNALS__);
       
       console.log('[DropZone] Tauri detected:', hasTauri);
-      
       if (!hasTauri) return;
 
       try {
         const { getCurrentWebview } = await import('@tauri-apps/api/webview');
-        const { readFile, readDir } = await import('@tauri-apps/plugin-fs');
-        
+        const { readDir } = await import('@tauri-apps/plugin-fs');
+        const { convertFileSrc } = await import('@tauri-apps/api/core');
         const webview = getCurrentWebview();
-        console.log('[DropZone] Webview obtained');
 
         const unlisten = await webview.onDragDropEvent(async (event) => {
-          console.log('[DropZone] Drag event:', event.payload.type);
-          
-          const { type, paths } = event.payload;
+          const { type } = event.payload;
 
           if (type === 'enter' || type === 'over') {
             setIsDragging(true);
@@ -46,72 +39,83 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
             setIsDragging(false);
           } else if (type === 'drop') {
             setIsDragging(false);
-
-            if (!paths || paths.length === 0) {
-              console.log('[DropZone] No paths');
-              return;
-            }
+            const { paths } = event.payload as { paths: string[] };
+            if (!paths || paths.length === 0) return;
 
             console.log('[DropZone] Dropped paths:', paths.length);
 
-            // Quick scan for video files
-            const filePaths: string[] = [];
+            // PHASE 1: Scan for video files (fast, no reading)
+            const fileEntries: { path: string; name: string; type: string }[] = [];
             
             for (const path of paths) {
               const name = path.split(/[/\\]/).pop() || '';
               const lower = name.toLowerCase();
               
               if (lower.endsWith('.mp4') || lower === 'event.json') {
-                filePaths.push(path);
-              } else if (!lower.includes('.')) {
+                fileEntries.push({ path, name, type: lower.endsWith('.mp4') ? 'video/mp4' : 'application/json' });
+              } else {
                 // Try as directory
                 try {
                   const entries = await readDir(path);
                   for (const entry of entries) {
                     const el = entry.name.toLowerCase();
                     if (el.endsWith('.mp4') || el === 'event.json') {
-                      filePaths.push(path + '/' + entry.name);
+                      fileEntries.push({
+                        path: path.replace(/\\/g, '/') + '/' + entry.name,
+                        name: entry.name,
+                        type: el.endsWith('.mp4') ? 'video/mp4' : 'application/json'
+                      });
                     }
                   }
                 } catch {}
               }
             }
 
-            console.log('[DropZone] Video files:', filePaths.length);
-            if (filePaths.length === 0) return;
+            console.log('[DropZone] Video files found:', fileEntries.length);
+            if (fileEntries.length === 0) return;
 
-            onScanProgress?.(0, filePaths.length);
+            // Show loading UI
+            onScanProgress?.(0, fileEntries.length);
 
-            // Read all files
+            // PHASE 2: Create File objects with Tauri URLs (FAST!)
             const files: File[] = [];
-            for (let i = 0; i < filePaths.length; i++) {
+            
+            for (const { path, name, type } of fileEntries) {
               try {
-                const path = filePaths[i];
-                const name = path.split(/[/\\]/).pop() || '';
-                const contents = await readFile(path);
-                const blob = new Blob([contents], { 
-                  type: name.endsWith('.mp4') ? 'video/mp4' : 'application/json' 
-                });
-                files.push(new File([blob], name));
+                // Use convertFileSrc to get a URL that can be loaded by webview
+                // This is MUCH faster than reading the entire file into memory
+                const assetUrl = convertFileSrc(path);
+                
+                // Create a File object with minimal content (we don't need the data)
+                // The actual video will be loaded from assetUrl
+                const file = new File([], name, { type });
+                
+                // Store the Tauri URL as a custom property
+                (file as any).tauriUrl = assetUrl;
+                (file as any).tauriPath = path;
+                
+                files.push(file);
               } catch (e) {
-                console.error('Read error:', e);
+                console.error('Convert error:', path, e);
               }
               
-              onScanProgress?.(i + 1, filePaths.length);
+              // Update progress every 10 files
+              if (files.length % 10 === 0) {
+                onScanProgress?.(files.length, fileEntries.length);
+              }
             }
 
-            console.log('[DropZone] Loaded files:', files.length);
+            onScanProgress?.(fileEntries.length, fileEntries.length);
+            console.log('[DropZone] Created file objects:', files.length);
+            
             if (files.length > 0) {
               onFilesAdded(files);
             }
           }
         });
 
-        console.log('[DropZone] Listener registered');
-        
-        return () => {
-          unlisten();
-        };
+        console.log('[DropZone] Tauri listener registered');
+        return () => unlisten();
       } catch (e) {
         console.error('[DropZone] Setup error:', e);
       }
@@ -215,29 +219,27 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
           />
         </label>
       ) : (
-        <>
-          <div className="flex flex-col items-center gap-4 relative z-10">
-            <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-medium text-gray-200">Drop your TeslaCam clips here</p>
-              <p className="text-sm text-gray-500 mt-2">Drag & drop a folder containing video files</p>
-            </div>
-            <div className="flex items-center gap-3 mt-4">
-              <label className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
-                <span>Browse Files</span>
-                <input type="file" accept="video/mp4,application/json" multiple onChange={handleFileInput} className="hidden" />
-              </label>
-              <label className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg cursor-pointer transition-colors border border-gray-600">
-                <span>Import Folder</span>
-                <input type="file" webkitdirectory="" directory="" onChange={handleFileInput} className="hidden" />
-              </label>
-            </div>
+        <div className="flex flex-col items-center gap-4 relative z-10">
+          <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
+            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
           </div>
-        </>
+          <div className="text-center">
+            <p className="text-xl font-medium text-gray-200">Drop your TeslaCam clips here</p>
+            <p className="text-sm text-gray-500 mt-2">Drag & drop a folder containing video files</p>
+          </div>
+          <div className="flex items-center gap-3 mt-4">
+            <label className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
+              <span>Browse Files</span>
+              <input type="file" accept="video/mp4,application/json" multiple onChange={handleFileInput} className="hidden" />
+            </label>
+            <label className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg cursor-pointer transition-colors border border-gray-600">
+              <span>Import Folder</span>
+              <input type="file" {...{ webkitdirectory: '', directory: '' } as any} onChange={handleFileInput} className="hidden" />
+            </label>
+          </div>
+        </div>
       )}
     </div>
   );

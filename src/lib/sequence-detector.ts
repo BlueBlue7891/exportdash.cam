@@ -36,25 +36,27 @@ const SKIP_DURATION_DETECTION = true;
 /** Get video duration using HTMLVideoElement */
 async function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
+    // Use Tauri URL if available, otherwise create object URL
+    const tauriUrl = (file as any).tauriUrl;
+    const url = tauriUrl || URL.createObjectURL(file);
     const video = document.createElement('video');
     video.preload = 'metadata';
 
     // Set a timeout to avoid hanging on corrupted files
     const timeout = setTimeout(() => {
-      URL.revokeObjectURL(url);
+      if (!tauriUrl) URL.revokeObjectURL(url);
       resolve(DEFAULT_VIDEO_DURATION);
     }, 5000); // 5 second timeout
 
     video.onloadedmetadata = () => {
       clearTimeout(timeout);
-      URL.revokeObjectURL(url);
+      if (!tauriUrl) URL.revokeObjectURL(url);
       resolve(video.duration && isFinite(video.duration) ? video.duration : DEFAULT_VIDEO_DURATION);
     };
 
     video.onerror = () => {
       clearTimeout(timeout);
-      URL.revokeObjectURL(url);
+      if (!tauriUrl) URL.revokeObjectURL(url);
       resolve(DEFAULT_VIDEO_DURATION);
     };
 
@@ -204,6 +206,7 @@ export async function processFilesToMoments(
 
     const videos: CameraVideo[] = groupFiles.map(({ file, angle }) => {
       const duration = fileDurations.get(file.name) || DEFAULT_VIDEO_DURATION;
+      const tauriUrl = (file as any).tauriUrl;
       
       return {
         file,
@@ -212,6 +215,7 @@ export async function processFilesToMoments(
         duration,
         durationFormatted: formatDuration(duration),
         size: formatFileSize(file.size),
+        url: tauriUrl, // Pass Tauri URL for direct file access
       };
     });
 

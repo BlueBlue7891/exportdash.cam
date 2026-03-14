@@ -14,6 +14,7 @@ export interface CameraVideo {
   duration: number;        // Duration in seconds
   durationFormatted: string | null;  // e.g., "1:00"
   size: string;            // Human-readable size
+  url?: string;            // For Tauri: direct file URL (convertFileSrc)
 }
 
 /** One timestamp - all camera angles at a specific moment */

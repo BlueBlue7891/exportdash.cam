@@ -237,12 +237,23 @@ export function VideoPlayer({
 
     const urls: Record<string, string> = {};
     for (const video of currentMoment.videos) {
-      urls[video.angle] = URL.createObjectURL(video.file);
+      // Use Tauri URL if available, otherwise create object URL
+      if (video.url) {
+        urls[video.angle] = video.url;
+      } else {
+        urls[video.angle] = URL.createObjectURL(video.file);
+      }
     }
     setVideoUrls(urls);
 
     return () => {
-      Object.values(urls).forEach(url => URL.revokeObjectURL(url));
+      // Only revoke URLs we created via createObjectURL, not Tauri asset URLs
+      Object.entries(urls).forEach(([angle, url]) => {
+        const video = currentMoment.videos.find(v => v.angle === angle);
+        if (video && !video.url) {
+          URL.revokeObjectURL(url);
+        }
+      });
     };
   }, [currentMoment?.id]);
 
@@ -256,12 +267,21 @@ export function VideoPlayer({
     const nextMoment = sequence.moments[currentMomentIndex + 1];
     const urls: Record<string, string> = {};
     for (const video of nextMoment.videos) {
-      urls[video.angle] = URL.createObjectURL(video.file);
+      if (video.url) {
+        urls[video.angle] = video.url;
+      } else {
+        urls[video.angle] = URL.createObjectURL(video.file);
+      }
     }
     setPreloadedUrls(urls);
 
     return () => {
-      Object.values(urls).forEach(url => URL.revokeObjectURL(url));
+      Object.entries(urls).forEach(([angle, url]) => {
+        const video = nextMoment.videos.find(v => v.angle === angle);
+        if (video && !video.url) {
+          URL.revokeObjectURL(url);
+        }
+      });
     };
   }, [sequence?.id, currentMomentIndex]);
 
