@@ -243,11 +243,19 @@ export async function processFilesToMoments(
     const frontVideo = videos.find(v => v.angle === 'front');
     const momentDuration = frontVideo?.duration || videos[0]?.duration || DEFAULT_VIDEO_DURATION;
 
-    const date = validTimestamp.toISOString().split('T')[0];
-    const time = validTimestamp.toTimeString().split(' ')[0];
+    // Use local time for display (avoid UTC conversion issues)
+    const year = validTimestamp.getFullYear();
+    const month = String(validTimestamp.getMonth() + 1).padStart(2, '0');
+    const day = String(validTimestamp.getDate()).padStart(2, '0');
+    const date = `${year}-${month}-${day}`;
+    
+    const hours = String(validTimestamp.getHours()).padStart(2, '0');
+    const minutes = String(validTimestamp.getMinutes()).padStart(2, '0');
+    const seconds = String(validTimestamp.getSeconds()).padStart(2, '0');
+    const time = `${hours}:${minutes}:${seconds}`;
 
     moments.push({
-      id: validTimestamp.toISOString(),
+      id: `${date}_${hours}-${minutes}-${seconds}`,
       timestamp: validTimestamp,
       date,
       time,

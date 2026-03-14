@@ -942,8 +942,15 @@ export function VideoExporter({
         }
         if (showDateTime) {
           const realTime = new Date(moment.timestamp.getTime() + localTime * 1000);
-          const dynamicDate = realTime.toISOString().split('T')[0];
-          const dynamicTime = realTime.toTimeString().split(' ')[0];
+          // Use local time formatting to avoid UTC conversion
+          const year = realTime.getFullYear();
+          const month = String(realTime.getMonth() + 1).padStart(2, '0');
+          const day = String(realTime.getDate()).padStart(2, '0');
+          const hours = String(realTime.getHours()).padStart(2, '0');
+          const minutes = String(realTime.getMinutes()).padStart(2, '0');
+          const seconds = String(realTime.getSeconds()).padStart(2, '0');
+          const dynamicDate = `${year}-${month}-${day}`;
+          const dynamicTime = `${hours}:${minutes}:${seconds}`;
           drawDateTime(ctx, width, height, dynamicDate, dynamicTime, showTelemetry);
         }
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {

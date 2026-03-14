@@ -908,9 +908,14 @@ export function VideoPlayer({
                 <div className="px-2 py-1 rounded-md bg-black/50 backdrop-blur-sm text-white/90 text-xs font-medium">
                   {(() => {
                     const realTime = new Date(currentMoment.timestamp.getTime() + localTime * 1000);
-                    const date = realTime.toISOString().split('T')[0];
-                    const time = realTime.toTimeString().split(' ')[0];
-                    return <>{date} &nbsp; {time}</>;
+                    // Use local time formatting to avoid UTC conversion
+                    const year = realTime.getFullYear();
+                    const month = String(realTime.getMonth() + 1).padStart(2, '0');
+                    const day = String(realTime.getDate()).padStart(2, '0');
+                    const hours = String(realTime.getHours()).padStart(2, '0');
+                    const minutes = String(realTime.getMinutes()).padStart(2, '0');
+                    const seconds = String(realTime.getSeconds()).padStart(2, '0');
+                    return <>{year}-{month}-{day} &nbsp; {hours}:{minutes}:{seconds}</>;
                   })()}
                 </div>
               </div>
