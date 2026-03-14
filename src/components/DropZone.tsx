@@ -12,6 +12,9 @@ interface DropZoneProps {
 
 export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [loadingFileCount, setLoadingFileCount] = useState(0);
+  const [loadingFileIndex, setLoadingFileIndex] = useState(0);
 
   // Check if running in Tauri (需要在 useEffect 中检查，避免 SSR 问题)
 
@@ -54,7 +57,8 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
         const webview = getCurrentWebview();
 
         unlisten = await webview.onDragDropEvent(async (event) => {
-          const { type, paths } = event.payload;
+          const payload = event.payload as { type: string; paths?: string[] };
+          const { type, paths } = payload;
 
           if (type === 'enter' || type === 'over') {
             setIsDragging(true);
@@ -63,13 +67,28 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
           } else if (type === 'drop') {
             setIsDragging(false);
 
+            // 确保 paths 存在
+            if (!paths || paths.length === 0) {
+              return;
+            }
+
+            // 显示加载状态
+            const totalPaths = paths.length;
+            setLoadingFileCount(totalPaths);
+            setLoadingFileIndex(0);
+            setIsLoadingFiles(true);
+
             const files: File[] = [];
+            let fileIndex = 0;
 
             for (const path of paths) {
               if (processingFileRef.current === path) {
                 continue;
               }
               processingFileRef.current = path;
+
+              // 更新进度
+              setLoadingFileIndex(++fileIndex);
 
               try {
                 const contents = await readFile(path);
@@ -105,6 +124,9 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
                 }
               }, 500);
             }
+
+            // 隐藏加载状态
+            setIsLoadingFiles(false);
 
             if (files.length > 0) {
               onFilesAdded(files);
@@ -206,30 +228,6 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
     [onFilesAdded]
   );
 
-  if (hasVideos) {
-    return (
-      <div
-        className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-          isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600 hover:border-gray-500'
-        }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <label className="cursor-pointer text-gray-400 hover:text-gray-300">
-          <span className="text-sm">Drop more videos or click to add</span>
-          <input
-            type="file"
-            accept="video/mp4,application/json"
-            multiple
-            onChange={handleFileInput}
-            className="hidden"
-          />
-        </label>
-      </div>
-    );
-  }
-
   // Sample Tesla file names for visual hint
   const sampleFiles = [
     '2026-01-24_18-40-57-front.mp4',
@@ -241,7 +239,28 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
     '2026-01-24_18-40-57-right_pillar.mp4',
   ];
 
-  return (
+  // 构建组件内容
+  const dropZoneContent = hasVideos ? (
+    <div
+      className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+        isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600 hover:border-gray-500'
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <label className="cursor-pointer text-gray-400 hover:text-gray-300">
+        <span className="text-sm">Drop more videos or click to add</span>
+        <input
+          type="file"
+          accept="video/mp4,application/json"
+          multiple
+          onChange={handleFileInput}
+          className="hidden"
+        />
+      </label>
+    </div>
+  ) : (
     <div
       className={`border-2 border-dashed rounded-xl p-12 text-center transition-all relative overflow-hidden ${
         isDragging
@@ -323,4 +342,38 @@ export function DropZone({ onFilesAdded, hasVideos }: DropZoneProps) {
       </div>
     </div>
   );
+
+  // 如果正在加载，显示加载覆盖层
+  if (isLoadingFiles) {
+    const percentage = loadingFileCount > 0 ? Math.round((loadingFileIndex / loadingFileCount) * 100) : 0;
+    return (
+      <div className="relative">
+        {dropZoneContent}
+        <div className="absolute inset-0 z-50 bg-gray-950/90 backdrop-blur-sm flex items-center justify-center rounded-xl">
+          <div className="max-w-sm w-full mx-4 text-center">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-blue-600 flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 animate-pulse text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-white mb-2">读取文件中...</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              正在读取 {loadingFileIndex} / {loadingFileCount} 个文件
+            </p>
+            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-600 to-blue-500 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <p className="text-gray-500 text-xs mt-4">
+              请稍候...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return dropZoneContent;
 }
