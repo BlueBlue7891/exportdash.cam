@@ -76,9 +76,19 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     return filteredDates.find(d => d.date === selectedDate) || null;
   }, [selectedDate, filteredDates]);
 
-  // Parse dates with available videos (filtered)
-  const datesWithVideos = useMemo(() => {
-    return new Set(filteredDates.map(d => d.date));
+  // Parse dates with available videos and their source types (filtered)
+  const dateSources = useMemo(() => {
+    const map = new Map<string, Set<VideoSource>>();
+    for (const date of filteredDates) {
+      const sources = new Set<VideoSource>();
+      for (const slot of date.timeSlots) {
+        for (const source of slot.sources) {
+          sources.add(source);
+        }
+      }
+      map.set(date.date, sources);
+    }
+    return map;
   }, [filteredDates]);
 
   // Generate calendar days
@@ -89,23 +99,24 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     const startPadding = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
     
-    const days: { day: number; dateStr: string; hasVideos: boolean }[] = [];
+    const days: { day: number; dateStr: string; sources: VideoSource[] }[] = [];
     
     for (let i = 0; i < startPadding; i++) {
-      days.push({ day: 0, dateStr: '', hasVideos: false });
+      days.push({ day: 0, dateStr: '', sources: [] });
     }
     
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const sources = dateSources.get(dateStr);
       days.push({
         day,
         dateStr,
-        hasVideos: datesWithVideos.has(dateStr),
+        sources: sources ? Array.from(sources) : [],
       });
     }
     
     return days;
-  }, [currentMonth, datesWithVideos]);
+  }, [currentMonth, dateSources]);
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                       'July', 'August', 'September', 'October', 'November', 'December'];
@@ -221,26 +232,39 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
             </div>
 
             <div className="grid grid-cols-7 gap-1">
-              {calendarDays.map((dayInfo, idx) => (
-                <button
-                  key={idx}
-                  disabled={!dayInfo.hasVideos}
-                  onClick={() => dayInfo.hasVideos && setSelectedDate(dayInfo.dateStr)}
-                  className={`
-                    aspect-square rounded-lg text-sm font-medium transition-all relative
-                    ${!dayInfo.day ? 'invisible' : ''}
-                    ${dayInfo.hasVideos 
-                      ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 cursor-pointer' 
-                      : 'text-gray-600 cursor-default'}
-                    ${selectedDate === dayInfo.dateStr ? 'ring-2 ring-blue-500 bg-blue-600/40' : ''}
-                  `}
-                >
-                  {dayInfo.day}
-                  {dayInfo.hasVideos && (
-                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-400 rounded-full" />
-                  )}
-                </button>
-              ))}
+              {calendarDays.map((dayInfo, idx) => {
+                const hasVideos = dayInfo.sources.length > 0;
+                return (
+                  <button
+                    key={idx}
+                    disabled={!hasVideos}
+                    onClick={() => hasVideos && setSelectedDate(dayInfo.dateStr)}
+                    className={`
+                      aspect-square rounded-lg text-sm font-medium transition-all relative
+                      ${!dayInfo.day ? 'invisible' : ''}
+                      ${hasVideos 
+                        ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 cursor-pointer' 
+                        : 'text-gray-600 cursor-default'}
+                      ${selectedDate === dayInfo.dateStr ? 'ring-2 ring-blue-500 bg-blue-600/40' : ''}
+                    `}
+                  >
+                    {dayInfo.day}
+                    {hasVideos && (
+                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
+                        {dayInfo.sources.slice(0, 3).map((source, i) => {
+                          const bgColor = SOURCE_COLORS[source].split(' ')[0].replace('/20', '');
+                          return (
+                            <div 
+                              key={source} 
+                              className={`w-1.5 h-1.5 rounded-full ${bgColor}`} 
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -264,34 +288,54 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {ALL_SOURCES.map(source => {
                 const count = sourceStats.get(source) || 0;
                 const isSelected = selectedSources.has(source);
                 const isDisabled = count === 0;
+                const colorClass = SOURCE_COLORS[source];
+                const bgColor = colorClass.split(' ')[0];
+                const textColor = colorClass.split(' ')[1];
                 
                 return (
-                  <label
+                  <button
                     key={source}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                      isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-800'
+                    disabled={isDisabled}
+                    onClick={() => toggleSource(source)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                      isDisabled 
+                        ? 'opacity-30 cursor-not-allowed' 
+                        : isSelected
+                          ? 'bg-gray-800 hover:bg-gray-750'
+                          : 'hover:bg-gray-800/50'
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={isDisabled}
-                      onChange={() => toggleSource(source)}
-                      className="w-4 h-4 rounded border-gray-600 text-blue-600 focus:ring-blue-600 bg-gray-800"
-                    />
-                    <span className={`w-2 h-2 rounded-full ${SOURCE_COLORS[source].split(' ')[0].replace('/20', '')}`} />
-                    <span className="flex-1 text-sm text-gray-300">
+                    {/* Custom checkbox */}
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                      isSelected 
+                        ? `${bgColor} border-transparent` 
+                        : 'border-gray-600 bg-gray-900'
+                    }`}>
+                      {isSelected && (
+                        <svg className={`w-3.5 h-3.5 ${textColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    
+                    {/* Source indicator dot */}
+                    <span className={`w-2 h-2 rounded-full ${bgColor.replace('/20', '')}`} />
+                    
+                    {/* Label */}
+                    <span className={`flex-1 text-sm ${isSelected ? 'text-white' : 'text-gray-400'}`}>
                       {SOURCE_LABELS[source]}
                     </span>
-                    <span className="text-xs text-gray-500 tabular-nums">
+                    
+                    {/* Count */}
+                    <span className={`text-xs tabular-nums ${isSelected ? 'text-gray-400' : 'text-gray-600'}`}>
                       {count}
                     </span>
-                  </label>
+                  </button>
                 );
               })}
             </div>
