@@ -1413,100 +1413,100 @@ export function VideoPlayer({
                 {sequences.length > 1 ? `${sequences.indexOf(sequence) + 1}/${sequences.length}` : sequences.length === 1 ? '1/1' : 'Files'}
               </span>
             </button>
-
-            {/* Sequence Dialog */}
-            {showSequenceMenu && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowSequenceMenu(false)}>
-                <div className="bg-gray-900 rounded-xl w-80 max-h-[70vh] shadow-2xl border border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
-                  <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">Video Files</h3>
-                    <button onClick={() => setShowSequenceMenu(false)} className="text-gray-400 hover:text-white">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  <div className="max-h-64 overflow-y-auto">
-                    {sequences.map((seq) => {
-                      const isSelected = seq.id === sequence.id;
-                      return (
-                        <button
-                          key={seq.id}
-                          onClick={() => {
-                            onSelectSequence(seq);
-                            setShowSequenceMenu(false);
-                          }}
-                          className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
-                            isSelected
-                              ? 'bg-blue-600/20 text-white'
-                              : 'hover:bg-gray-800 text-gray-300'
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            {/* Date on top (larger) */}
-                            <div className="text-sm font-medium text-white">
-                              {seq.dateRange}
-                            </div>
-                            {/* Time range below (smaller) */}
-                            <div className="text-xs text-gray-400 truncate">
-                              {seq.moments[0].time}
-                              {seq.clipCount > 1 && (
-                                <span className="text-gray-500"> - {seq.moments[seq.clipCount - 1].time}</span>
-                              )}
-                            </div>
-                            {/* Duration and clip count */}
-                            <div className="text-xs text-gray-500 flex items-center gap-2">
-                              <span>Duration: {seq.durationFormatted}</span>
-                              {seq.clipCount > 1 && (
-                                <>
-                                  <span>·</span>
-                                  <span>{seq.clipCount} clips</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {isSelected && <IconCheck size={16} className="text-blue-400 flex-shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="border-t border-gray-700 p-3 flex gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium cursor-pointer transition-colors">
-                      <IconPlus size={14} />
-                      Add More
-                      <input
-                        type="file"
-                        accept="video/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            onAddFiles(Array.from(e.target.files));
-                            setShowSequenceMenu(false);
-                          }
-                        }}
-                      />
-                    </label>
-                    <button
-                      onClick={() => {
-                        onClear();
-                        setShowSequenceMenu(false);
-                      }}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-medium transition-colors"
-                    >
-                      <IconTrash size={14} />
-                      Clear
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Sequence Dialog - moved outside Control Bar to avoid z-index stacking context issues */}
+      {showSequenceMenu && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowSequenceMenu(false)}>
+          <div className="bg-gray-900 rounded-xl w-80 max-h-[70vh] shadow-2xl border border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Video Files</h3>
+              <button onClick={() => setShowSequenceMenu(false)} className="text-gray-400 hover:text-white">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto">
+              {sequences.map((seq) => {
+                const isSelected = seq.id === sequence.id;
+                return (
+                  <button
+                    key={seq.id}
+                    onClick={() => {
+                      onSelectSequence(seq);
+                      setShowSequenceMenu(false);
+                    }}
+                    className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+                      isSelected
+                        ? 'bg-blue-600/20 text-white'
+                        : 'hover:bg-gray-800 text-gray-300'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      {/* Date on top (larger) */}
+                      <div className="text-sm font-medium text-white">
+                        {seq.dateRange}
+                      </div>
+                      {/* Time range below (smaller) */}
+                      <div className="text-xs text-gray-400 truncate">
+                        {seq.moments[0].time}
+                        {seq.clipCount > 1 && (
+                          <span className="text-gray-500"> - {seq.moments[seq.clipCount - 1].time}</span>
+                        )}
+                      </div>
+                      {/* Duration and clip count */}
+                      <div className="text-xs text-gray-500 flex items-center gap-2">
+                        <span>Duration: {seq.durationFormatted}</span>
+                        {seq.clipCount > 1 && (
+                          <>
+                            <span>·</span>
+                            <span>{seq.clipCount} clips</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {isSelected && <IconCheck size={16} className="text-blue-400 flex-shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Actions */}
+            <div className="border-t border-gray-700 p-3 flex gap-2">
+              <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium cursor-pointer transition-colors">
+                <IconPlus size={14} />
+                Add More
+                <input
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      onAddFiles(Array.from(e.target.files));
+                      setShowSequenceMenu(false);
+                    }
+                  }}
+                />
+              </label>
+              <button
+                onClick={() => {
+                  onClear();
+                  setShowSequenceMenu(false);
+                }}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-medium transition-colors"
+              >
+                <IconTrash size={14} />
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* Telemetry Timeline */}
         {totalDuration > 0 && (
