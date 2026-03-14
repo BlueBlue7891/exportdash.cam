@@ -110,43 +110,56 @@ export default function Home() {
     }
   }, []);
   
-  const handleSelectTimeSlot = useCallback(async (timeSlot: TimeSlot) => {
-    const files = Object.values(timeSlot.files);
-    if (files.length === 0) return;
+  const handleSelectTimeSlot = useCallback(async (timeSlot: TimeSlot | TimeSlot[]) => {
+    // Handle both single slot and array of slots
+    const timeSlots = Array.isArray(timeSlot) ? timeSlot : [timeSlot];
+    
+    // Collect all files from all selected time slots
+    let allFiles: File[] = [];
+    const processedDirs = new Set<string>();
+    
+    for (const slot of timeSlots) {
+      const files = Object.values(slot.files);
+      allFiles.push(...files);
+      
+      // Get the directory path from the first video file to find event.json
+      if (files.length > 0) {
+        const firstVideo = files[0];
+        const videoPath = (firstVideo as any).webkitRelativePath || (firstVideo as any).tauriPath || '';
+        const normalizedVideoPath = videoPath.replace(/\\/g, '/');
+        const videoDir = normalizedVideoPath.substring(0, normalizedVideoPath.lastIndexOf('/'));
+        
+        if (!processedDirs.has(videoDir)) {
+          processedDirs.add(videoDir);
+          
+          // Find event.json in the same directory
+          const eventJson = folderStructure?.allFiles.find(f => {
+            if (f.name !== 'event.json') return false;
+            const eventPath = (f as any).webkitRelativePath || (f as any).tauriPath || '';
+            const normalizedEventPath = eventPath.replace(/\\/g, '/');
+            const eventDir = normalizedEventPath.substring(0, normalizedEventPath.lastIndexOf('/'));
+            return eventDir === videoDir;
+          });
+          
+          if (eventJson) {
+            allFiles.push(eventJson);
+          }
+        }
+      }
+    }
+    
+    if (allFiles.length === 0) return;
     
     setShowVideoBrowser(false);
     setIsProcessing(true);
     setProcessingProgress({
       stage: 'scanning',
       current: 0,
-      total: files.length,
+      total: allFiles.length,
       message: 'Scanning files...',
     });
 
     try {
-      // Also include event.json from the same folder if available
-      const allFiles = [...files];
-      
-      // Get the directory path from the first video file
-      const firstVideo = files[0];
-      const videoPath = (firstVideo as any).webkitRelativePath || (firstVideo as any).tauriPath || '';
-      // Normalize path separators for Windows
-      const normalizedVideoPath = videoPath.replace(/\\/g, '/');
-      const videoDir = normalizedVideoPath.substring(0, normalizedVideoPath.lastIndexOf('/'));
-      
-      // Find event.json in the same directory
-      const eventJson = folderStructure?.allFiles.find(f => {
-        if (f.name !== 'event.json') return false;
-        const eventPath = (f as any).webkitRelativePath || (f as any).tauriPath || '';
-        const normalizedEventPath = eventPath.replace(/\\/g, '/');
-        const eventDir = normalizedEventPath.substring(0, normalizedEventPath.lastIndexOf('/'));
-        return eventDir === videoDir;
-      });
-      
-      if (eventJson) {
-        allFiles.push(eventJson);
-      }
-      
       const { moments, events } = await processFilesToMoments(allFiles, setProcessingProgress);
       const detectedSequences = detectSequences(moments, events);
       

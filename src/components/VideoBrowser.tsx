@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   DateEntry, 
   TimeSlot, 
@@ -15,7 +15,7 @@ interface VideoBrowserProps {
   folderStructure: {
     dates: DateEntry[];
   };
-  onSelectTimeSlot: (timeSlot: TimeSlot) => void;
+  onSelectTimeSlot: (timeSlot: TimeSlot | TimeSlot[]) => void;
   onClose: () => void;
 }
 
@@ -26,13 +26,22 @@ const STORAGE_KEY_DATE = 'videoBrowserLastDate';
 
 type MonthState = { year: number; month: number };
 
+// Complete badge color - distinct from Saved (green)
+const COMPLETE_BADGE_COLOR = 'bg-teal-600/20 text-teal-400';
+
 export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: VideoBrowserProps) {
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
+  
+  // New: Selected time slots for batch operations
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<Set<string>>(new Set());
+  const [isDragging, setIsDragging] = useState(false);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const dragStartRef = useRef<number | null>(null);
+  const timeSlotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   
   // Compute date range from folder structure
   const dateRange = useMemo(() => {
     if (folderStructure.dates.length === 0) return null;
-    // Sort dates to ensure correct order (dates are in YYYY-MM-DD format, string sort works)
     const sortedDates = [...folderStructure.dates].sort((a, b) => a.date.localeCompare(b.date));
     const earliest = sortedDates[0].date;
     const latest = sortedDates[sortedDates.length - 1].date;
@@ -71,11 +80,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     })).filter(date => date.timeSlots.length > 0);
   }, [folderStructure.dates, selectedSources]);
   
-
-  
-  // Parse initial month and date: from localStorage or default to latest
+  // Parse initial month and date
   const { initialMonth, initialDate } = useMemo(() => {
-    // Try to restore from localStorage first
     if (typeof window !== 'undefined') {
       const savedMonth = localStorage.getItem(STORAGE_KEY_MONTH);
       const savedDate = localStorage.getItem(STORAGE_KEY_DATE);
@@ -83,13 +89,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
       if (savedMonth && savedDate && dateRange) {
         try {
           const parsedMonth = JSON.parse(savedMonth);
-          // Validate the saved month is within valid range
           const savedTime = new Date(parsedMonth.year, parsedMonth.month).getTime();
           const earliestTime = new Date(dateRange.earliest.year, dateRange.earliest.month).getTime();
           const latestTime = new Date(dateRange.latest.year, dateRange.latest.month).getTime();
           
           if (savedTime >= earliestTime && savedTime <= latestTime) {
-            // Validate saved date exists in folder structure
             const dateExists = folderStructure.dates.some(d => d.date === savedDate);
             if (dateExists) {
               return { initialMonth: parsedMonth, initialDate: savedDate };
@@ -101,7 +105,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
       }
     }
     
-    // Default to latest date (most recent)
     if (dateRange) {
       return { 
         initialMonth: { year: dateRange.latest.year, month: dateRange.latest.month },
@@ -118,7 +121,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
   const [currentMonth, setCurrentMonth] = useState<MonthState>(initialMonth);
   const [selectedDate, setSelectedDate] = useState<string | null>(initialDate);
   
-  // Save current month and date to localStorage when changed
+  // Save current month and date to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEY_MONTH, JSON.stringify(currentMonth));
@@ -133,8 +136,18 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     if (!selectedDate) return null;
     return filteredDates.find(d => d.date === selectedDate) || null;
   }, [selectedDate, filteredDates]);
+  
+  // Flatten time slots for the selected date with index
+  const timeSlotsWithIndex = useMemo(() => {
+    if (!selectedDateEntry) return [];
+    return selectedDateEntry.timeSlots.map((slot, index) => ({
+      ...slot,
+      index,
+      id: `${selectedDateEntry.date}_${slot.time}`
+    }));
+  }, [selectedDateEntry]);
 
-  // Parse dates with available videos and their source types (filtered)
+  // Parse dates with available videos and their source types
   const dateSources = useMemo(() => {
     const map = new Map<string, Set<VideoSource>>();
     for (const date of filteredDates) {
@@ -195,7 +208,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
       if (prev.month === 11) {
         return { year: prev.year + 1, month: 0 };
       }
-      return { ...prev, month: prev.month + 1 };
+      return { ...prev, month: prev.month - 1 };
     });
   };
 
@@ -213,7 +226,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     }
   };
 
-  // Check if at boundaries (convert to comparable number: year * 12 + month)
+  // Check if at boundaries
   const currentMonthValue = currentMonth.year * 12 + currentMonth.month;
   const earliestMonthValue = dateRange ? dateRange.earliest.year * 12 + dateRange.earliest.month : 0;
   const latestMonthValue = dateRange ? dateRange.latest.year * 12 + dateRange.latest.month : 0;
@@ -230,7 +243,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
       }
       return next;
     });
-    // Clear selected date if it's no longer in filtered results
     if (selectedDate && !filteredDates.find(d => d.date === selectedDate)) {
       setSelectedDate(null);
     }
@@ -245,15 +257,108 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
     setSelectedDate(null);
   };
 
+  // Store the initial selection state when drag starts
+  const initialSelectionRef = useRef<Set<string>>(new Set());
+  
+  // Time slot selection handlers
+  const handleMouseDown = useCallback((id: string, index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    const isCtrlClick = e.ctrlKey || e.metaKey;
+    const isAlreadySelected = selectedTimeSlots.has(id);
+    
+    setIsDragging(true);
+    dragStartRef.current = index;
+    setLastSelectedIndex(index);
+    
+    if (isCtrlClick) {
+      // Ctrl/Cmd click: toggle single item without clearing others
+      setSelectedTimeSlots(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+    } else {
+      // Normal click: single selection, clear others
+      // But if clicking on already selected item, just keep selection for potential drag
+      if (!isAlreadySelected) {
+        setSelectedTimeSlots(new Set([id]));
+      }
+      // Store current selection for drag add operation
+      initialSelectionRef.current = new Set(selectedTimeSlots);
+    }
+  }, [selectedTimeSlots]);
+
+  const handleMouseEnter = useCallback((id: string, index: number) => {
+    if (isDragging && dragStartRef.current !== null) {
+      const start = Math.min(dragStartRef.current, index);
+      const end = Math.max(dragStartRef.current, index);
+      
+      setSelectedTimeSlots(() => {
+        // Start with the initial selection when drag began
+        const next = new Set(initialSelectionRef.current);
+        // Add all slots in the drag range
+        for (let i = start; i <= end; i++) {
+          const slotId = timeSlotsWithIndex[i]?.id;
+          if (slotId) next.add(slotId);
+        }
+        return next;
+      });
+    }
+  }, [isDragging, timeSlotsWithIndex]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    dragStartRef.current = null;
+  }, []);
+
+  // Global mouse up handler to stop dragging
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+      dragStartRef.current = null;
+    };
+    
+    if (isDragging) {
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+      return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+    }
+  }, [isDragging]);
+
+  // Select all / Clear all time slots
+  const selectAllTimeSlots = useCallback(() => {
+    const allIds = timeSlotsWithIndex.map(slot => slot.id);
+    setSelectedTimeSlots(new Set(allIds));
+  }, [timeSlotsWithIndex]);
+
+  const clearAllTimeSlots = useCallback(() => {
+    setSelectedTimeSlots(new Set());
+    setLastSelectedIndex(null);
+  }, []);
+
+  // Import selected time slots
+  const handleImport = useCallback(() => {
+    const selectedSlots = timeSlotsWithIndex.filter(slot => selectedTimeSlots.has(slot.id));
+    if (selectedSlots.length >= 1) {
+      // Pass array of selected slots for batch import
+      onSelectTimeSlot(selectedSlots);
+    }
+  }, [selectedTimeSlots, timeSlotsWithIndex, onSelectTimeSlot]);
+
   // Calculate total recordings after filter
   const totalRecordings = useMemo(() => {
     return filteredDates.reduce((sum, d) => sum + d.timeSlots.length, 0);
   }, [filteredDates]);
 
+  const selectedCount = selectedTimeSlots.size;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div 
-        className="bg-gray-900 rounded-xl w-[1000px] max-h-[85vh] shadow-2xl border border-gray-700 overflow-hidden flex"
+        className="bg-gray-900 rounded-xl w-[1100px] max-h-[85vh] shadow-2xl border border-gray-700 overflow-hidden flex"
         onClick={e => e.stopPropagation()}
       >
         {/* Left: Calendar + Filters */}
@@ -261,7 +366,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
           {/* Calendar Section */}
           <div className="p-5 flex-shrink-0">
             <div className="flex items-center justify-between mb-2">
-              {/* Jump to earliest button */}
               <button
                 onClick={goToEarliestMonth}
                 disabled={isAtEarliest}
@@ -277,7 +381,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                 </svg>
               </button>
               
-              {/* Previous month button */}
               <button
                 onClick={goToPreviousMonth}
                 disabled={isAtEarliest}
@@ -292,12 +395,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                 </svg>
               </button>
               
-              {/* Month/Year display */}
               <h3 className="text-lg font-semibold text-white">
                 {monthNames[currentMonth.month]} {currentMonth.year}
               </h3>
               
-              {/* Next month button */}
               <button
                 onClick={goToNextMonth}
                 disabled={isAtLatest}
@@ -312,7 +413,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                 </svg>
               </button>
               
-              {/* Jump to latest button */}
               <button
                 onClick={goToLatestMonth}
                 disabled={isAtLatest}
@@ -416,7 +516,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                           : 'hover:bg-gray-800/50'
                     }`}
                   >
-                    {/* Custom checkbox */}
                     <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
                       isSelected 
                         ? `${bgColor} border-transparent` 
@@ -429,15 +528,12 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                       )}
                     </div>
                     
-                    {/* Source indicator dot */}
                     <span className={`w-2 h-2 rounded-full ${bgColor.replace('/20', '')}`} />
                     
-                    {/* Label */}
                     <span className={`flex-1 text-sm ${isSelected ? 'text-white' : 'text-gray-400'}`}>
                       {SOURCE_LABELS[source]}
                     </span>
                     
-                    {/* Count */}
                     <span className={`text-xs tabular-nums ${isSelected ? 'text-gray-400' : 'text-gray-600'}`}>
                       {count}
                     </span>
@@ -457,38 +553,105 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
 
         {/* Right: Time list */}
         <div className="flex-1 flex flex-col min-h-0">
+          {/* Header with selection controls */}
           <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-            <h3 className="font-semibold text-white">
-              {selectedDateEntry ? selectedDateEntry.displayDate : 'Select a date'}
-            </h3>
-            {selectedDateEntry && (
-              <span className="text-xs text-gray-400">
-                {selectedDateEntry.timeSlots.length} recordings
-              </span>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-white">
+                {selectedDateEntry ? selectedDateEntry.displayDate : 'Select a date'}
+              </h3>
+              {selectedDateEntry && (
+                <span className="text-xs text-gray-400">
+                  {selectedDateEntry.timeSlots.length} recordings
+                </span>
+              )}
+            </div>
+            
+            {selectedDateEntry && timeSlotsWithIndex.length > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={selectAllTimeSlots}
+                  className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-600/10"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={clearAllTimeSlots}
+                  className="text-xs text-gray-500 hover:text-gray-400 px-2 py-1 rounded hover:bg-gray-800"
+                >
+                  Clear
+                </button>
+              </div>
             )}
           </div>
 
+          {/* Time slots list */}
           <div className="flex-1 overflow-y-auto p-4">
             {selectedDateEntry ? (
-              <div className="space-y-2">
-                {selectedDateEntry.timeSlots.map((timeSlot, idx) => {
+              <div className="space-y-2 select-none">
+                {timeSlotsWithIndex.map((timeSlot, idx) => {
                   const allCameras = hasAllCameras(timeSlot);
                   const cameraCount = getCameraCount(timeSlot);
+                  const isSelected = selectedTimeSlots.has(timeSlot.id);
                   
                   return (
-                    <button
-                      key={idx}
-                      onClick={() => onSelectTimeSlot(timeSlot)}
-                      className="w-full p-3 bg-gray-800 hover:bg-gray-750 rounded-lg text-left transition-colors border border-gray-700 hover:border-gray-600 group"
+                    <div
+                      key={timeSlot.id}
+                      ref={el => {
+                        if (el) timeSlotRefs.current.set(timeSlot.id, el);
+                      }}
+                      onMouseDown={(e) => handleMouseDown(timeSlot.id, idx, e)}
+                      onMouseEnter={() => handleMouseEnter(timeSlot.id, idx)}
+                      onMouseUp={handleMouseUp}
+                      className={`
+                        group w-full p-3 rounded-lg text-left transition-all border cursor-pointer
+                        ${isSelected 
+                          ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/30' 
+                          : 'bg-gray-800 border-gray-700 hover:border-gray-600'}
+                      `}
                     >
                       <div className="flex items-center justify-between">
+                        {/* Left: Checkbox + Info */}
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded bg-gray-700 flex items-center justify-center">
-                            <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {/* Circular Checkbox - visible on hover or when selected */}
+                          <div 
+                            className={`
+                              w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer
+                              ${isSelected 
+                                ? 'bg-blue-500 border-blue-500 opacity-100' 
+                                : 'border-gray-500 bg-gray-900/50 opacity-0 group-hover:opacity-100'}
+                            `}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Toggle this item without affecting others (Ctrl+click behavior)
+                              setSelectedTimeSlots(prev => {
+                                const next = new Set(prev);
+                                if (next.has(timeSlot.id)) {
+                                  next.delete(timeSlot.id);
+                                } else {
+                                  next.add(timeSlot.id);
+                                }
+                                return next;
+                              });
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                          >
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          
+                          {/* Play icon */}
+                          <div className={`w-10 h-10 rounded flex items-center justify-center transition-colors ${
+                            isSelected ? 'bg-blue-600/30' : 'bg-gray-700'
+                          }`}>
+                            <svg className={`w-5 h-5 ${isSelected ? 'text-blue-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
+                          
                           <div>
                             <div className="text-sm font-medium text-white">
                               {timeSlot.displayTime}
@@ -503,6 +666,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Right: Badges */}
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
                           {timeSlot.hasGps && (
                             <span className="px-2 py-0.5 bg-cyan-600/20 text-cyan-400 text-[10px] rounded flex items-center gap-1">
@@ -527,16 +692,13 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
                             </span>
                           ))}
                           {allCameras && (
-                            <span className="px-2 py-0.5 bg-green-600/20 text-green-400 text-[10px] rounded">
+                            <span className={`px-2 py-0.5 text-[10px] rounded ${COMPLETE_BADGE_COLOR}`}>
                               Complete
                             </span>
                           )}
-                          <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -552,6 +714,31 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose }: Vid
               </div>
             )}
           </div>
+          
+          {/* Bottom action bar */}
+          {selectedCount > 0 && (
+            <div className="p-4 border-t border-gray-700 bg-gray-800/50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">
+                  {selectedCount} item{selectedCount > 1 ? 's' : ''} selected
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={clearAllTimeSlots}
+                    className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Import {selectedCount > 1 ? `(${selectedCount})` : ''}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
