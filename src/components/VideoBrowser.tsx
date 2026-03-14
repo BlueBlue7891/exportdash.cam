@@ -18,10 +18,9 @@ interface VideoBrowserProps {
   onSelectTimeSlot: (timeSlot: TimeSlot | TimeSlot[]) => void;
   onClose: () => void;
   // External selection state (persisted across opens)
+  // Selection persists after import to remind user what's been imported
   selectedTimeSlotIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
-  // Already imported time slots (green status)
-  importedTimeSlotIds: Set<string>;
   // Clear all videos from player
   onClear: () => void;
 }
@@ -36,7 +35,7 @@ type MonthState = { year: number; month: number };
 // Complete badge color - distinct from Saved (green)
 const COMPLETE_BADGE_COLOR = 'bg-teal-600/20 text-teal-400';
 
-export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange, importedTimeSlotIds, onClear }: VideoBrowserProps) {
+export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange, onClear }: VideoBrowserProps) {
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
   // Use external selection state
@@ -477,18 +476,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
 
   const selectedCount = selectedTimeSlots.size;
   
-  // Check if a time slot is currently selected (blue)
+  // Check if a time slot is selected (also indicates it has been imported)
   const isTimeSlotSelected = useCallback((slotId: string) => {
     return selectedTimeSlots.has(slotId);
   }, [selectedTimeSlots]);
-  
-  // Check if a time slot has been imported to player (green)
-  const isTimeSlotImported = useCallback((slotId: string) => {
-    return importedTimeSlotIds.has(slotId);
-  }, [importedTimeSlotIds]);
-  
-  // Check if any videos have been imported (for File button color)
-  const hasImportedVideos = importedTimeSlotIds.size > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -727,9 +718,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   const allCameras = hasAllCameras(timeSlot);
                   const cameraCount = getCameraCount(timeSlot);
                   const isSelected = isTimeSlotSelected(timeSlot.id);
-                  const isImported = isTimeSlotImported(timeSlot.id);
-                  
-                  // Determine visual state: imported (green) takes precedence over selected (blue)
                   
                   return (
                     <div
@@ -744,29 +732,24 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                       onMouseUp={handleMouseUp}
                       className={`
                         group w-full p-3 rounded-lg text-left transition-all border cursor-pointer
-                        ${isImported
-                          ? 'bg-green-600/20 border-green-500/50 ring-1 ring-green-500/30' 
-                          : isSelected 
-                            ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/30' 
-                            : 'bg-gray-800 border-gray-700 hover:border-gray-600'}
+                        ${isSelected 
+                          ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/30' 
+                          : 'bg-gray-800 border-gray-700 hover:border-gray-600'}
                       `}
-                      title={isImported ? 'Imported to player' : isSelected ? 'Selected for import' : ''}
                     >
                       <div className="flex items-center justify-between">
                         {/* Left: Checkbox + Info */}
                         <div className="flex items-center gap-3">
-                          {/* Circular Checkbox - visible on hover or when selected/imported */}
+                          {/* Circular Checkbox - visible on hover or when selected */}
                           <div 
                             className={`
                               w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0
-                              ${isImported
-                                ? 'bg-green-500 border-green-500 opacity-100'
-                                : isSelected 
-                                  ? 'bg-blue-500 border-blue-500 opacity-100' 
-                                  : 'border-gray-500 bg-gray-900/50 opacity-0 group-hover:opacity-100'}
+                              ${isSelected 
+                                ? 'bg-blue-500 border-blue-500 opacity-100' 
+                                : 'border-gray-500 bg-gray-900/50 opacity-0 group-hover:opacity-100'}
                             `}
                           >
-                            {(isSelected || isImported) && (
+                            {isSelected && (
                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                               </svg>
@@ -775,13 +758,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                           
                           {/* Play icon */}
                           <div className={`w-10 h-10 rounded flex items-center justify-center transition-colors ${
-                            isImported 
-                              ? 'bg-green-600/30'
-                              : isSelected 
-                                ? 'bg-blue-600/30' 
-                                : 'bg-gray-700'
+                            isSelected 
+                              ? 'bg-blue-600/30' 
+                              : 'bg-gray-700'
                           }`}>
-                            <svg className={`w-5 h-5 ${isImported ? 'text-green-400' : isSelected ? 'text-blue-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={`w-5 h-5 ${isSelected ? 'text-blue-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
@@ -804,14 +785,6 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                         
                         {/* Right: Badges */}
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                          {isImported && (
-                            <span className="px-2 py-0.5 bg-green-600/20 text-green-400 text-[10px] rounded flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Imported
-                            </span>
-                          )}
                           {timeSlot.hasGps && (
                             <span className="px-2 py-0.5 bg-cyan-600/20 text-cyan-400 text-[10px] rounded flex items-center gap-1">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

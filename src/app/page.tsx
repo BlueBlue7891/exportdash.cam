@@ -28,9 +28,8 @@ export default function Home() {
   const [folderStructure, setFolderStructure] = useState<FolderStructure | null>(null);
   const [showVideoBrowser, setShowVideoBrowser] = useState(false);
   // Persist selected time slots across calendar opens (keyed by date_time)
+  // Selection persists after import to remind user what's been imported
   const [selectedTimeSlotIds, setSelectedTimeSlotIds] = useState<Set<string>>(new Set());
-  // Track which time slots have been imported to the player (green status)
-  const [importedTimeSlotIds, setImportedTimeSlotIds] = useState<Set<string>>(new Set());
 
   // Handle scan progress from DropZone
   const handleScanProgress = useCallback((current: number, total: number) => {
@@ -157,7 +156,6 @@ export default function Home() {
     // Close browser before processing
     setShowVideoBrowser(false);
     // Mark selected slots as imported
-    setImportedTimeSlotIds(new Set(selectedTimeSlotIds));
     setIsProcessing(true);
     setProcessingProgress({
       stage: 'scanning',
@@ -186,7 +184,7 @@ export default function Home() {
     setSelectedSequence(null);
     setFolderStructure(null);
     setSelectedTimeSlotIds(new Set());
-    setImportedTimeSlotIds(new Set());
+
   }, []);
 
   return (
@@ -426,7 +424,7 @@ export default function Home() {
             onClose={() => setShowVideoBrowser(false)}
             selectedTimeSlotIds={selectedTimeSlotIds}
             onSelectionChange={setSelectedTimeSlotIds}
-            importedTimeSlotIds={importedTimeSlotIds}
+
             onClear={handleClear}
           />
         )}
