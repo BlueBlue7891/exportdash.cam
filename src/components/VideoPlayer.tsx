@@ -212,6 +212,38 @@ export function VideoPlayer({
     return { mapSeiData: seiData, isEventJsonGps: false };
   }, [seiData, sequence?.event]);
 
+  // Check if GPS data is available (for button state)
+  const hasGpsData = useMemo(() => {
+    return !!(mapSeiData?.latitude_deg && mapSeiData?.longitude_deg && 
+              mapSeiData.latitude_deg !== 0 && mapSeiData.longitude_deg !== 0);
+  }, [mapSeiData]);
+
+  // Check if Telemetry data is available (for button state)
+  const hasTelemetryData = useMemo(() => {
+    if (!seiData) return false;
+    // Check for any non-zero telemetry field (based on actual SEI protobuf schema)
+    const telemetryFields = [
+      'vehicle_speed_mps',      // Vehicle speed (m/s)
+      'accelerator_pedal_position', // Accelerator pedal position
+      'steering_wheel_angle',   // Steering wheel angle
+      'brake_applied',          // Brake applied (boolean)
+      'linear_acceleration_mps2_x', // Acceleration X
+      'linear_acceleration_mps2_y', // Acceleration Y
+      'linear_acceleration_mps2_z', // Acceleration Z
+      'heading_deg',            // Heading
+      'gear_state',             // Gear state
+      'autopilot_state',        // Autopilot state
+      'blinker_on_left',        // Left blinker
+      'blinker_on_right',       // Right blinker
+    ];
+    return telemetryFields.some(field => {
+      const value = (seiData as any)[field];
+      // For booleans, check if defined; for numbers, check if non-zero
+      if (typeof value === 'boolean') return value === true;
+      return value !== undefined && value !== null && value !== 0;
+    });
+  }, [seiData]);
+
   // Reset state when sequence changes
   useEffect(() => {
     if (sequence && sequence.moments.length > 0) {
@@ -231,6 +263,13 @@ export function VideoPlayer({
       setTrimPoints({ inPoint: 0, outPoint: sequence.totalDuration });
       setCameraSegments([{ startTime: 0, endTime: sequence.totalDuration, angle: defaultAngle }]);
       setUseCustomCameraTrack(false);
+
+      // Auto-adjust overlay visibility based on data availability
+      // Wait for SEI data to load first
+      const timer = setTimeout(() => {
+        // These will be updated after hasGpsData and hasTelemetryData are calculated
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [sequence?.id]);
 
@@ -240,6 +279,18 @@ export function VideoPlayer({
       setUseCustomCameraTrack(true);
     }
   }, [hasCustomCameraTrack, useCustomCameraTrack]);
+
+  // Auto-adjust overlay visibility based on data availability
+  useEffect(() => {
+    // If no GPS data, hide map
+    if (!hasGpsData) {
+      setShowMap(false);
+    }
+    // If no telemetry data, hide telemetry
+    if (!hasTelemetryData) {
+      setShowTelemetry(false);
+    }
+  }, [hasGpsData, hasTelemetryData]);
 
   // Create object URLs for current moment's videos
   useEffect(() => {
@@ -1200,30 +1251,36 @@ export function VideoPlayer({
           {/* Overlay Toggles */}
           <div className="flex items-center gap-1 relative z-10">
             <span className="text-[10px] text-gray-500 mr-1">Show:</span>
-            <Tooltip content="Telemetry (T)" position="top">
+            <Tooltip content={hasTelemetryData ? "Telemetry (T)" : "No telemetry data available"} position="top">
               <button
-                onClick={() => setShowTelemetry(prev => !prev)}
+                onClick={() => hasTelemetryData && setShowTelemetry(prev => !prev)}
                 className={`p-1.5 rounded transition-all ${
-                  showTelemetry
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  hasTelemetryData
+                    ? showTelemetry
+                      ? 'bg-green-600 text-white'
+                      : 'bg-green-600/30 text-green-400 hover:bg-green-600/50'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                 }`}
               >
                 <IconBolt size={16} />
               </button>
             </Tooltip>
             <div className="relative flex items-center z-10">
-              <Tooltip content="Map (M) - Right-click to resize" position="top">
+              <Tooltip content={hasGpsData ? "Map (M) - Right-click to resize" : "No GPS data available"} position="top">
                 <button
-                  onClick={() => setShowMap(prev => !prev)}
+                  onClick={() => hasGpsData && setShowMap(prev => !prev)}
                   onContextMenu={(e) => {
-                    e.preventDefault();
-                    setShowMapSizeControl(prev => !prev);
+                    if (hasGpsData) {
+                      e.preventDefault();
+                      setShowMapSizeControl(prev => !prev);
+                    }
                   }}
                   className={`p-1.5 rounded transition-all h-[28px] flex items-center justify-center ${
-                    showMap
-                      ? 'bg-green-600 text-white'
-                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                    hasGpsData
+                      ? showMap
+                        ? 'bg-green-600 text-white'
+                        : 'bg-green-600/30 text-green-400 hover:bg-green-600/50'
+                      : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                   }`}
                 >
                   <IconMapPin size={16} />
