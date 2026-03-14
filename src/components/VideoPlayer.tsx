@@ -113,6 +113,9 @@ export function VideoPlayer({
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  const lastSequenceIdRef = useRef<string | null>(null);
+  const hasAutoEnabledTelemetryRef = useRef<boolean>(false);
+  const hasAutoEnabledMapRef = useRef<boolean>(false);
 
   // Playback state
   const [selectedAngle, setSelectedAngle] = useState<string>('front');
@@ -281,16 +284,39 @@ export function VideoPlayer({
   }, [hasCustomCameraTrack, useCustomCameraTrack]);
 
   // Auto-adjust overlay visibility based on data availability
+  // Auto-enable when switching to a new sequence or when data becomes available
   useEffect(() => {
-    // If no GPS data, hide map
+    const isNewSequence = lastSequenceIdRef.current !== sequence?.id;
+    
+    if (isNewSequence && sequence) {
+      // Reset auto-enable flags for new sequence
+      hasAutoEnabledTelemetryRef.current = false;
+      hasAutoEnabledMapRef.current = false;
+      lastSequenceIdRef.current = sequence.id;
+    }
+    
+    // Auto-enable telemetry when data becomes available (only once per sequence)
+    if (hasTelemetryData && !hasAutoEnabledTelemetryRef.current) {
+      setShowTelemetry(true);
+      hasAutoEnabledTelemetryRef.current = true;
+    }
+    
+    // Auto-enable map when data becomes available (only once per sequence)
+    if (hasGpsData && !hasAutoEnabledMapRef.current) {
+      setShowMap(true);
+      hasAutoEnabledMapRef.current = true;
+    }
+    
+    // Auto-disable when data becomes unavailable
     if (!hasGpsData) {
       setShowMap(false);
+      hasAutoEnabledMapRef.current = false;
     }
-    // If no telemetry data, hide telemetry
     if (!hasTelemetryData) {
       setShowTelemetry(false);
+      hasAutoEnabledTelemetryRef.current = false;
     }
-  }, [hasGpsData, hasTelemetryData]);
+  }, [hasGpsData, hasTelemetryData, sequence?.id]);
 
   // Create object URLs for current moment's videos
   useEffect(() => {
@@ -951,24 +977,9 @@ export function VideoPlayer({
             }`}
             style={layout === 'pip' && videoAspectRatio ? { aspectRatio: `${videoAspectRatio}` } : undefined}
           >
-            {/* Telemetry Overlay - Top Center */}
-            {showTelemetry && (
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto">
-                <TelemetryCard
-                  seiData={seiData}
-                  isLoading={isLoading}
-                  error={error}
-                  speedUnit={speedUnit}
-                  onSpeedUnitToggle={() => setSpeedUnit(prev => prev === 'mph' ? 'kmh' : 'mph')}
-                />
-              </div>
-            )}
-
-            {/* Date/Time Overlay - Below Telemetry or Top Center */}
+            {/* Date/Time Overlay - Top Center */}
             {showDateTime && (
-              <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-none ${
-                showTelemetry ? 'top-[95px]' : 'top-3'
-              }`}>
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 pointer-events-none">
                 <div className="px-2 py-1 rounded-md bg-black/50 backdrop-blur-sm text-white/90 text-xs font-medium">
                   {(() => {
                     const realTime = new Date(currentMoment.timestamp.getTime() + localTime * 1000);
@@ -982,6 +993,21 @@ export function VideoPlayer({
                     return <>{year}-{month}-{day} &nbsp; {hours}:{minutes}:{seconds}</>;
                   })()}
                 </div>
+              </div>
+            )}
+
+            {/* Telemetry Overlay - Below Date/Time */}
+            {showTelemetry && (
+              <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-auto ${
+                showDateTime ? 'top-[42px]' : 'top-2'
+              }`}>
+                <TelemetryCard
+                  seiData={seiData}
+                  isLoading={isLoading}
+                  error={error}
+                  speedUnit={speedUnit}
+                  onSpeedUnitToggle={() => setSpeedUnit(prev => prev === 'mph' ? 'kmh' : 'mph')}
+                />
               </div>
             )}
 
