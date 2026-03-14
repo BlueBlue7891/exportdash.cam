@@ -192,9 +192,19 @@ export function VideoPlayer({
 
   // Map SEI data with event.json GPS fallback
   const mapSeiData = useMemo(() => {
-    if (seiData?.latitude_deg && seiData?.longitude_deg) return seiData;
-    if (sequence?.event?.est_lat && sequence?.event?.est_lon) {
-      return { ...(seiData || {}), latitude_deg: sequence.event.est_lat, longitude_deg: sequence.event.est_lon } as typeof seiData;
+    const hasSeiGps = seiData?.latitude_deg && seiData?.longitude_deg && seiData.latitude_deg !== 0 && seiData.longitude_deg !== 0;
+    const hasEventGps = sequence?.event?.est_lat && sequence?.event?.est_lon;
+    
+    if (hasSeiGps) {
+      console.log('[VideoPlayer] Using SEI GPS:', seiData?.latitude_deg, seiData?.longitude_deg);
+      return seiData;
+    }
+    if (hasEventGps) {
+      console.log('[VideoPlayer] Using event.json GPS fallback:', sequence?.event?.est_lat, sequence?.event?.est_lon);
+      return { ...(seiData || {}), latitude_deg: sequence!.event!.est_lat, longitude_deg: sequence!.event!.est_lon } as typeof seiData;
+    }
+    if (seiData) {
+      console.log('[VideoPlayer] SEI has no GPS. Available fields:', Object.keys(seiData).filter(k => (seiData as any)[k] !== undefined && (seiData as any)[k] !== 0));
     }
     return seiData;
   }, [seiData, sequence?.event]);
