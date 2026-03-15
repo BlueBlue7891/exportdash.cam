@@ -262,25 +262,13 @@ async function parseEventJson(file: File): Promise<TeslaEvent | null> {
     if (!data.timestamp || !data.reason) return null;
 
     // Parse timestamp: "2026-02-07T17:36:02" (local time, no timezone)
-    // Parse manually to avoid timezone issues
-    const timestamp = data.timestamp;
-    let ts: Date;
-    if (timestamp.includes('T')) {
-      // ISO format: 2026-02-13T14:05:01
-      // Parse manually to ensure local time interpretation
-      const [datePart, timePart] = timestamp.split('T');
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hour, minute, second] = timePart.split(':').map(Number);
-      ts = new Date(year, month - 1, day, hour, minute, second);
-    } else {
-      ts = new Date(timestamp);
-    }
+    const ts = new Date(data.timestamp);
     if (isNaN(ts.getTime())) return null;
 
     // Parse GPS coordinates - handle both string and number types
     const est_lat = data.est_lat !== undefined ? parseFloat(String(data.est_lat)) : undefined;
     const est_lon = data.est_lon !== undefined ? parseFloat(String(data.est_lon)) : undefined;
-    
+
     return {
       timestamp: ts,
       city: data.city || undefined,
@@ -575,12 +563,7 @@ function createSequence(moments: VideoMoment[]): VideoSequence {
 
   // Format time range
   const startTimeStr = moments[0].time;
-  // Calculate end time string from last moment's time plus duration
-  // Use local time components to avoid timezone issues
-  const endHours = String(endTime.getHours()).padStart(2, '0');
-  const endMinutes = String(endTime.getMinutes()).padStart(2, '0');
-  const endSeconds = String(endTime.getSeconds()).padStart(2, '0');
-  const endTimeStr = `${endHours}:${endMinutes}:${endSeconds}`;
+  const endTimeStr = endTime.toTimeString().split(' ')[0];
   const timeRange = `${startTimeStr} - ${endTimeStr}`;
 
   // Format date range (usually just one date)
