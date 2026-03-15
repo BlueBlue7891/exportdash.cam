@@ -817,7 +817,7 @@ export function TelemetryTimeline({
               const segEnd = Math.min(segment.endTime, duration); // Limit to actual video end, not viewEnd
               const left = timeToPosition(segStart);
               const width = ((segEnd - segStart) / viewDuration) * 100;
-              const opacity = segment.intensity !== undefined ? 0.2 + segment.intensity * 0.8 : 0.9;
+              const opacity = segment.intensity !== undefined ? 0.4 + segment.intensity * 0.6 : 0.9;
 
               const isLeftBlinker = track.id === 'left-blinker';
               const isRightBlinker = track.id === 'right-blinker';
