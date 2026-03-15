@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { TrimPoints, CameraSegment, ANGLE_COLORS, ANGLE_LABELS, TeslaEvent } from '@/types/video';
 import { Tooltip } from './Tooltip';
@@ -68,7 +69,7 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
     right: Math.min(Math.max(arrowX, arrowPadding), tooltipWidth - arrowPadding),
   };
 
-  return (
+  return createPortal(
     <div 
       className="fixed pointer-events-none z-[9999]"
       style={{ left, top }}
@@ -91,7 +92,8 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
         className="absolute w-2 h-2 bg-gray-900/95 border-r border-b border-orange-500/40 rotate-45 -bottom-1"
         style={{ left: arrowLeft[align] - 4 }}
       />
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -715,7 +717,7 @@ export function TelemetryTimeline({
         {eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
           <div
             ref={eventMarkerRef}
-            className="absolute top-0 bottom-0 z-[100] group"
+            className="absolute top-0 bottom-0 z-[5] group"
             style={{ left: `${timeToPosition(eventAbsoluteTime)}%` }}
             onMouseEnter={() => {
               // Get marker position for fixed positioning
