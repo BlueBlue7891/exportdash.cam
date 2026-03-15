@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import Image from 'next/image';
 import { SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { TrimPoints, CameraSegment, ANGLE_COLORS, ANGLE_LABELS, TeslaEvent } from '@/types/video';
 import { Tooltip } from './Tooltip';
@@ -835,11 +836,12 @@ export function TelemetryTimeline({
                   }}
                 >
                   {showArrow && width > 1 && (
-                    <img
-                      src={isLeftBlinker ? '/arrow-left.svg' : '/arrow-right.svg'}
+                    <Image 
+                      src="/blinker.svg" 
                       alt={isLeftBlinker ? 'Left' : 'Right'}
-                      className="h-2 w-auto max-w-[80%] pointer-events-none"
-                      style={{ opacity: 0.9 }}
+                      width={10}
+                      height={10}
+                      className={`pointer-events-none opacity-30 ${isLeftBlinker ? '' : 'rotate-180'}`}
                     />
                   )}
                 </div>
