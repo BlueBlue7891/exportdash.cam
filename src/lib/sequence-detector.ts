@@ -104,7 +104,7 @@ function parseMp4Duration(buffer: ArrayBuffer): number | null {
                 : view.getUint32(durationOffset);
               
               if (timescale > 0 && duration > 0) {
-                return Math.round(duration / timescale);
+                return duration / timescale;
               }
             }
             return null;
