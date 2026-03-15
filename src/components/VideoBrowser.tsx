@@ -757,7 +757,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                       className={`
                         group w-full p-3 rounded-lg text-left transition-all border cursor-pointer
                         ${isSelected 
-                          ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/30' 
+                          ? 'bg-green-600/20 border-green-500/50 ring-1 ring-green-500/30' 
                           : 'bg-gray-800 border-gray-700 hover:border-gray-600'}
                       `}
                     >
@@ -769,7 +769,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                             className={`
                               w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0
                               ${isSelected 
-                                ? 'bg-blue-500 border-blue-500 opacity-100' 
+                                ? 'bg-green-500 border-green-500 opacity-100' 
                                 : 'border-gray-500 bg-gray-900/50 opacity-0 group-hover:opacity-100'}
                             `}
                           >
@@ -783,10 +783,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                           {/* Play icon */}
                           <div className={`w-10 h-10 rounded flex items-center justify-center transition-colors ${
                             isSelected 
-                              ? 'bg-blue-600/30' 
+                              ? 'bg-green-600/30' 
                               : 'bg-gray-700'
                           }`}>
-                            <svg className={`w-5 h-5 ${isSelected ? 'text-blue-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={`w-5 h-5 ${isSelected ? 'text-green-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>

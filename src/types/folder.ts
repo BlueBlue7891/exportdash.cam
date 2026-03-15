@@ -7,11 +7,11 @@ export type VideoSource = 'recent' | 'saved' | 'sentry' | 'encrypted' | 'photobo
 
 /** Source category labels */
 export const SOURCE_LABELS: Record<VideoSource, string> = {
-  recent: 'Recent',
-  saved: 'Saved',
-  sentry: 'Sentry',
-  encrypted: 'Encrypted',
-  photobooth: 'Photo',
+  recent: 'RecentClips',
+  saved: 'SavedClips',
+  sentry: 'SentryClips',
+  encrypted: 'EncryptedClips',
+  photobooth: 'Photobooth',
   unknown: 'Unknown',
 };
 
