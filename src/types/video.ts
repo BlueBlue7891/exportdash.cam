@@ -249,14 +249,10 @@ export function parseTimestamp(filename: string): Date | null {
   if (!match) return null;
 
   const [, year, month, day, hour, minute, second] = match;
-  return new Date(
-    parseInt(year),
-    parseInt(month) - 1,  // Month is 0-indexed
-    parseInt(day),
-    parseInt(hour),
-    parseInt(minute),
-    parseInt(second)
-  );
+  // Create date in local time but treat it as if the components are local time
+  // Use explicit string format to ensure consistent parsing
+  const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+  return new Date(dateStr);
 }
 
 /** Format duration in seconds to MM:SS */
