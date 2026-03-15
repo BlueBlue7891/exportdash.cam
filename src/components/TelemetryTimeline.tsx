@@ -291,18 +291,9 @@ export function TelemetryTimeline({
   const eventAbsoluteTime = useMemo(() => {
     if (!event || !sequenceStartTime) return null;
     const offsetSeconds = (event.timestamp.getTime() - sequenceStartTime.getTime()) / 1000;
-    console.log('[TelemetryTimeline] Event position calculation:', { 
-      eventTime: event.timestamp.toISOString(), 
-      sequenceStartTime: sequenceStartTime.toISOString(),
-      offsetSeconds, 
-      duration, 
-      viewStart, 
-      viewEnd,
-      position: viewEnd > viewStart ? ((offsetSeconds - viewStart) / (viewEnd - viewStart) * 100).toFixed(2) + '%' : 'N/A'
-    });
     if (offsetSeconds < 0 || offsetSeconds > duration + 5) return null; // 5 second buffer for multi-clip sequences
     return offsetSeconds;
-  }, [event, sequenceStartTime, duration, viewStart, viewEnd]);
+  }, [event, sequenceStartTime, duration]);
 
   const [showEventTooltip, setShowEventTooltip] = useState(false);
   const [markerRect, setMarkerRect] = useState<DOMRect | null>(null);
@@ -685,7 +676,7 @@ export function TelemetryTimeline({
           )}
 
           {/* Track legend */}
-          {event && (
+          {showEventMarker && event && (
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rotate-45 bg-orange-500" />
               <span className="text-[10px] text-orange-400 font-medium">{event.reasonLabel}</span>
