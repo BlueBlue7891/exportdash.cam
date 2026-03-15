@@ -133,6 +133,10 @@ export function VideoPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null);
   const [isTimelineDragging, setIsTimelineDragging] = useState(false);
+  
+  // Smooth animation refs
+  const rafRef = useRef<number | null>(null);
+  const lastTimeUpdateRef = useRef<number>(0);
 
   // Layout camera config
   const [layoutConfig, setLayoutConfig] = useState<LayoutCameraConfig>(DEFAULT_LAYOUT_CONFIG);
@@ -397,12 +401,49 @@ export function VideoPlayer({
     }
   }, [selectedAngle]);
 
+  // Use requestAnimationFrame for smooth progress bar updates
+  useEffect(() => {
+    if (!isPlaying) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    const updateFrame = () => {
+      if (mainVideoRef.current) {
+        const currentTime = mainVideoRef.current.currentTime;
+        // Update local time for smooth UI updates (throttled to ~60fps for state updates)
+        // Use requestAnimationFrame timestamp for consistent timing
+        const now = performance.now();
+        if (now - lastTimeUpdateRef.current >= 16) { // ~60fps
+          setLocalTime(currentTime);
+          lastTimeUpdateRef.current = now;
+        }
+        // Sync other videos without triggering React state updates
+        syncVideos();
+      }
+      rafRef.current = requestAnimationFrame(updateFrame);
+    };
+
+    rafRef.current = requestAnimationFrame(updateFrame);
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isPlaying, syncVideos]);
+
+  // Fallback timeupdate handler for when not playing
   const handleTimeUpdate = useCallback(() => {
-    if (mainVideoRef.current) {
+    if (mainVideoRef.current && !isPlaying) {
       setLocalTime(mainVideoRef.current.currentTime);
       syncVideos();
     }
-  }, [syncVideos]);
+  }, [syncVideos, isPlaying]);
 
   // Handle video ended - auto-advance to next clip
   const handleVideoEnded = useCallback(() => {
@@ -1137,7 +1178,7 @@ export function VideoPlayer({
 
             return (
               <>
-                <span className="text-sm text-gray-400 w-[4.5rem] tabular-nums ml-2">{formatTime(clampedTime - effectiveStart, true)}</span>
+                <span className="text-sm text-gray-400 w-[4.5rem] tabular-nums ml-2 will-change-contents">{formatTime(clampedTime - effectiveStart, true)}</span>
                 <input
                   type="range"
                   min={effectiveStart}
@@ -1145,9 +1186,10 @@ export function VideoPlayer({
                   step={0.001}
                   value={clampedTime}
                   onChange={handleSeek}
-                  className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                  className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer will-change-transform"
+                  style={{ contain: 'layout style' }}
                 />
-                <span className="text-sm text-gray-400 w-[4.5rem] tabular-nums">{formatTime(effectiveEnd - effectiveStart, true)}</span>
+                <span className="text-sm text-gray-400 w-[4.5rem] tabular-nums will-change-contents">{formatTime(effectiveEnd - effectiveStart, true)}</span>
               </>
             );
           })()}
