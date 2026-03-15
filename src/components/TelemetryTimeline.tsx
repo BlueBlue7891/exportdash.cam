@@ -615,8 +615,10 @@ export function TelemetryTimeline({
   // Generate time markers
   const timeMarkers = useMemo(() => {
     const markers: number[] = [];
+    // Always include viewStart (usually 0)
+    markers.push(viewStart);
     const interval = viewDuration > 120 ? 30 : 15;
-    for (let t = viewStart; t <= viewEnd; t += interval) {
+    for (let t = viewStart + interval; t <= viewEnd; t += interval) {
       markers.push(t);
     }
     if (markers[markers.length - 1] !== viewEnd) {
@@ -758,14 +760,33 @@ export function TelemetryTimeline({
           </div>
         )}
 
-        {/* Time interval lines - including start (0) and end markers */}
-        {timeMarkers.map((time) => (
-          <div
-            key={time}
-            className="absolute top-0 bottom-0 w-px bg-gray-600/50 z-[1] pointer-events-none"
-            style={{ left: `${timeToPosition(time)}%` }}
-          />
-        ))}
+        {/* Secondary tick marks - dynamic interval based on clip count */}
+        {(() => {
+          // Calculate secondary tick interval: 1 clip = 1s, more clips = 2s
+          const clipCount = Math.max(1, clipBoundaries.length > 0 ? clipBoundaries.length - 1 : 1);
+          const secondaryInterval = clipCount <= 1 ? 1 : 2;
+          
+          return Array.from({ length: Math.ceil((viewEnd - viewStart) / secondaryInterval) }, (_, i) => viewStart + i * secondaryInterval)
+            .filter(time => time > viewStart && time < viewEnd && !timeMarkers.includes(time))
+            .map((time) => (
+              <div
+                key={`tick-${time}`}
+                className="absolute top-0 bottom-0 w-px bg-gray-700/30 z-[0] pointer-events-none"
+                style={{ left: `${timeToPosition(time)}%` }}
+              />
+            ));
+        })()}
+
+        {/* Primary time interval lines - skip boundary markers (viewStart and viewEnd) */}
+        {timeMarkers
+          .filter(time => time > viewStart && time < viewEnd)
+          .map((time) => (
+            <div
+              key={time}
+              className="absolute top-0 bottom-0 w-px bg-gray-600/50 z-[1] pointer-events-none"
+              style={{ left: `${timeToPosition(time)}%` }}
+            />
+          ))}
 
         {/* Telemetry tracks */}
         {tracks.map((track) => (
@@ -900,10 +921,11 @@ export function TelemetryTimeline({
           return (
             <div
               key={time}
-              className="absolute flex flex-col items-center pointer-events-none"
+              className="absolute flex flex-col pointer-events-none"
               style={{
-                left: `${position}%`,
+                left: isFirst ? '0px' : isLast ? '100%' : `${position}%`,
                 transform: isFirst ? 'translateX(0)' : isLast ? 'translateX(-100%)' : 'translateX(-50%)',
+                alignItems: isFirst ? 'flex-start' : isLast ? 'flex-end' : 'center',
               }}
             >
               <div className="w-px h-1.5 bg-gray-600" />
