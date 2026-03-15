@@ -116,6 +116,7 @@ export function VideoPlayer({
   const lastSequenceIdRef = useRef<string | null>(null);
   const hasAutoEnabledTelemetryRef = useRef<boolean>(false);
   const hasAutoEnabledMapRef = useRef<boolean>(false);
+  const hasAutoEnabledEventMarkerRef = useRef<boolean>(false);
 
   // Playback state
   const [selectedAngle, setSelectedAngle] = useState<string>('front');
@@ -128,6 +129,7 @@ export function VideoPlayer({
   const [showMap, setShowMap] = useState(true);
   const [showTelemetry, setShowTelemetry] = useState(true);
   const [showDateTime, setShowDateTime] = useState(true);
+  const [showEventMarker, setShowEventMarker] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null);
   const [isTimelineDragging, setIsTimelineDragging] = useState(false);
@@ -292,6 +294,7 @@ export function VideoPlayer({
       // Reset auto-enable flags for new sequence
       hasAutoEnabledTelemetryRef.current = false;
       hasAutoEnabledMapRef.current = false;
+      hasAutoEnabledEventMarkerRef.current = false;
       lastSequenceIdRef.current = sequence.id;
     }
     
@@ -307,10 +310,20 @@ export function VideoPlayer({
       hasAutoEnabledMapRef.current = true;
     }
     
+    // Auto-enable event marker when event data becomes available (only once per sequence)
+    if (sequence?.event && !hasAutoEnabledEventMarkerRef.current) {
+      setShowEventMarker(true);
+      hasAutoEnabledEventMarkerRef.current = true;
+    }
+    
     // Auto-disable when data becomes unavailable
     if (!hasGpsData) {
       setShowMap(false);
       hasAutoEnabledMapRef.current = false;
+    }
+    if (!sequence?.event) {
+      setShowEventMarker(false);
+      hasAutoEnabledEventMarkerRef.current = false;
     }
     if (!hasTelemetryData) {
       setShowTelemetry(false);
@@ -1277,6 +1290,18 @@ export function VideoPlayer({
           {/* Overlay Toggles */}
           <div className="flex items-center gap-1 relative z-10">
             <span className="text-[10px] text-gray-500 mr-1">Show:</span>
+            <Tooltip content="Date/Time (D)" position="top">
+              <button
+                onClick={() => setShowDateTime(prev => !prev)}
+                className={`p-1.5 rounded transition-all ${
+                  showDateTime
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                }`}
+              >
+                <IconClock size={16} />
+              </button>
+            </Tooltip>
             <Tooltip content={hasTelemetryData ? "Telemetry (T)" : "No telemetry data available"} position="top">
               <button
                 onClick={() => hasTelemetryData && setShowTelemetry(prev => !prev)}
@@ -1327,16 +1352,20 @@ export function VideoPlayer({
                 </div>
               )}
             </div>
-            <Tooltip content="Date/Time (D)" position="top">
+            <Tooltip content={sequence?.event ? "Event Marker" : "No event data available"} position="top">
               <button
-                onClick={() => setShowDateTime(prev => !prev)}
+                onClick={() => sequence?.event && setShowEventMarker(prev => !prev)}
                 className={`p-1.5 rounded transition-all ${
-                  showDateTime
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  sequence?.event
+                    ? showEventMarker
+                      ? 'bg-green-600 text-white'
+                      : 'bg-green-600/30 text-green-400 hover:bg-green-600/50'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                <IconClock size={16} />
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <IconSquare size={12} className="rotate-45" />
+                </div>
               </button>
             </Tooltip>
             <Tooltip content={`Speed: ${speedUnit === 'mph' ? 'mph' : 'km/h'} (click to switch)`} position="top">
@@ -1531,6 +1560,7 @@ export function VideoPlayer({
             selectedAngle={selectedAngle}
             availableAngles={availableAngles}
             disableEventTooltip={showSequenceMenu}
+            showEventMarker={showEventMarker}
           />
         )}
       </div>

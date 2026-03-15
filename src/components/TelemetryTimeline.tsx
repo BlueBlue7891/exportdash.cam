@@ -120,6 +120,8 @@ interface TelemetryTimelineProps {
   availableAngles?: string[];  // For drag-drop palette
   // When true, hide event tooltip (e.g., when Video Files panel is open)
   disableEventTooltip?: boolean;
+  // When false, hide event marker on timeline
+  showEventMarker?: boolean;
 }
 
 interface EventSegment {
@@ -156,6 +158,7 @@ export function TelemetryTimeline({
   selectedAngle,
   availableAngles = [],
   disableEventTooltip = false,
+  showEventMarker = true,
 }: TelemetryTimelineProps) {
   // Process telemetry data into timeline tracks
   const tracks = useMemo((): TrackData[] => {
@@ -714,7 +717,7 @@ export function TelemetryTimeline({
         })}
 
         {/* Event marker */}
-        {eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
+        {showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
           <div
             ref={eventMarkerRef}
             className="absolute top-0 bottom-0 z-[5] group"
