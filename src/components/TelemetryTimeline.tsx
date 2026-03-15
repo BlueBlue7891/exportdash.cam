@@ -277,21 +277,29 @@ export function TelemetryTimeline({
   const [draggingAngle, setDraggingAngle] = useState<string | null>(null); // For drag-drop from palette
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
 
-  // Calculate view bounds based on trim state
-  // Add 5 seconds buffer to duration for timeline display (for event marker visibility)
-  const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
-  const rawViewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
-  const viewEnd = rawViewEnd + 5; // 5 seconds buffer
-  const viewDuration = viewEnd - viewStart;
-
   // Calculate event position in absolute time
-  // Add 5 second buffer to duration to handle event timestamps after video end
   const eventAbsoluteTime = useMemo(() => {
     if (!event || !sequenceStartTime) return null;
     const offsetSeconds = (event.timestamp.getTime() - sequenceStartTime.getTime()) / 1000;
-    if (offsetSeconds < 0 || offsetSeconds > duration + 5) return null; // 5 second buffer for multi-clip sequences
     return offsetSeconds;
-  }, [event, sequenceStartTime, duration]);
+  }, [event, sequenceStartTime]);
+
+  // Calculate view bounds based on trim state
+  // Smart buffer: only add buffer if event is after video end
+  const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
+  const rawViewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
+  
+  // Calculate buffer based on event position
+  let viewEnd = rawViewEnd;
+  if (eventAbsoluteTime !== null && eventAbsoluteTime > rawViewEnd) {
+    // Event is after video end, add buffer to show event marker
+    // Event marker needs about 120px width (diamond + label), convert to time
+    // Estimate: 120px / timelineWidth * totalDuration = bufferTime
+    // Use a safe estimate: 2 seconds or (eventTime - rawViewEnd + 1 second), whichever is larger
+    const eventBuffer = eventAbsoluteTime - rawViewEnd + 1; // 1 second after event
+    viewEnd = rawViewEnd + Math.max(eventBuffer, 0.5); // At least 0.5s buffer
+  }
+  const viewDuration = viewEnd - viewStart;
 
   const [showEventTooltip, setShowEventTooltip] = useState(false);
   const [markerRect, setMarkerRect] = useState<DOMRect | null>(null);
