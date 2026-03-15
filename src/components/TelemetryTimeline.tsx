@@ -70,12 +70,12 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
 
   return (
     <div 
-      className="fixed pointer-events-none z-0"
+      className="fixed pointer-events-none z-[9999]"
       style={{ left, top }}
     >
       <div 
         ref={contentRef}
-        className="bg-gray-900/50 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
+        className="bg-gray-900/30 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
       >
         <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
         {(event.city || event.street) && (
@@ -715,9 +715,13 @@ export function TelemetryTimeline({
         {eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
           <div
             ref={eventMarkerRef}
-            className="absolute top-0 bottom-0 z-20 group"
+            className="absolute top-0 bottom-0 z-[100] group"
             style={{ left: `${timeToPosition(eventAbsoluteTime)}%` }}
             onMouseEnter={() => {
+              // Get marker position for fixed positioning
+              if (eventMarkerRef.current) {
+                setMarkerRect(eventMarkerRef.current.getBoundingClientRect());
+              }
               setShowEventTooltip(true);
             }}
             onMouseLeave={() => setShowEventTooltip(false)}
@@ -728,22 +732,12 @@ export function TelemetryTimeline({
             <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 pointer-events-auto cursor-default">
               <div className="w-3 h-3 bg-orange-500 rotate-45 transform mx-auto border border-orange-300 shadow-lg shadow-orange-500/30" />
             </div>
-            {/* Tooltip - absolute positioned within marker, so it respects z-20 */}
+            {/* Tooltip */}
             {showEventTooltip && event && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none z-30">
-                <div className="bg-gray-900/95 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap">
-                  <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
-                  {(event.city || event.street) && (
-                    <div className="text-gray-400 mt-0.5">
-                      {[event.street, event.city].filter(Boolean).join(', ')}
-                    </div>
-                  )}
-                  <div className="text-gray-500 mt-0.5 text-[10px]">
-                    {event.timestamp.toLocaleTimeString()}
-                  </div>
-                </div>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900/95 border-r border-b border-orange-500/40 rotate-45 -mt-1" />
-              </div>
+              <EventTooltip 
+                event={event} 
+                markerRect={markerRect}
+              />
             )}
           </div>
         )}
