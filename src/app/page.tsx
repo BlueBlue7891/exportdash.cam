@@ -210,20 +210,34 @@ export default function Home() {
         
         setSequences(newSequences);
         
-        // Set selected sequence: try to find the replacement sequence in newSequences
-        // If not found (shouldn't happen), select the first sequence
-        const replacementInNew = newSequences.find(seq => 
-          detectedSequences.some(ds => ds.id === seq.id)
-        );
-        if (replacementInNew) {
-          setSelectedSequence(replacementInNew);
-        } else if (newSequences.length > 0) {
-          setSelectedSequence(newSequences[0]);
+        // Keep current selection if it's not the replaced sequence
+        // Otherwise update to the replacement sequence
+        const currentSelectedId = selectedSequence?.id;
+        if (currentSelectedId && currentSelectedId !== sequenceIdToReplace) {
+          // Current selection is not the replaced one, keep it (if still exists)
+          const stillExists = newSequences.some(seq => seq.id === currentSelectedId);
+          if (!stillExists && newSequences.length > 0) {
+            // Current selection was removed (contained by another), select first
+            setSelectedSequence(newSequences[0]);
+          }
+          // Otherwise keep current selection (already in state)
+        } else if (currentSelectedId === sequenceIdToReplace) {
+          // Current selection was replaced, update to replacement
+          const replacementInNew = newSequences.find(seq => 
+            detectedSequences.some(ds => ds.id === seq.id)
+          );
+          if (replacementInNew) {
+            setSelectedSequence(replacementInNew);
+          } else if (newSequences.length > 0) {
+            setSelectedSequence(newSequences[0]);
+          }
         }
+        // If no current selection, don't auto-select (keep as is)
       } else {
         // No sequence to replace, set all detected sequences
         setSequences(detectedSequences);
-        if (detectedSequences.length > 0) {
+        // Only auto-select if nothing is currently selected
+        if (!selectedSequence && detectedSequences.length > 0) {
           setSelectedSequence(detectedSequences[0]);
         }
       }
@@ -232,7 +246,7 @@ export default function Home() {
     } finally {
       setIsProcessing(false);
     }
-  }, [folderStructure, sequences]);
+  }, [folderStructure, sequences, selectedSequence]);
 
   const handleClear = useCallback(() => {
     setSequences([]);
