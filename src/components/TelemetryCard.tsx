@@ -113,7 +113,7 @@ export function TelemetryCard({
           </div>
           <div className="telemetry-circle telemetry-accelerator">
             <div className="accelerator-fill" style={{ height: `${acceleratorPosition}%` }} />
-            <Image src="/right-pedal.png" alt="Accelerator" width={16} height={16} className="pedal-icon overlay" />
+            <Image src="/right-pedal.png" alt="Accelerator" width={8} height={8} className="pedal-icon overlay" />
           </div>
         </div>
       </div>

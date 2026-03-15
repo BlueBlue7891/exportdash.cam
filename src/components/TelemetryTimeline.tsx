@@ -237,7 +237,7 @@ export function TelemetryTimeline({
         segments: buildIntensitySegments((msg) => {
           const val = msg.sei.accelerator_pedal_position || 0;
           return val > 1 ? val / 100 : val; // Normalize to 0-1
-        }, 0.02), 
+        }, 0.05), 
       },
       {
         id: 'brake',
