@@ -8,9 +8,7 @@
       "Bash(curl -s http://localhost:3000 -o /dev/null -w \"%{http_code}\")",
       "Bash(npx tauri:*)",
       "Bash(rustc --version)",
-      "Bash(taskkill /F /IM node.exe)",
-      "Bash(git -C \"d:/Users/AnsenPA/Development/exportdash.cam\" show 945d5d3 --stat)",
-      "Bash(git show:*)"
+      "Bash(taskkill /F /IM node.exe)"
     ]
   }
 }
