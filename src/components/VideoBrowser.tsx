@@ -15,7 +15,7 @@ interface VideoBrowserProps {
   folderStructure: {
     dates: DateEntry[];
   };
-  onSelectTimeSlot: (timeSlot: TimeSlot | TimeSlot[]) => void;
+  onSelectTimeSlot: (timeSlot: TimeSlot | TimeSlot[], sequenceIdToReplace?: string) => void;
   onClose: () => void;
   // External selection state (persisted across opens)
   // Selection persists after import to remind user what's been imported
@@ -25,6 +25,7 @@ interface VideoBrowserProps {
   onClear: () => void;
   // Current selected sequence to derive selection from when switching sequences
   currentSequence?: {
+    id: string;
     moments: { date: string; time: string }[];
   } | null;
 }
@@ -47,7 +48,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
   const [draftSelection, setDraftSelection] = useState<Set<string>>(new Set(selectedTimeSlotIds));
   const [isDragging, setIsDragging] = useState(false);
   
-  // Initialize draft selection when component mounts
+  // Initialize draft selection and date when component mounts
   // Priority: 1) current sequence moments (when switching sequences), 2) persisted selection
   useEffect(() => {
     if (currentSequence?.moments && currentSequence.moments.length > 0) {
@@ -60,10 +61,23 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
         sequenceTimeSlotIds.add(id);
       }
       setDraftSelection(sequenceTimeSlotIds);
+      // Sync external state so the button shows "Imported" status
+      onSelectionChange(sequenceTimeSlotIds);
+      
+      // Also set the calendar to the first date of the current sequence
+      const firstMoment = currentSequence.moments[0];
+      if (firstMoment) {
+        const [year, month, day] = firstMoment.date.split('-').map(Number);
+        setCurrentMonth({ year, month: month - 1 });
+        setSelectedDate(firstMoment.date);
+      }
     } else {
       // Fall back to persisted selection
       setDraftSelection(new Set(selectedTimeSlotIds));
     }
+    
+    // Reset scroll flag when component mounts
+    hasScrolledOnOpen.current = false;
   }, []); // Only run on mount
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const dragStartRef = useRef<number | null>(null);
@@ -198,21 +212,22 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
   // Auto-scroll to first selected item only once when panel opens
   // This should only happen on initial open, not when user makes selections
   useEffect(() => {
-    if (!hasScrolledOnOpen.current && selectedDateEntry && draftSelectionRef.current.size > 0) {
-      hasScrolledOnOpen.current = true;
-      // Find first selected time slot on current date
-      const firstSelectedSlot = timeSlotsWithIndex.find(slot => draftSelectionRef.current.has(slot.id));
-      if (firstSelectedSlot) {
-        const element = timeSlotRefs.current.get(firstSelectedSlot.id);
-        if (element && listContainerRef.current) {
-          // Use setTimeout to ensure DOM is ready
-          setTimeout(() => {
+    if (!hasScrolledOnOpen.current && selectedDateEntry && draftSelectionRef.current.size > 0 && timeSlotsWithIndex.length > 0) {
+      // Use a longer timeout to ensure DOM is fully rendered
+      const timeoutId = setTimeout(() => {
+        // Find first selected time slot on current date
+        const firstSelectedSlot = timeSlotsWithIndex.find(slot => draftSelectionRef.current.has(slot.id));
+        if (firstSelectedSlot) {
+          const element = timeSlotRefs.current.get(firstSelectedSlot.id);
+          if (element && listContainerRef.current) {
+            hasScrolledOnOpen.current = true;
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 100);
+          }
         }
-      }
+      }, 150);
+      return () => clearTimeout(timeoutId);
     }
-  }, [selectedDateEntry]); // Only depend on selectedDateEntry, not draftSelection
+  }, [selectedDateEntry, timeSlotsWithIndex]);
   
   // Parse dates with available videos and their source types
   const dateSources = useMemo(() => {
@@ -524,10 +539,10 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
     if (selectedSlots.length >= 1) {
       // Sync draft to external state (marks these as imported)
       onSelectionChange(new Set(draftSelection));
-      // Pass array of selected slots for batch import
-      onSelectTimeSlot(selectedSlots);
+      // Pass array of selected slots for batch import, with current sequence ID to replace
+      onSelectTimeSlot(selectedSlots, currentSequence?.id);
     }
-  }, [draftSelection, allTimeSlotsMap, onSelectTimeSlot, onSelectionChange]);
+  }, [draftSelection, allTimeSlotsMap, onSelectTimeSlot, onSelectionChange, currentSequence?.id]);
 
   // Calculate total recordings after filter
   const totalRecordings = useMemo(() => {

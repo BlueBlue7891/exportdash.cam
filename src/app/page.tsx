@@ -113,7 +113,7 @@ export default function Home() {
     }
   }, []);
   
-  const handleSelectTimeSlot = useCallback(async (timeSlot: TimeSlot | TimeSlot[]) => {
+  const handleSelectTimeSlot = useCallback(async (timeSlot: TimeSlot | TimeSlot[], sequenceIdToReplace?: string) => {
     // Handle both single slot and array of slots
     const timeSlots = Array.isArray(timeSlot) ? timeSlot : [timeSlot];
     
@@ -168,16 +168,71 @@ export default function Home() {
       const { moments, events } = await processFilesToMoments(allFiles, setProcessingProgress);
       const detectedSequences = detectSequences(moments, events);
       
-      setSequences(detectedSequences);
-      if (detectedSequences.length > 0) {
-        setSelectedSequence(detectedSequences[0]);
+      if (sequenceIdToReplace && sequences.length > 0) {
+        // Replace only the specified sequence, keep others
+        // Note: detectedSequences may contain multiple sequences if selected videos are not continuous
+        
+        // Build new sequences: keep non-replaced sequences + all newly detected sequences
+        const keptSequences = sequences.filter(seq => 
+          seq.id !== sequenceIdToReplace
+        );
+        
+        // Combine kept sequences with all detected sequences
+        let newSequences: VideoSequence[] = [...keptSequences, ...detectedSequences];
+        
+        // Remove duplicates by ID
+        const seenIds = new Set<string>();
+        newSequences = newSequences.filter(seq => {
+          if (seenIds.has(seq.id)) return false;
+          seenIds.add(seq.id);
+          return true;
+        });
+        
+        // Check containment and remove contained sequences iteratively until stable
+        // This handles cases like: A contains B, B contains C, etc.
+        let changed = true;
+        while (changed) {
+          changed = false;
+          const filtered: VideoSequence[] = [];
+          for (const seq of newSequences) {
+            // Check if this sequence is contained by any other sequence in the list
+            const isContained = newSequences.some(other => 
+              other.id !== seq.id && sequenceContains(other, seq)
+            );
+            if (!isContained) {
+              filtered.push(seq);
+            } else {
+              changed = true;
+            }
+          }
+          newSequences = filtered;
+        }
+        
+        setSequences(newSequences);
+        
+        // Set selected sequence: try to find the replacement sequence in newSequences
+        // If not found (shouldn't happen), select the first sequence
+        const replacementInNew = newSequences.find(seq => 
+          detectedSequences.some(ds => ds.id === seq.id)
+        );
+        if (replacementInNew) {
+          setSelectedSequence(replacementInNew);
+        } else if (newSequences.length > 0) {
+          setSelectedSequence(newSequences[0]);
+        }
+      } else {
+        // No sequence to replace, set all detected sequences
+        setSequences(detectedSequences);
+        if (detectedSequences.length > 0) {
+          setSelectedSequence(detectedSequences[0]);
+        }
       }
     } catch (error) {
       console.error('Error processing videos:', error);
     } finally {
       setIsProcessing(false);
     }
-  }, [folderStructure]);
+  }, [folderStructure, sequences]);
 
   const handleClear = useCallback(() => {
     setSequences([]);
@@ -185,6 +240,28 @@ export default function Home() {
     setFolderStructure(null);
     setSelectedTimeSlotIds(new Set());
 
+  }, []);
+
+  // Delete a specific sequence
+  const handleDeleteSequence = useCallback((sequenceId: string) => {
+    setSequences(prev => {
+      const newSequences = prev.filter(seq => seq.id !== sequenceId);
+      // Update selected sequence if the deleted one was selected
+      if (selectedSequence?.id === sequenceId) {
+        setSelectedSequence(newSequences.length > 0 ? newSequences[0] : null);
+      }
+      return newSequences;
+    });
+  }, [selectedSequence]);
+
+  // Check if sequence A contains all moments of sequence B
+  const sequenceContains = useCallback((container: VideoSequence, contained: VideoSequence): boolean => {
+    if (contained.moments.length === 0) return true;
+    if (container.moments.length < contained.moments.length) return false;
+    // Build a set of moment IDs from container (use moment.id for accuracy)
+    const containerMomentIds = new Set(container.moments.map(m => m.id));
+    // Check if all moments of contained are in container
+    return contained.moments.every(m => containerMomentIds.has(m.id));
   }, []);
 
   return (
@@ -410,6 +487,7 @@ export default function Home() {
             selectedSequence={selectedSequence}
             onSelectSequence={setSelectedSequence}
             onClear={handleClear}
+            onDeleteSequence={handleDeleteSequence}
             onAddFiles={handleFilesAdded}
             folderStructure={folderStructure}
             onOpenVideoBrowser={() => setShowVideoBrowser(true)}

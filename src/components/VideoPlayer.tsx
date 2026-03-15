@@ -49,6 +49,7 @@ interface VideoPlayerProps {
   selectedSequence: VideoSequence | null;
   onSelectSequence: (sequence: VideoSequence) => void;
   onClear: () => void;
+  onDeleteSequence?: (sequenceId: string) => void;
   onAddFiles: (files: File[]) => void;
   folderStructure?: { dates: { date: string; timeSlots: { time: string; files: Record<string, File> }[] }[] } | null;
   onOpenVideoBrowser?: () => void;
@@ -104,6 +105,7 @@ export function VideoPlayer({
   selectedSequence: sequence,
   onSelectSequence,
   onClear,
+  onDeleteSequence,
   onAddFiles,
   folderStructure,
   onOpenVideoBrowser,
@@ -1507,19 +1509,21 @@ export function VideoPlayer({
               {sequences.map((seq) => {
                 const isSelected = seq.id === sequence.id;
                 return (
-                  <button
+                  <div
                     key={seq.id}
-                    onClick={() => {
-                      onSelectSequence(seq);
-                      setShowSequenceMenu(false);
-                    }}
-                    className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+                    className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors group ${
                       isSelected
                         ? 'bg-blue-600/20 text-white'
                         : 'hover:bg-gray-800 text-gray-300'
                     }`}
                   >
-                    <div className="flex-1 min-w-0">
+                    <button
+                      onClick={() => {
+                        onSelectSequence(seq);
+                        setShowSequenceMenu(false);
+                      }}
+                      className="flex-1 min-w-0 text-left"
+                    >
                       {/* Date on top (larger) */}
                       <div className="text-sm font-medium text-white">
                         {seq.dateRange}
@@ -1538,9 +1542,33 @@ export function VideoPlayer({
                           </>
                         )}
                       </div>
+                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {isSelected && <IconCheck size={16} className="text-blue-400" />}
+                      {/* Delete button - visible on hover or when selected */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (sequences.length === 1) {
+                            // If only one sequence, Discard all
+                            onClear();
+                          } else {
+                            // Delete this specific sequence
+                            onDeleteSequence?.(seq.id);
+                          }
+                          setShowSequenceMenu(false);
+                        }}
+                        className={`p-1.5 rounded transition-all ${
+                          isSelected 
+                            ? 'text-red-400 hover:bg-red-600/20 opacity-100' 
+                            : 'text-gray-500 hover:text-red-400 hover:bg-red-600/20 opacity-0 group-hover:opacity-100'
+                        }`}
+                        title={sequences.length === 1 ? 'Discard all' : 'Delete this sequence'}
+                      >
+                        <IconTrash size={14} />
+                      </button>
                     </div>
-                    {isSelected && <IconCheck size={16} className="text-blue-400 flex-shrink-0" />}
-                  </button>
+                  </div>
                 );
               })}
             </div>
