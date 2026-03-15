@@ -762,9 +762,16 @@ export function TelemetryTimeline({
 
         {/* Secondary tick marks - dynamic interval based on clip count */}
         {(() => {
-          // Calculate secondary tick interval: 1 clip = 1s, more clips = 2s
+          // Calculate secondary tick interval: 1 clip = 1s, 2-4 clips = 2s, 5+ clips = 4s
           const clipCount = Math.max(1, clipBoundaries.length > 0 ? clipBoundaries.length - 1 : 1);
-          const secondaryInterval = clipCount <= 1 ? 1 : 2;
+          let secondaryInterval: number;
+          if (clipCount === 1) {
+            secondaryInterval = 1;
+          } else if (clipCount <= 4) {
+            secondaryInterval = 2;
+          } else {
+            secondaryInterval = 4;
+          }
           
           return Array.from({ length: Math.ceil((viewEnd - viewStart) / secondaryInterval) }, (_, i) => viewStart + i * secondaryInterval)
             .filter(time => time > viewStart && time < viewEnd && !timeMarkers.includes(time))
