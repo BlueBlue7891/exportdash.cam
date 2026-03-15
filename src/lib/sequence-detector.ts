@@ -31,7 +31,7 @@ const DEFAULT_VIDEO_DURATION = 60;
 const BATCH_SIZE = 50;
 
 /** Skip duration detection for faster processing (Tesla clips are always 60s) */
-const SKIP_DURATION_DETECTION = true;
+const SKIP_DURATION_DETECTION = false;
 
 /** Get video duration using HTMLVideoElement */
 async function getVideoDuration(file: File): Promise<number> {
