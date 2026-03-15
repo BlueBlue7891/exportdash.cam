@@ -237,7 +237,7 @@ export function TelemetryTimeline({
         segments: buildIntensitySegments((msg) => {
           const val = msg.sei.accelerator_pedal_position || 0;
           return val > 1 ? val / 100 : val; // Normalize to 0-1
-        }),
+        }, 0.02), 
       },
       {
         id: 'brake',
@@ -264,7 +264,7 @@ export function TelemetryTimeline({
         segments: buildIntensitySegments((msg) => {
           const angle = Math.abs(msg.sei.steering_wheel_angle || 0);
           return Math.min(1, angle / 180); // Normalize to 0-1 (180° = full)
-        }, 0.1),
+        }, 0.005),
       },
     ];
   }, [allSeiMessages, fps]);
@@ -817,7 +817,7 @@ export function TelemetryTimeline({
               const segEnd = Math.min(segment.endTime, duration); // Limit to actual video end, not viewEnd
               const left = timeToPosition(segStart);
               const width = ((segEnd - segStart) / viewDuration) * 100;
-              const opacity = segment.intensity !== undefined ? 0.4 + segment.intensity * 0.6 : 0.9;
+              const opacity = segment.intensity !== undefined ? 0.2 + segment.intensity * 0.8 : 0.9;
 
               const isLeftBlinker = track.id === 'left-blinker';
               const isRightBlinker = track.id === 'right-blinker';
