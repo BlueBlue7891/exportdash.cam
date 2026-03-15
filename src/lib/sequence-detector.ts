@@ -33,30 +33,127 @@ const BATCH_SIZE = 50;
 /** Skip duration detection for faster processing (Tesla clips are always 60s) */
 const SKIP_DURATION_DETECTION = false;
 
-/** Get video duration using HTMLVideoElement */
+/** Parse MP4 duration from file buffer by reading mvhd box */
+function parseMp4Duration(buffer: ArrayBuffer): number | null {
+  try {
+    const view = new DataView(buffer);
+    const length = buffer.byteLength;
+    
+    // Search for moov box
+    let pos = 0;
+    while (pos + 8 <= length) {
+      const size = view.getUint32(pos);
+      const type = String.fromCharCode(
+        view.getUint8(pos + 4),
+        view.getUint8(pos + 5),
+        view.getUint8(pos + 6),
+        view.getUint8(pos + 7)
+      );
+      
+      if (type === 'moov') {
+        // Found moov box, now search for mvhd inside it
+        const moovStart = pos + 8;
+        const moovEnd = pos + (size === 1 ? 16 : size);
+        let mvhdPos = moovStart;
+        
+        while (mvhdPos + 8 <= moovEnd && mvhdPos < length) {
+          const mvhdSize = view.getUint32(mvhdPos);
+          const mvhdType = String.fromCharCode(
+            view.getUint8(mvhdPos + 4),
+            view.getUint8(mvhdPos + 5),
+            view.getUint8(mvhdPos + 6),
+            view.getUint8(mvhdPos + 7)
+          );
+          
+          if (mvhdType === 'mvhd') {
+            // Found mvhd box, parse duration
+            // mvhd box format:
+            // version 0: 4 bytes (size) + 4 bytes (type) + 1 byte (version) + 3 bytes (flags) + 4 bytes (creation) + 4 bytes (modification) + 4 bytes (timescale) + 4 bytes (duration) = 24 bytes header
+            // version 1: 4 bytes (size) + 4 bytes (type) + 1 byte (version) + 3 bytes (flags) + 8 bytes (creation) + 8 bytes (modification) + 4 bytes (timescale) + 8 bytes (duration) = 32 bytes header
+            const version = view.getUint8(mvhdPos + 8);
+            const timescaleOffset = mvhdPos + 8 + (version === 1 ? 20 : 12);
+            const durationOffset = mvhdPos + 8 + (version === 1 ? 28 : 16);
+            
+            if (durationOffset + 8 <= length) {
+              const timescale = view.getUint32(timescaleOffset);
+              const duration = version === 1 
+                ? Number((BigInt(view.getUint32(durationOffset)) << 32n) | BigInt(view.getUint32(durationOffset + 4)))
+                : view.getUint32(durationOffset);
+              
+              if (timescale > 0 && duration > 0) {
+                const seconds = Math.round(duration / timescale);
+                console.log(`[Duration] Parsed from MP4: ${seconds}s (timescale=${timescale}, duration=${duration})`);
+                return seconds;
+              }
+            }
+            return null;
+          }
+          
+          // Move to next box
+          const boxSize = mvhdSize === 1 ? 16 : (mvhdSize === 0 ? moovEnd - mvhdPos : mvhdSize);
+          mvhdPos += boxSize;
+        }
+        return null;
+      }
+      
+      // Move to next box
+      const boxSize = size === 1 ? 16 : (size === 0 ? length - pos : size);
+      pos += boxSize;
+    }
+    return null;
+  } catch (e) {
+    console.warn('[Duration] Failed to parse MP4:', e);
+    return null;
+  }
+}
+
+/** Get video duration - uses MP4 parsing in Tauri, HTMLVideoElement in browser */
 async function getVideoDuration(file: File): Promise<number> {
+  const tauriPath = (file as any).tauriPath;
+  const tauriUrl = (file as any).tauriUrl;
+  
+  // In Tauri environment, read file head and parse MP4 duration
+  if (tauriPath) {
+    try {
+      const { readFile } = await import('@tauri-apps/plugin-fs');
+      // Read the entire file (for Tesla clips, this is typically manageable)
+      // We read the full file to ensure we get the complete moov box
+      const content = await readFile(tauriPath);
+      // Only use first 4MB for parsing (moov box is usually at the start or end)
+      const maxParseSize = Math.min(content.length, 4 * 1024 * 1024);
+      const buffer = content.buffer.slice(content.byteOffset, content.byteOffset + maxParseSize);
+      const duration = parseMp4Duration(buffer);
+      if (duration && duration > 0 && isFinite(duration)) {
+        return duration;
+      }
+      console.warn('[Duration] MP4 parse failed, falling back to default');
+    } catch (e) {
+      console.warn('[Duration] Error reading Tauri file:', e);
+    }
+    return DEFAULT_VIDEO_DURATION;
+  }
+  
+  // In browser environment, use HTMLVideoElement
   return new Promise((resolve) => {
-    // Use Tauri URL if available, otherwise create object URL
-    const tauriUrl = (file as any).tauriUrl;
-    const url = tauriUrl || URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
     const video = document.createElement('video');
     video.preload = 'metadata';
 
     // Set a timeout to avoid hanging on corrupted files
     const timeout = setTimeout(() => {
-      if (!tauriUrl) URL.revokeObjectURL(url);
+      URL.revokeObjectURL(url);
       resolve(DEFAULT_VIDEO_DURATION);
     }, 5000); // 5 second timeout
 
     video.onloadedmetadata = () => {
       clearTimeout(timeout);
-      if (!tauriUrl) URL.revokeObjectURL(url);
+      URL.revokeObjectURL(url);
       resolve(video.duration && isFinite(video.duration) ? video.duration : DEFAULT_VIDEO_DURATION);
     };
 
     video.onerror = () => {
       clearTimeout(timeout);
-      if (!tauriUrl) URL.revokeObjectURL(url);
+      URL.revokeObjectURL(url);
       resolve(DEFAULT_VIDEO_DURATION);
     };
 
