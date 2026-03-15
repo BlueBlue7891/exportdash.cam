@@ -6,7 +6,7 @@ import { DropZone } from '@/components/DropZone';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { VideoBrowser } from '@/components/VideoBrowser';
-import { VideoSequence, ProcessingProgress } from '@/types/video';
+import { VideoSequence, VideoMoment, TeslaEvent, ProcessingProgress } from '@/types/video';
 import { FolderStructure, parseFolderStructure, parseFolderStructureAsync, TimeSlot } from '@/types/folder';
 import { processFilesToMoments, detectSequences } from '@/lib/sequence-detector';
 
@@ -117,13 +117,33 @@ export default function Home() {
     // Handle both single slot and array of slots
     const timeSlots = Array.isArray(timeSlot) ? timeSlot : [timeSlot];
     
-    // Collect all files from all selected time slots
-    let allFiles: File[] = [];
+    // Build a set of already imported file paths for quick lookup
+    const importedFilePaths = new Set<string>();
+    for (const seq of sequences) {
+      for (const moment of seq.moments) {
+        for (const video of moment.videos) {
+          const path = (video.file as any).webkitRelativePath || (video.file as any).tauriPath || video.file.name;
+          importedFilePaths.add(path);
+        }
+      }
+    }
+    
+    // Collect files from selected time slots, skipping already imported ones
+    let newFiles: File[] = [];
     const processedDirs = new Set<string>();
+    let skippedCount = 0;
     
     for (const slot of timeSlots) {
       const files = Object.values(slot.files);
-      allFiles.push(...files);
+      
+      for (const file of files) {
+        const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || file.name;
+        if (importedFilePaths.has(filePath)) {
+          skippedCount++;
+        } else {
+          newFiles.push(file);
+        }
+      }
       
       // Get the directory path from the first video file to find event.json
       if (files.length > 0) {
@@ -145,28 +165,82 @@ export default function Home() {
           });
           
           if (eventJson) {
-            allFiles.push(eventJson);
+            // Only add event.json if any video from this directory is new
+            const hasNewVideoInDir = files.some(f => {
+              const fp = (f as any).webkitRelativePath || (f as any).tauriPath || f.name;
+              return !importedFilePaths.has(fp);
+            });
+            if (hasNewVideoInDir) {
+              newFiles.push(eventJson);
+            }
           }
         }
       }
     }
     
-    if (allFiles.length === 0) return;
+    // Collect existing moments from sequences that are not being replaced
+    // and whose files are still in the selection
+    const selectedTimeSlotIds = new Set(timeSlots.map(ts => {
+      // Build time slot ID from files
+      const firstFile = Object.values(ts.files)[0];
+      if (!firstFile) return '';
+      const match = firstFile.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+      if (!match) return '';
+      const [, year, month, day, hour, minute, second] = match;
+      return `${year}-${month}-${day}_${hour}-${minute}-${second}`;
+    }).filter(Boolean));
+    
+    // Collect moments to keep from existing sequences
+    let existingMomentsToKeep: VideoMoment[] = [];
+    if (sequenceIdToReplace) {
+      const sequenceToUpdate = sequences.find(seq => seq.id === sequenceIdToReplace);
+      if (sequenceToUpdate) {
+        for (const moment of sequenceToUpdate.moments) {
+          const momentId = `${moment.date}_${moment.time.replace(/:/g, '-')}`;
+          if (selectedTimeSlotIds.has(momentId)) {
+            // This moment is still selected, keep it
+            existingMomentsToKeep.push(moment);
+          }
+        }
+      }
+    }
+    
+    // If no new files and no existing moments to keep, nothing to do
+    if (newFiles.length === 0 && existingMomentsToKeep.length === 0) {
+      setShowVideoBrowser(false);
+      return;
+    }
     
     // Close browser before processing
     setShowVideoBrowser(false);
     // Mark selected slots as imported
     setIsProcessing(true);
+    
+    const totalFilesToProcess = newFiles.length + existingMomentsToKeep.length;
     setProcessingProgress({
       stage: 'scanning',
       current: 0,
-      total: allFiles.length,
-      message: 'Scanning files...',
+      total: totalFilesToProcess,
+      message: skippedCount > 0 
+        ? `Skipping ${skippedCount} already imported files...` 
+        : 'Scanning files...',
     });
 
     try {
-      const { moments, events } = await processFilesToMoments(allFiles, setProcessingProgress);
-      const detectedSequences = detectSequences(moments, events);
+      let allMoments: VideoMoment[] = [...existingMomentsToKeep];
+      let allEvents: TeslaEvent[] = [];
+      
+      // Process only new files
+      if (newFiles.length > 0) {
+        const { moments: newMoments, events: newEvents } = await processFilesToMoments(newFiles, setProcessingProgress);
+        allMoments = [...allMoments, ...newMoments];
+        allEvents = [...allEvents, ...newEvents];
+      }
+      
+      // Sort all moments by timestamp
+      allMoments.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      
+      const detectedSequences = detectSequences(allMoments, allEvents);
       
       if (sequenceIdToReplace && sequences.length > 0) {
         // Replace only the specified sequence, keep others
