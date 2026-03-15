@@ -42,29 +42,10 @@ function parseMp4Duration(buffer: ArrayBuffer): number | null {
     const view = new DataView(buffer);
     const length = buffer.byteLength;
     
-    console.log('[Duration] Parsing MP4, buffer size:', length);
-    
-    // Log first 32 bytes for debugging
-    let headerBytes = '';
-    for (let i = 0; i < Math.min(32, length); i++) {
-      headerBytes += view.getUint8(i).toString(16).padStart(2, '0') + ' ';
-    }
-    console.log('[Duration] First 32 bytes:', headerBytes);
-    
-    // Check if it's a valid MP4 (starts with ftyp)
-    const ftypType = String.fromCharCode(
-      view.getUint8(4),
-      view.getUint8(5),
-      view.getUint8(6),
-      view.getUint8(7)
-    );
-    console.log('[Duration] File type:', ftypType);
-    
     // Search for moov box
     let pos = 0;
-    let boxCount = 0;
-    while (pos + 8 <= length && boxCount < 50) {
-      const size = view.getUint32(pos);
+    while (pos + 8 <= length) {
+      let size = view.getUint32(pos);
       const type = String.fromCharCode(
         view.getUint8(pos + 4),
         view.getUint8(pos + 5),
@@ -72,37 +53,49 @@ function parseMp4Duration(buffer: ArrayBuffer): number | null {
         view.getUint8(pos + 7)
       );
       
-      console.log(`[Duration] Box at ${pos}: type=${type}, size=${size}`);
-      boxCount++;
+      // Extended size (64-bit)
+      let headerSize = 8;
+      if (size === 1) {
+        if (pos + 16 > length) break;
+        const high = view.getUint32(pos + 8);
+        const low = view.getUint32(pos + 12);
+        size = Number((BigInt(high) << 32n) | BigInt(low));
+        headerSize = 16;
+      } else if (size === 0) {
+        size = length - pos;
+      }
       
       if (type === 'moov') {
-        console.log('[Duration] Found moov box at', pos);
         // Found moov box, now search for mvhd inside it
-        const moovStart = pos + 8;
-        const moovEnd = Math.min(pos + (size === 1 ? 16 : size), length);
+        const moovStart = pos + headerSize;
+        const moovEnd = Math.min(moovStart + size - headerSize, length);
         let mvhdPos = moovStart;
         
-        let subBoxCount = 0;
-        while (mvhdPos + 8 <= moovEnd && mvhdPos < length && subBoxCount < 20) {
-          const mvhdSize = view.getUint32(mvhdPos);
-          const mvhdType = String.fromCharCode(
+        while (mvhdPos + 8 <= moovEnd && mvhdPos < length) {
+          let boxSize = view.getUint32(mvhdPos);
+          const boxType = String.fromCharCode(
             view.getUint8(mvhdPos + 4),
             view.getUint8(mvhdPos + 5),
             view.getUint8(mvhdPos + 6),
             view.getUint8(mvhdPos + 7)
           );
           
-          console.log(`[Duration]  Sub-box at ${mvhdPos}: type=${mvhdType}, size=${mvhdSize}`);
-          subBoxCount++;
+          let boxHeaderSize = 8;
+          if (boxSize === 1) {
+            if (mvhdPos + 16 > length) break;
+            const high = view.getUint32(mvhdPos + 8);
+            const low = view.getUint32(mvhdPos + 12);
+            boxSize = Number((BigInt(high) << 32n) | BigInt(low));
+            boxHeaderSize = 16;
+          } else if (boxSize === 0) {
+            boxSize = moovEnd - mvhdPos;
+          }
           
-          if (mvhdType === 'mvhd') {
-            console.log('[Duration] Found mvhd box at', mvhdPos);
+          if (boxType === 'mvhd') {
             // Found mvhd box, parse duration
-            const version = view.getUint8(mvhdPos + 8);
-            const timescaleOffset = mvhdPos + 8 + (version === 1 ? 20 : 12);
-            const durationOffset = mvhdPos + 8 + (version === 1 ? 28 : 16);
-            
-            console.log(`[Duration] mvhd version=${version}, timescaleOffset=${timescaleOffset}, durationOffset=${durationOffset}, bufferLength=${length}`);
+            const version = view.getUint8(mvhdPos + boxHeaderSize);
+            const timescaleOffset = mvhdPos + boxHeaderSize + (version === 1 ? 20 : 12);
+            const durationOffset = mvhdPos + boxHeaderSize + (version === 1 ? 28 : 16);
             
             if (durationOffset + 8 <= length) {
               const timescale = view.getUint32(timescaleOffset);
@@ -110,19 +103,14 @@ function parseMp4Duration(buffer: ArrayBuffer): number | null {
                 ? Number((BigInt(view.getUint32(durationOffset)) << 32n) | BigInt(view.getUint32(durationOffset + 4)))
                 : view.getUint32(durationOffset);
               
-              console.log(`[Duration] timescale=${timescale}, duration=${duration}`);
-              
               if (timescale > 0 && duration > 0) {
-                const seconds = Math.round(duration / timescale);
-                console.log(`[Duration] Parsed from MP4: ${seconds}s`);
-                return seconds;
+                return Math.round(duration / timescale);
               }
             }
             return null;
           }
           
           // Move to next box
-          const boxSize = mvhdSize === 1 ? 16 : (mvhdSize === 0 ? moovEnd - mvhdPos : mvhdSize);
           if (boxSize === 0 || boxSize > moovEnd - mvhdPos) break;
           mvhdPos += boxSize;
         }
@@ -130,70 +118,12 @@ function parseMp4Duration(buffer: ArrayBuffer): number | null {
       }
       
       // Move to next box
-      const boxSize = size === 1 ? 16 : (size === 0 ? length - pos : size);
-      if (boxSize === 0 || boxSize > length - pos) break;
-      pos += boxSize;
+      if (size === 0 || size > length - pos) break;
+      pos += size;
     }
-    console.warn('[Duration] No moov box found in first', length, 'bytes');
     return null;
   } catch (e) {
     console.warn('[Duration] Failed to parse MP4:', e);
-    return null;
-  }
-}
-
-/** Get file size from Tauri path */
-async function getTauriFileSize(tauriPath: string): Promise<number | null> {
-  try {
-    const { stat } = await import('@tauri-apps/plugin-fs');
-    const fileStat = await stat(tauriPath);
-    return fileStat.size;
-  } catch (e) {
-    console.warn('[Duration] Error getting file size:', e);
-    return null;
-  }
-}
-
-/** Read partial file data using FileHandle for large files */
-async function readTauriFilePartial(tauriPath: string, offset: number, length: number): Promise<Uint8Array | null> {
-  try {
-    const { open, SeekMode } = await import('@tauri-apps/plugin-fs');
-    const file = await open(tauriPath, { read: true });
-    
-    try {
-      // Seek to offset from start
-      await file.seek(offset, SeekMode.Start);
-      
-      // Read data using file.read method
-      const buffer = new Uint8Array(length);
-      const bytesRead = await file.read(buffer);
-      
-      // Handle null or undefined bytesRead
-      if (bytesRead === null || bytesRead === undefined) {
-        return null;
-      }
-      
-      // If we read less than requested, truncate
-      if (bytesRead < length) {
-        return buffer.slice(0, bytesRead);
-      }
-      return buffer;
-    } finally {
-      await file.close();
-    }
-  } catch (e) {
-    console.warn('[Duration] Error reading partial file:', e);
-    return null;
-  }
-}
-
-/** Read entire file (fallback for small files) */
-async function readTauriFileData(tauriPath: string): Promise<Uint8Array | null> {
-  try {
-    const { readFile } = await import('@tauri-apps/plugin-fs');
-    return await readFile(tauriPath);
-  } catch (e) {
-    console.warn('[Duration] Error reading file:', e);
     return null;
   }
 }
@@ -203,157 +133,27 @@ async function readTauriFileDuration(tauriPath: string, fileName: string): Promi
   try {
     console.log('[Duration] Reading Tauri file:', fileName);
     
-    // Get file size first
-    const fileSize = await getTauriFileSize(tauriPath);
-    if (!fileSize) {
-      console.warn('[Duration] Could not get file size for', fileName);
+    // Read entire file using readFile
+    const { readFile } = await import('@tauri-apps/plugin-fs');
+    const content = await readFile(tauriPath);
+    
+    if (!content || content.length === 0) {
+      console.warn('[Duration] Empty file:', fileName);
       return null;
     }
-    console.log('[Duration] File size:', fileSize);
     
-    // For files > 1MB, try partial reads (end first, then start)
-    // For smaller files, read whole file
+    console.log('[Duration] Read', content.length, 'bytes from', fileName);
     
-    if (fileSize > 1024 * 1024) {
-      // Large file: try partial reads
-      
-      // Strategy 1: Try end first (most common for dashcam files with moov at end)
-      const endOffset = Math.max(0, fileSize - 1024 * 1024);
-      const endData = await readTauriFilePartial(tauriPath, endOffset, 1024 * 1024);
-      
-      if (endData) {
-        // Parse moov from end data with file offset info
-        const duration = parseMp4DurationFromEnd(endData, fileSize, endOffset);
-        if (duration !== null) {
-          console.log('[Duration] Found moov at end, duration:', duration);
-          return duration;
-        }
-      }
-      
-      // Strategy 2: Try start
-      console.log('[Duration] Moov not at end, trying start...');
-      const startData = await readTauriFilePartial(tauriPath, 0, 1024 * 1024);
-      
-      if (startData) {
-        const duration = parseMp4Duration(startData.buffer.slice(startData.byteOffset, startData.byteOffset + startData.byteLength) as ArrayBuffer);
-        if (duration !== null) {
-          console.log('[Duration] Found moov at start, duration:', duration);
-          return duration;
-        }
-      }
-      
-      // Strategy 3: Read whole file (if still not found and file < 8MB)
-      if (fileSize < 8 * 1024 * 1024) {
-        console.log('[Duration] Trying full file read...');
-        const fullData = await readTauriFileData(tauriPath);
-        if (fullData) {
-          const duration = parseMp4Duration(fullData.buffer.slice(fullData.byteOffset, fullData.byteOffset + fullData.byteLength) as ArrayBuffer);
-          if (duration !== null) {
-            console.log('[Duration] Found moov in full file, duration:', duration);
-            return duration;
-          }
-        }
-      }
-    } else {
-      // Small file: read whole file
-      const content = await readTauriFileData(tauriPath);
-      if (!content) return null;
-      
-      const duration = parseMp4Duration(content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer);
-      if (duration !== null) {
-        console.log('[Duration] Found moov in small file, duration:', duration);
-        return duration;
-      }
-    }
+    // Parse entire file
+    const buffer = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
+    const duration = parseMp4Duration(buffer);
     
-    console.warn('[Duration] Could not find moov box in', fileName);
-    return null;
+    console.log('[Duration] Parsed duration for', fileName, ':', duration);
+    return duration;
   } catch (e) {
     console.warn('[Duration] Error reading Tauri file:', fileName, e);
     return null;
   }
-}
-
-/** Parse MP4 duration from end-of-file data (handles partial reads)
- * When moov is at file end, we read last 1MB. The moov box might start
- * anywhere in this buffer, and its size field is relative to file start.
- * We need to search backwards for moov box signature.
- */
-function parseMp4DurationFromEnd(data: Uint8Array, fileSize: number, readOffset: number): number | null {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const length = data.byteLength;
-  
-  console.log('[Duration] Parsing from end data, buffer size:', length, 'fileSize:', fileSize, 'readOffset:', readOffset);
-  
-  // Search backwards for 'moov' signature (0x6D 0x6F 0x6F 0x76)
-  // Start from end and work backwards
-  for (let pos = length - 4; pos >= 4; pos--) {
-    // Check for 'moov' at position pos (as box type)
-    const type = String.fromCharCode(
-      view.getUint8(pos),
-      view.getUint8(pos + 1),
-      view.getUint8(pos + 2),
-      view.getUint8(pos + 3)
-    );
-    
-    if (type === 'moov') {
-      // Found moov signature, get size from 4 bytes before
-      const size = view.getUint32(pos - 4);
-      console.log('[Duration] Found moov at buffer pos', pos, 'size:', size);
-      
-      // Validate size is reasonable (moov box should be < 10MB)
-      if (size > 0 && size < 10 * 1024 * 1024) {
-        // Now parse mvhd inside this moov box
-        // moov box starts at pos - 4, content starts at pos + 4
-        const moovContentStart = pos + 4;
-        const moovContentEnd = Math.min((pos - 4) + size - readOffset, length);
-        
-        // Search for mvhd inside moov content
-        let mvhdPos = moovContentStart;
-        while (mvhdPos + 8 <= moovContentEnd) {
-          const boxSize = view.getUint32(mvhdPos);
-          const boxType = String.fromCharCode(
-            view.getUint8(mvhdPos + 4),
-            view.getUint8(mvhdPos + 5),
-            view.getUint8(mvhdPos + 6),
-            view.getUint8(mvhdPos + 7)
-          );
-          
-          if (boxType === 'mvhd') {
-            console.log('[Duration] Found mvhd at', mvhdPos, 'size:', boxSize);
-            // Parse mvhd
-            const version = view.getUint8(mvhdPos + 8);
-            const timescaleOffset = mvhdPos + 8 + (version === 1 ? 20 : 12);
-            const durationOffset = mvhdPos + 8 + (version === 1 ? 28 : 16);
-            
-            if (durationOffset + 8 <= length) {
-              const timescale = view.getUint32(timescaleOffset);
-              const duration = version === 1 
-                ? Number((BigInt(view.getUint32(durationOffset)) << 32n) | BigInt(view.getUint32(durationOffset + 4)))
-                : view.getUint32(durationOffset);
-              
-              console.log('[Duration] mvhd version:', version, 'timescale:', timescale, 'duration:', duration);
-              
-              if (timescale > 0 && duration > 0) {
-                const seconds = Math.round(duration / timescale);
-                console.log('[Duration] Parsed from end data:', seconds, 'seconds');
-                return seconds;
-              }
-            }
-            return null;
-          }
-          
-          // Move to next box within moov
-          const nextPos = mvhdPos + (boxSize > 0 ? boxSize : 8);
-          if (nextPos <= mvhdPos) break; // Prevent infinite loop
-          mvhdPos = nextPos;
-        }
-      }
-    }
-  }
-  
-  console.log('[Duration] No moov found in end data');
-  return null;
 }
 
 /** Get video duration - optimized for both Tauri and browser */
