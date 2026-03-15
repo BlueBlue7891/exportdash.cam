@@ -424,8 +424,8 @@ export default function Home() {
             onClose={() => setShowVideoBrowser(false)}
             selectedTimeSlotIds={selectedTimeSlotIds}
             onSelectionChange={setSelectedTimeSlotIds}
-
             onClear={handleClear}
+            currentSequence={selectedSequence}
           />
         )}
       </main>

@@ -23,6 +23,10 @@ interface VideoBrowserProps {
   onSelectionChange: (ids: Set<string>) => void;
   // Clear all videos from player
   onClear: () => void;
+  // Current selected sequence to derive selection from when switching sequences
+  currentSequence?: {
+    moments: { date: string; time: string }[];
+  } | null;
 }
 
 const ALL_SOURCES: VideoSource[] = ['recent', 'saved', 'sentry', 'encrypted', 'photobooth', 'unknown'];
@@ -35,7 +39,7 @@ type MonthState = { year: number; month: number };
 // Complete badge color - distinct from Saved (green)
 const COMPLETE_BADGE_COLOR = 'bg-teal-600/20 text-teal-400';
 
-export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange, onClear }: VideoBrowserProps) {
+export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange, onClear, currentSequence }: VideoBrowserProps) {
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
   // Draft selection state - independent from imported state
@@ -43,11 +47,24 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
   const [draftSelection, setDraftSelection] = useState<Set<string>>(new Set(selectedTimeSlotIds));
   const [isDragging, setIsDragging] = useState(false);
   
-  // Sync draft with external state when component opens/mounts or external state changes
-  // This ensures that when reopening the browser, it shows the previously imported selections
+  // Initialize draft selection when component mounts
+  // Priority: 1) current sequence moments (when switching sequences), 2) persisted selection
   useEffect(() => {
-    setDraftSelection(new Set(selectedTimeSlotIds));
-  }, [selectedTimeSlotIds]);
+    if (currentSequence?.moments && currentSequence.moments.length > 0) {
+      // Build set of time slot IDs from current sequence moments
+      const sequenceTimeSlotIds = new Set<string>();
+      for (const moment of currentSequence.moments) {
+        // Convert moment.time from HH:MM:SS (VideoMoment format) to HH-MM-SS (TimeSlot format)
+        const timeWithHyphens = moment.time.replace(/:/g, '-');
+        const id = `${moment.date}_${timeWithHyphens}`;
+        sequenceTimeSlotIds.add(id);
+      }
+      setDraftSelection(sequenceTimeSlotIds);
+    } else {
+      // Fall back to persisted selection
+      setDraftSelection(new Set(selectedTimeSlotIds));
+    }
+  }, []); // Only run on mount
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const dragStartRef = useRef<number | null>(null);
   const timeSlotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -168,6 +185,35 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
     });
   }, [selectedDateEntry]);
 
+  // Refs for scrolling
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  const hasScrolledOnOpen = useRef(false);
+  const draftSelectionRef = useRef(draftSelection);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    draftSelectionRef.current = draftSelection;
+  }, [draftSelection]);
+  
+  // Auto-scroll to first selected item only once when panel opens
+  // This should only happen on initial open, not when user makes selections
+  useEffect(() => {
+    if (!hasScrolledOnOpen.current && selectedDateEntry && draftSelectionRef.current.size > 0) {
+      hasScrolledOnOpen.current = true;
+      // Find first selected time slot on current date
+      const firstSelectedSlot = timeSlotsWithIndex.find(slot => draftSelectionRef.current.has(slot.id));
+      if (firstSelectedSlot) {
+        const element = timeSlotRefs.current.get(firstSelectedSlot.id);
+        if (element && listContainerRef.current) {
+          // Use setTimeout to ensure DOM is ready
+          setTimeout(() => {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 100);
+        }
+      }
+    }
+  }, [selectedDateEntry]); // Only depend on selectedDateEntry, not draftSelection
+  
   // Parse dates with available videos and their source types
   const dateSources = useMemo(() => {
     const map = new Map<string, Set<VideoSource>>();
@@ -735,7 +781,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
           </div>
 
           {/* Time slots list */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div ref={listContainerRef} className="flex-1 overflow-y-auto p-4">
             {selectedDateEntry ? (
               <div className="space-y-2 select-none">
                 {timeSlotsWithIndex.map((timeSlot, idx) => {
@@ -874,17 +920,28 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   Discard
                 </button>
                 <button
-                  onClick={handleImport}
-                  disabled={selectedCount === 0 || isSelectionUnchanged}
+                  onClick={() => {
+                    if (isSelectionUnchanged && hasImportedSelections) {
+                      // No changes made, just close the panel
+                      onClose();
+                    } else {
+                      handleImport();
+                    }
+                  }}
+                  disabled={selectedCount === 0}
                   className={`px-6 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
                     isSelectionUnchanged && hasImportedSelections
-                      ? 'bg-green-600 cursor-default'
-                      : 'bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : hasImportedSelections
+                        ? 'bg-blue-600 hover:bg-blue-700'
+                        : 'bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
                   }`}
                 >
                   {isSelectionUnchanged && hasImportedSelections
                     ? 'Imported' 
-                    : `Import ${selectedCount > 1 ? `(${selectedCount})` : ''}`}
+                    : hasImportedSelections
+                      ? `Update ${selectedCount > 1 ? `(${selectedCount})` : ''}`
+                      : `Import ${selectedCount > 1 ? `(${selectedCount})` : ''}`}
                 </button>
               </div>
             </div>
