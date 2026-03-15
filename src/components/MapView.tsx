@@ -219,14 +219,14 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
 
       {/* Coordinates overlay */}
       {isMapReady && hasValidCoords && (
-        <div className="absolute bottom-1 left-1 bg-black/60 rounded px-1.5 py-0.5 text-[9px] font-mono z-[1000] flex flex-col gap-0.5 max-w-[240px]">
+        <div className="absolute bottom-1 left-1 right-1 bg-black/60 rounded px-1.5 py-0.5 text-[9px] font-mono z-[1000] flex flex-col gap-0.5">
           {!hasNativeVideoGps ? (
             // 使用 event.json 回退（视频无原生 GPS）
             <>
               <div className="text-yellow-400">
                 Estimated: {lat?.toFixed(5)}, {lng?.toFixed(5)}
               </div>
-              <div className="text-[8px] text-white/70">
+              <div className="text-[8px] text-white/70 truncate">
                 From event.json ({eventReason || 'Event Trigger'})
               </div>
               {(city || street) && (
