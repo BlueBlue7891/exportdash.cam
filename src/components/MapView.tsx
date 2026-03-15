@@ -177,7 +177,7 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
               : 'text-gray-400 hover:text-white hover:bg-gray-700'
           }`}
         >
-          高德
+          AMap
         </button>
         <button
           onClick={() => setMapProvider('osm')}
@@ -211,8 +211,8 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <p>无 GPS 数据</p>
-            <p className="text-xs text-gray-600 mt-1">视频无 GPS 或 event.json 时间戳不匹配</p>
+            <p>No GPS Data</p>
+            <p className="text-xs text-gray-600 mt-1">No GPS data or event.json timestamp mismatch</p>
           </div>
         </div>
       )}
@@ -224,10 +224,10 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
             // 使用 event.json 回退（视频无原生 GPS）
             <>
               <div className="text-yellow-400">
-                估计位置: {lat?.toFixed(5)}, {lng?.toFixed(5)}
+                Estimated: {lat?.toFixed(5)}, {lng?.toFixed(5)}
               </div>
               <div className="text-[8px] text-white/70">
-                来自 event.json ({eventReason || '事件触发时刻'})
+                From event.json ({eventReason || 'Event Trigger'})
               </div>
               {(city || street) && (
                 <div className="text-[8px] text-white/60 truncate">
@@ -239,11 +239,11 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
             // 视频包含原生 GPS 数据 + 高德地图
             <>
               <div className="text-green-400">
-                高德: {lat?.toFixed(5)}, {lng?.toFixed(5)} 
+                AMap: {lat?.toFixed(5)}, {lng?.toFixed(5)} 
                 {headingDeg > 0 && <span className="text-green-600 ml-1">{Math.round(headingDeg)}°</span>}
               </div>
               <div className="text-[8px] text-white/70">
-                GPS: {rawLat?.toFixed(5)}, {rawLng?.toFixed(5)} (偏移: {offset.toFixed(0)}m)
+                GPS: {rawLat?.toFixed(5)}, {rawLng?.toFixed(5)} (Offset: {offset.toFixed(0)}m)
               </div>
             </>
           ) : (

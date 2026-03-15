@@ -124,7 +124,7 @@ export function VideoPlayer({
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
   const [localTime, setLocalTime] = useState(0);  // Time within current clip
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speedUnit, setSpeedUnit] = useState<'mph' | 'kmh'>('mph');
+  const [speedUnit, setSpeedUnit] = useState<'mph' | 'kmh'>('kmh');
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showMap, setShowMap] = useState(true);
   const [showTelemetry, setShowTelemetry] = useState(true);
@@ -1417,7 +1417,7 @@ export function VideoPlayer({
                 onClick={() => setSpeedUnit(prev => prev === 'mph' ? 'kmh' : 'mph')}
                 className="px-1.5 h-[28px] flex items-center rounded transition-all bg-gray-700 text-gray-300 hover:bg-gray-600 text-[10px] font-bold leading-none"
               >
-                {speedUnit === 'mph' ? 'MPH' : 'KMH'}
+                {speedUnit === 'mph' ? 'mph' : 'km/h'}
               </button>
             </Tooltip>
 

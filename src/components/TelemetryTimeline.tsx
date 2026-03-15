@@ -86,7 +86,7 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
           </div>
         )}
         <div className="text-gray-500 mt-0.5 text-[10px]">
-          {event.timestamp.toLocaleTimeString()}
+          {event.timestamp.toLocaleTimeString('en-US', { hour12: false })}
         </div>
       </div>
       <div 

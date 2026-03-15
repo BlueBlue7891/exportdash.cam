@@ -91,7 +91,7 @@ export function TelemetryCard({
         {/* Speed Display */}
         <div className="telemetry-speed" onClick={onSpeedUnitToggle}>
           <div className="speed-value">{displaySpeed}</div>
-          <div className="speed-unit">{speedUnit}</div>
+          <div className="speed-unit">{speedUnit === 'mph' ? 'mph' : 'km/h'}</div>
         </div>
 
         {/* Right Blinker */}
@@ -232,7 +232,6 @@ export function TelemetryCard({
           font-size: 12px;
           font-weight: 600;
           color: #9ca3af;
-          text-transform: uppercase;
         }
 
         .telemetry-autopilot {
