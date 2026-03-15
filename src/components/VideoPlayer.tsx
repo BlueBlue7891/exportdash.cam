@@ -329,7 +329,7 @@ export function VideoPlayer({
       setShowTelemetry(false);
       hasAutoEnabledTelemetryRef.current = false;
     }
-  }, [hasGpsData, hasTelemetryData, sequence?.id]);
+  }, [hasGpsData, hasTelemetryData, sequence?.id, sequence?.event]);
 
   // Create object URLs for current moment's videos
   useEffect(() => {
@@ -562,7 +562,8 @@ export function VideoPlayer({
   const seekToAbsoluteTime = useCallback((targetAbsoluteTime: number) => {
     if (!sequence) return;
 
-    const clampedTime = Math.max(0, Math.min(targetAbsoluteTime, totalDuration));
+    // Allow seeking slightly beyond totalDuration to ensure progress bar can reach the end
+    const clampedTime = Math.max(0, Math.min(targetAbsoluteTime, totalDuration + 0.001));
     const { momentIndex, localTime: newLocalTime } = findMomentForTime(sequence, clampedTime);
 
     if (momentIndex !== currentMomentIndex) {

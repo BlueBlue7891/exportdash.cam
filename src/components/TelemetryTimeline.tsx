@@ -295,8 +295,12 @@ export function TelemetryTimeline({
   }, [isDragging, draggingTrimHandle, draggingSegmentBoundary, onDraggingChange]);
 
   // Calculate view bounds based on trim state
+  // Round up to nearest minute for timeline display (e.g., 53s video shows as 60s)
+  const roundUpToMinute = (seconds: number) => Math.ceil(seconds / 60) * 60;
+  
   const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
-  const viewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
+  const rawViewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
+  const viewEnd = roundUpToMinute(rawViewEnd);
   const viewDuration = viewEnd - viewStart;
 
   // Calculate time from mouse position (view-aware)
