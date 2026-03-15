@@ -128,7 +128,44 @@ export default function Home() {
       }
     }
     
-    // Collect files from selected time slots, skipping already imported ones
+    // Check if any new files have GPS data (event.json)
+    let hasNewGpsData = false;
+    for (const slot of timeSlots) {
+      const files = Object.values(slot.files);
+      const firstVideo = files[0];
+      if (!firstVideo) continue;
+      
+      const videoPath = (firstVideo as any).webkitRelativePath || (firstVideo as any).tauriPath || '';
+      const normalizedVideoPath = videoPath.replace(/\\/g, '/');
+      const videoDir = normalizedVideoPath.substring(0, normalizedVideoPath.lastIndexOf('/'));
+      
+      // Find event.json in the same directory
+      const eventJson = folderStructure?.allFiles.find(f => {
+        if (f.name !== 'event.json') return false;
+        const eventPath = (f as any).webkitRelativePath || (f as any).tauriPath || '';
+        const normalizedEventPath = eventPath.replace(/\\/g, '/');
+        const eventDir = normalizedEventPath.substring(0, normalizedEventPath.lastIndexOf('/'));
+        return eventDir === videoDir;
+      });
+      
+      if (eventJson) {
+        // Check if any video from this slot is new
+        const hasNewVideo = files.some(f => {
+          const fp = (f as any).webkitRelativePath || (f as any).tauriPath || f.name;
+          return !importedFilePaths.has(fp);
+        });
+        if (hasNewVideo) {
+          hasNewGpsData = true;
+          break;
+        }
+      }
+    }
+    
+    // If adding GPS data, do full re-import of all selected files
+    // Otherwise use incremental import
+    const useFullImport = hasNewGpsData;
+    
+    // Collect files from selected time slots
     let newFiles: File[] = [];
     const processedDirs = new Set<string>();
     let skippedCount = 0;
@@ -138,7 +175,8 @@ export default function Home() {
       
       for (const file of files) {
         const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || file.name;
-        if (importedFilePaths.has(filePath)) {
+        if (!useFullImport && importedFilePaths.has(filePath)) {
+          // Skip already imported files for incremental import
           skippedCount++;
         } else {
           newFiles.push(file);
@@ -165,12 +203,13 @@ export default function Home() {
           });
           
           if (eventJson) {
-            // Only add event.json if any video from this directory is new
-            const hasNewVideoInDir = files.some(f => {
+            // For full import, always add event.json
+            // For incremental, only add if there's new video in this directory
+            const shouldAddEvent = useFullImport || files.some(f => {
               const fp = (f as any).webkitRelativePath || (f as any).tauriPath || f.name;
               return !importedFilePaths.has(fp);
             });
-            if (hasNewVideoInDir) {
+            if (shouldAddEvent) {
               newFiles.push(eventJson);
             }
           }
@@ -190,10 +229,12 @@ export default function Home() {
       return `${year}-${month}-${day}_${hour}-${minute}-${second}`;
     }).filter(Boolean));
     
-    // Collect moments and events to keep from existing sequences
+    // Collect moments and events to keep from the sequence being updated
+    // Only for incremental import (not when adding GPS data)
     let existingMomentsToKeep: VideoMoment[] = [];
     let existingEventsToKeep: TeslaEvent[] = [];
-    if (sequenceIdToReplace) {
+    
+    if (!useFullImport && sequenceIdToReplace) {
       const sequenceToUpdate = sequences.find(seq => seq.id === sequenceIdToReplace);
       if (sequenceToUpdate) {
         // Keep the event from this sequence if it exists
@@ -226,9 +267,11 @@ export default function Home() {
       stage: 'scanning',
       current: 0,
       total: totalFilesToProcess,
-      message: skippedCount > 0 
-        ? `Skipping ${skippedCount} already imported files...` 
-        : 'Scanning files...',
+      message: useFullImport 
+        ? 'Re-importing with GPS data...'
+        : skippedCount > 0 
+          ? `Skipping ${skippedCount} already imported files...` 
+          : 'Scanning files...',
     });
 
     try {
