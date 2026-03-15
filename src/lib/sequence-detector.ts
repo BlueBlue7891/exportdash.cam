@@ -576,7 +576,7 @@ function createSequence(moments: VideoMoment[]): VideoSequence {
     clipCount: moments.length,
     dateRange,
     timeRange,
-    durationFormatted: formatDuration(totalDuration),
+    durationFormatted: formatDuration(totalDuration, true),
     momentOffsets,
   };
 }

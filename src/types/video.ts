@@ -255,10 +255,15 @@ export function parseTimestamp(filename: string): Date | null {
   return new Date(dateStr);
 }
 
-/** Format duration in seconds to MM:SS */
-export function formatDuration(seconds: number): string {
+/** Format duration in seconds to MM:SS or MM:SS.mmm (3-digit ms) */
+export function formatDuration(seconds: number, showMs: boolean = false): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
+  const ms = Math.round((seconds % 1) * 1000);
+  
+  if (showMs && ms > 0) {
+    return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+  }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 

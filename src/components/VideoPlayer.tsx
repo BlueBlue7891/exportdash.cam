@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback, lazy, Suspense, ReactNode, useMemo } from 'react';
 import { useSeiData } from '@/hooks/useSeiData';
 import { TelemetryCard } from './TelemetryCard';
-import { VideoSequence, ANGLE_LABELS, ANGLE_ORDER, VideoMoment, TrimPoints, CameraSegment, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, loadLayoutConfig, saveLayoutConfig, loadMapSize, saveMapSize, DEFAULT_MAP_SIZE, MIN_MAP_SIZE, MAX_MAP_SIZE } from '@/types/video';
+import { VideoSequence, ANGLE_LABELS, ANGLE_ORDER, VideoMoment, TrimPoints, CameraSegment, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, loadLayoutConfig, saveLayoutConfig, loadMapSize, saveMapSize, DEFAULT_MAP_SIZE, MIN_MAP_SIZE, MAX_MAP_SIZE, formatDuration } from '@/types/video';
 import { findMomentForTime, toAbsoluteTime } from '@/lib/sequence-detector';
 import {
   IconArrowUp,
@@ -617,9 +617,14 @@ export function VideoPlayer({
     setLocalTime(0);
   }, [sequence, currentMomentIndex, isPlaying]);
 
-  const formatTime = (time: number): string => {
+  const formatTime = (time: number, showMs: boolean = false): string => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
+    const ms = Math.round((time % 1) * 1000);
+    
+    if (showMs && ms > 0) {
+      return `${minutes}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
@@ -1135,7 +1140,7 @@ export function VideoPlayer({
 
             return (
               <>
-                <span className="text-sm text-gray-400 w-12 tabular-nums ml-2">{formatTime(clampedTime - effectiveStart)}</span>
+                <span className="text-sm text-gray-400 w-[4.5rem] tabular-nums ml-2">{formatTime(clampedTime - effectiveStart, true)}</span>
                 <input
                   type="range"
                   min={effectiveStart}
@@ -1145,7 +1150,7 @@ export function VideoPlayer({
                   onChange={handleSeek}
                   className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
                 />
-                <span className="text-sm text-gray-400 w-12 tabular-nums">{formatTime(effectiveEnd - effectiveStart)}</span>
+                <span className="text-sm text-gray-400 w-[4.5rem] tabular-nums">{formatTime(effectiveEnd - effectiveStart, true)}</span>
               </>
             );
           })()}
