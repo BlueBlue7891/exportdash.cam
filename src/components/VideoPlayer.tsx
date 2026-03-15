@@ -1506,7 +1506,10 @@ export function VideoPlayer({
             </div>
 
             <div className="max-h-64 overflow-y-auto">
-              {sequences.map((seq) => {
+              {[...sequences].sort((a, b) => {
+                // Sort by start time (date first, then time)
+                return a.startTime.getTime() - b.startTime.getTime();
+              }).map((seq) => {
                 const isSelected = seq.id === sequence.id;
                 return (
                   <div
@@ -1532,15 +1535,11 @@ export function VideoPlayer({
                       <div className="text-xs text-gray-400/60 truncate">
                         {seq.timeRange}
                       </div>
-                      {/* Duration and clip count */}
+                      {/* Duration and clip count - always show clip count */}
                       <div className="text-xs text-gray-500 flex items-center gap-2">
                         <span>Duration: {seq.durationFormatted}</span>
-                        {seq.clipCount > 1 && (
-                          <>
-                            <span>·</span>
-                            <span>{seq.clipCount} clips</span>
-                          </>
-                        )}
+                        <span>·</span>
+                        <span>{seq.clipCount} clip{seq.clipCount !== 1 ? 's' : ''}</span>
                       </div>
                     </button>
                     <div className="flex items-center gap-2 flex-shrink-0">
