@@ -278,12 +278,10 @@ export function TelemetryTimeline({
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
 
   // Calculate view bounds based on trim state
-  // Round up to nearest minute for timeline display (e.g., 53s video shows as 60s)
-  const roundUpToMinute = (seconds: number) => Math.ceil(seconds / 60) * 60;
-  
+  // Add 5 seconds buffer to duration for timeline display (for event marker visibility)
   const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
   const rawViewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
-  const viewEnd = roundUpToMinute(rawViewEnd);
+  const viewEnd = rawViewEnd + 5; // 5 seconds buffer
   const viewDuration = viewEnd - viewStart;
 
   // Calculate event position in absolute time
