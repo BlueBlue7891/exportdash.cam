@@ -278,10 +278,11 @@ export function TelemetryTimeline({
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
 
   // Calculate event position in absolute time
+  // Add 1 second buffer to duration to handle event timestamps slightly after video end
   const eventAbsoluteTime = useMemo(() => {
     if (!event || !sequenceStartTime) return null;
     const offsetSeconds = (event.timestamp.getTime() - sequenceStartTime.getTime()) / 1000;
-    if (offsetSeconds < 0 || offsetSeconds > duration) return null;
+    if (offsetSeconds < 0 || offsetSeconds > duration + 1) return null; // 1 second buffer
     return offsetSeconds;
   }, [event, sequenceStartTime, duration]);
 
