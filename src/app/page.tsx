@@ -190,11 +190,16 @@ export default function Home() {
       return `${year}-${month}-${day}_${hour}-${minute}-${second}`;
     }).filter(Boolean));
     
-    // Collect moments to keep from existing sequences
+    // Collect moments and events to keep from existing sequences
     let existingMomentsToKeep: VideoMoment[] = [];
+    let existingEventsToKeep: TeslaEvent[] = [];
     if (sequenceIdToReplace) {
       const sequenceToUpdate = sequences.find(seq => seq.id === sequenceIdToReplace);
       if (sequenceToUpdate) {
+        // Keep the event from this sequence if it exists
+        if (sequenceToUpdate.event) {
+          existingEventsToKeep.push(sequenceToUpdate.event);
+        }
         for (const moment of sequenceToUpdate.moments) {
           const momentId = `${moment.date}_${moment.time.replace(/:/g, '-')}`;
           if (selectedTimeSlotIds.has(momentId)) {
@@ -228,7 +233,7 @@ export default function Home() {
 
     try {
       let allMoments: VideoMoment[] = [...existingMomentsToKeep];
-      let allEvents: TeslaEvent[] = [];
+      let allEvents: TeslaEvent[] = [...existingEventsToKeep];
       
       // Process only new files
       if (newFiles.length > 0) {

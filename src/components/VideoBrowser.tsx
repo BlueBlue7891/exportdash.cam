@@ -561,6 +561,25 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
     return true;
   }, [draftSelection, selectedTimeSlotIds]);
   
+  // Check if selection increased or decreased
+  const selectionChangeType = useMemo(() => {
+    // Count how many items in draft are not in original (new selections)
+    let addedCount = 0;
+    for (const id of draftSelection) {
+      if (!selectedTimeSlotIds.has(id)) addedCount++;
+    }
+    // Count how many items in original are not in draft (removed selections)
+    let removedCount = 0;
+    for (const id of selectedTimeSlotIds) {
+      if (!draftSelection.has(id)) removedCount++;
+    }
+    
+    if (addedCount > 0 && removedCount === 0) return { type: 'increased', count: addedCount };
+    if (removedCount > 0 && addedCount === 0) return { type: 'decreased', count: removedCount };
+    if (addedCount > 0 && removedCount > 0) return { type: 'mixed', count: selectedCount };
+    return { type: 'unchanged', count: 0 };
+  }, [draftSelection, selectedTimeSlotIds, selectedCount]);
+  
   // Check if a time slot is selected in current draft
   const isTimeSlotSelected = useCallback((slotId: string) => {
     return draftSelection.has(slotId);
@@ -955,7 +974,9 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   {isSelectionUnchanged && hasImportedSelections
                     ? 'Imported' 
                     : hasImportedSelections
-                      ? `Update ${selectedCount > 1 ? `(${selectedCount})` : ''}`
+                      ? selectionChangeType.type === 'increased' 
+                        ? `Update (${selectionChangeType.count})`
+                        : 'Update'
                       : `Import ${selectedCount > 1 ? `(${selectedCount})` : ''}`}
                 </button>
               </div>
