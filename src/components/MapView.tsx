@@ -224,8 +224,13 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
             // 使用 event.json 回退（视频无原生 GPS）
             <>
               <div className="text-yellow-400">
-                Estimated: {lat?.toFixed(5)}, {lng?.toFixed(5)}
+                Estimated: {rawLat?.toFixed(5)}, {rawLng?.toFixed(5)}
               </div>
+              {isChina && mapProvider === 'amap' && (
+                <div className="text-[8px] text-white/60">
+                  AMap: {lat?.toFixed(5)}, {lng?.toFixed(5)} (Offset: {offset.toFixed(0)}m)
+                </div>
+              )}
               <div className="text-[8px] text-white/70 truncate">
                 From event.json ({eventReason || 'Event Trigger'})
               </div>
