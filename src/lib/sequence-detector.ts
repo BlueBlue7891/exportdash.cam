@@ -528,12 +528,12 @@ export function detectSequences(moments: VideoMoment[], events: TeslaEvent[] = [
   }
 
   // Match events to sequences by timestamp overlap
-  // Add 1 second buffer to seqEnd to handle small discrepancies between event timestamp and video duration
+  // Add 5 second buffer to seqEnd to handle event timestamps after video end (especially for multi-clip)
   for (const event of events) {
     const eventTime = event.timestamp.getTime();
     for (const seq of sequences) {
       const seqStart = seq.startTime.getTime();
-      const seqEnd = seq.endTime.getTime() + 1000; // 1 second buffer for event matching
+      const seqEnd = seq.endTime.getTime() + 5000; // 5 second buffer for event matching
       if (eventTime >= seqStart && eventTime <= seqEnd) {
         seq.event = event;
         break;

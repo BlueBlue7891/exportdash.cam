@@ -277,14 +277,32 @@ export function TelemetryTimeline({
   const [draggingAngle, setDraggingAngle] = useState<string | null>(null); // For drag-drop from palette
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
 
+  // Calculate view bounds based on trim state
+  // Round up to nearest minute for timeline display (e.g., 53s video shows as 60s)
+  const roundUpToMinute = (seconds: number) => Math.ceil(seconds / 60) * 60;
+  
+  const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
+  const rawViewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
+  const viewEnd = roundUpToMinute(rawViewEnd);
+  const viewDuration = viewEnd - viewStart;
+
   // Calculate event position in absolute time
-  // Add 1 second buffer to duration to handle event timestamps slightly after video end
+  // Add 5 second buffer to duration to handle event timestamps after video end
   const eventAbsoluteTime = useMemo(() => {
     if (!event || !sequenceStartTime) return null;
     const offsetSeconds = (event.timestamp.getTime() - sequenceStartTime.getTime()) / 1000;
-    if (offsetSeconds < 0 || offsetSeconds > duration + 1) return null; // 1 second buffer
+    console.log('[TelemetryTimeline] Event position calculation:', { 
+      eventTime: event.timestamp.toISOString(), 
+      sequenceStartTime: sequenceStartTime.toISOString(),
+      offsetSeconds, 
+      duration, 
+      viewStart, 
+      viewEnd,
+      position: viewEnd > viewStart ? ((offsetSeconds - viewStart) / (viewEnd - viewStart) * 100).toFixed(2) + '%' : 'N/A'
+    });
+    if (offsetSeconds < 0 || offsetSeconds > duration + 5) return null; // 5 second buffer for multi-clip sequences
     return offsetSeconds;
-  }, [event, sequenceStartTime, duration]);
+  }, [event, sequenceStartTime, duration, viewStart, viewEnd]);
 
   const [showEventTooltip, setShowEventTooltip] = useState(false);
   const [markerRect, setMarkerRect] = useState<DOMRect | null>(null);
@@ -294,15 +312,6 @@ export function TelemetryTimeline({
   useEffect(() => {
     onDraggingChange?.(isDragging || draggingTrimHandle !== null || draggingSegmentBoundary !== null);
   }, [isDragging, draggingTrimHandle, draggingSegmentBoundary, onDraggingChange]);
-
-  // Calculate view bounds based on trim state
-  // Round up to nearest minute for timeline display (e.g., 53s video shows as 60s)
-  const roundUpToMinute = (seconds: number) => Math.ceil(seconds / 60) * 60;
-  
-  const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
-  const rawViewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
-  const viewEnd = roundUpToMinute(rawViewEnd);
-  const viewDuration = viewEnd - viewStart;
 
   // Calculate time from mouse position (view-aware)
   const getTimeFromEvent = useCallback((clientX: number): number => {
