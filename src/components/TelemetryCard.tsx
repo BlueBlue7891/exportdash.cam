@@ -133,7 +133,8 @@ export function TelemetryCard({
           align-items: center;
           gap: 10px;
           padding: 8px 12px;
-          background: rgba(225, 225, 225, 0.85);
+          background: rgba(12, 12, 12, 0.65);
+          backdrop-filter: blur(5px);
           border-radius: 12px;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
@@ -148,7 +149,7 @@ export function TelemetryCard({
           width: 28px;
           height: 28px;
           border-radius: 50%;
-          background: #a4a4a4;
+          background: #3f3f3fde;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -157,7 +158,7 @@ export function TelemetryCard({
         .telemetry-gear {
           font-size: 16px;
           font-weight: 700;
-          color: #006deb;
+          color: #c0c0c0;
         }
 
         .telemetry-brake.active {
@@ -169,12 +170,12 @@ export function TelemetryCard({
         }
 
         .telemetry-steering :global(.wheel-icon) {
-          filter: brightness(0.5);
+          filter: brightness(0.6) invert(0.8);
           transition: transform 0.1s ease-out;
         }
 
         .telemetry-steering.autopilot :global(.wheel-icon) {
-          filter: brightness(0) invert(1);
+          filter: brightness(0.6) invert(0.8);
         }
 
         .telemetry-accelerator {
@@ -193,7 +194,7 @@ export function TelemetryCard({
         }
 
         :global(.pedal-icon) {
-          filter: brightness(0.6);
+          filter: brightness(0.4) invert(1);
         }
 
         :global(.pedal-icon.overlay) {
@@ -224,24 +225,24 @@ export function TelemetryCard({
           font-size: 32px;
           font-weight: 600;
           line-height: 1;
-          color: #333;
+          color: #c0c0c0;
         }
 
         .speed-unit {
           font-size: 12px;
           font-weight: 600;
-          color: #666;
+          color: #9ca3af;
           text-transform: uppercase;
         }
 
         .telemetry-autopilot {
           margin-top: -1px;
           padding: 2px 12px;
-          background: rgba(255, 255, 255, 0.7);
+          background: rgba(59, 130, 246, 0.9);
           border-radius: 0 0 8px 8px;
           font-size: 11px;
           font-weight: 600;
-          color: #006deb;
+          color: #c0c0c0;
         }
 
         @keyframes blink {
@@ -270,6 +271,7 @@ export function TelemetryCard({
 
           .speed-unit {
             font-size: 14px;
+            color: #c0c0c0;
           }
 
           .telemetry-blinker :global(img) {
