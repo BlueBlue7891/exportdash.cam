@@ -1482,10 +1482,7 @@ export function VideoPlayer({
                       </div>
                       {/* Time range below (smaller) */}
                       <div className="text-xs text-gray-400/60 truncate">
-                        {seq.moments[0].time}
-                        {seq.clipCount > 1 && (
-                          <span className="text-gray-400/60"> - {seq.moments[seq.clipCount - 1].time}</span>
-                        )}
+                        {seq.timeRange}
                       </div>
                       {/* Duration and clip count */}
                       <div className="text-xs text-gray-500 flex items-center gap-2">
