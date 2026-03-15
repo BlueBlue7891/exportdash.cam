@@ -778,8 +778,8 @@ export function TelemetryTimeline({
             <div 
               className="absolute top-0 bottom-0 bg-gray-700/50 rounded-sm"
               style={{ 
-                left: `${timeToPosition(0)}%`, 
-                width: `${((Math.min(duration, viewEnd) - 0) / viewDuration) * 100}%` 
+                left: '0%', 
+                width: `${((Math.min(duration, viewEnd) - viewStart) / viewDuration) * 100}%` 
               }}
             />
             {track.segments.map((segment, idx) => {
@@ -968,8 +968,8 @@ export function TelemetryTimeline({
                   : 'bg-gray-700/30 border-2 border-dashed border-gray-600/50'
               }`}
               style={{ 
-                left: `${timeToPosition(0)}%`, 
-                width: `${((Math.min(duration, viewEnd) - 0) / viewDuration) * 100}%` 
+                left: '0%', 
+                width: `${((Math.min(duration, viewEnd) - viewStart) / viewDuration) * 100}%` 
               }}
             />
             {visibleCameraSegments.map((segment, idx) => {
