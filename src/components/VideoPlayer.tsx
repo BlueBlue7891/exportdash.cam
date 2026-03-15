@@ -201,18 +201,13 @@ export function VideoPlayer({
     const hasEventGps = sequence?.event?.est_lat && sequence?.event?.est_lon;
     
     if (hasSeiGps) {
-      console.log('[VideoPlayer] Using SEI GPS:', seiData?.latitude_deg, seiData?.longitude_deg);
       return { mapSeiData: seiData, isEventJsonGps: false };
     }
     if (hasEventGps) {
-      console.log('[VideoPlayer] Using event.json GPS fallback:', sequence?.event?.est_lat, sequence?.event?.est_lon);
       return { 
         mapSeiData: { ...(seiData || {}), latitude_deg: sequence!.event!.est_lat, longitude_deg: sequence!.event!.est_lon } as typeof seiData,
         isEventJsonGps: true 
       };
-    }
-    if (seiData) {
-      console.log('[VideoPlayer] SEI has no GPS. Available fields:', Object.keys(seiData).filter(k => (seiData as any)[k] !== undefined && (seiData as any)[k] !== 0));
     }
     return { mapSeiData: seiData, isEventJsonGps: false };
   }, [seiData, sequence?.event]);
@@ -623,7 +618,7 @@ export function VideoPlayer({
     const seconds = Math.floor(time % 60);
     const ms = Math.round((time % 1) * 1000);
     
-    if (showMs && ms > 0) {
+    if (showMs) {
       return `${minutes}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
     }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -1137,7 +1132,8 @@ export function VideoPlayer({
             // When trimmed (and not in trim mode), show trimmed range
             const effectiveStart = (!isTrimming && trimPoints) ? trimPoints.inPoint : 0;
             const effectiveEnd = (!isTrimming && trimPoints) ? trimPoints.outPoint : totalDuration;
-            const clampedTime = Math.max(effectiveStart, Math.min(effectiveEnd, absoluteTime));
+            // Allow seeking slightly past the end to ensure progress bar can reach the end
+            const clampedTime = Math.max(effectiveStart, Math.min(effectiveEnd + 0.001, absoluteTime));
 
             return (
               <>
@@ -1145,8 +1141,8 @@ export function VideoPlayer({
                 <input
                   type="range"
                   min={effectiveStart}
-                  max={effectiveEnd || 0}
-                  step={0.1}
+                  max={(effectiveEnd + 0.001) || 0}
+                  step={0.001}
                   value={clampedTime}
                   onChange={handleSeek}
                   className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"

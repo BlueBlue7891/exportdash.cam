@@ -262,15 +262,31 @@ async function parseEventJson(file: File): Promise<TeslaEvent | null> {
     if (!data.timestamp || !data.reason) return null;
 
     // Parse timestamp: "2026-02-07T17:36:02" (local time, no timezone)
-    const ts = new Date(data.timestamp);
+    // Parse manually to avoid timezone issues
+    const timestamp = data.timestamp;
+    let ts: Date;
+    if (timestamp.includes('T')) {
+      // ISO format: 2026-02-13T14:05:01
+      // Parse manually to ensure local time interpretation
+      const [datePart, timePart] = timestamp.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute, second] = timePart.split(':').map(Number);
+      ts = new Date(year, month - 1, day, hour, minute, second);
+    } else {
+      ts = new Date(timestamp);
+    }
     if (isNaN(ts.getTime())) return null;
 
+    // Parse GPS coordinates - handle both string and number types
+    const est_lat = data.est_lat !== undefined ? parseFloat(String(data.est_lat)) : undefined;
+    const est_lon = data.est_lon !== undefined ? parseFloat(String(data.est_lon)) : undefined;
+    
     return {
       timestamp: ts,
       city: data.city || undefined,
       street: data.street || undefined,
-      est_lat: data.est_lat ? parseFloat(data.est_lat) : undefined,
-      est_lon: data.est_lon ? parseFloat(data.est_lon) : undefined,
+      est_lat,
+      est_lon,
       reason: data.reason,
       reasonLabel: getReasonLabel(data.reason),
       camera: data.camera || undefined,
@@ -524,11 +540,12 @@ export function detectSequences(moments: VideoMoment[], events: TeslaEvent[] = [
   }
 
   // Match events to sequences by timestamp overlap
+  // Add 1 second buffer to seqEnd to handle small discrepancies between event timestamp and video duration
   for (const event of events) {
     const eventTime = event.timestamp.getTime();
     for (const seq of sequences) {
       const seqStart = seq.startTime.getTime();
-      const seqEnd = seq.endTime.getTime();
+      const seqEnd = seq.endTime.getTime() + 1000; // 1 second buffer for event matching
       if (eventTime >= seqStart && eventTime <= seqEnd) {
         seq.event = event;
         break;
@@ -558,7 +575,12 @@ function createSequence(moments: VideoMoment[]): VideoSequence {
 
   // Format time range
   const startTimeStr = moments[0].time;
-  const endTimeStr = endTime.toTimeString().split(' ')[0];
+  // Calculate end time string from last moment's time plus duration
+  // Use local time components to avoid timezone issues
+  const endHours = String(endTime.getHours()).padStart(2, '0');
+  const endMinutes = String(endTime.getMinutes()).padStart(2, '0');
+  const endSeconds = String(endTime.getSeconds()).padStart(2, '0');
+  const endTimeStr = `${endHours}:${endMinutes}:${endSeconds}`;
   const timeRange = `${startTimeStr} - ${endTimeStr}`;
 
   // Format date range (usually just one date)

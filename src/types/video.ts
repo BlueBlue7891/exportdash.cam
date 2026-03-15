@@ -249,10 +249,16 @@ export function parseTimestamp(filename: string): Date | null {
   if (!match) return null;
 
   const [, year, month, day, hour, minute, second] = match;
-  // Create date in local time but treat it as if the components are local time
-  // Use explicit string format to ensure consistent parsing
-  const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
-  return new Date(dateStr);
+  // Parse as local time to avoid UTC conversion issues
+  // Use individual components instead of ISO string to ensure local time interpretation
+  return new Date(
+    parseInt(year),
+    parseInt(month) - 1,  // Month is 0-indexed
+    parseInt(day),
+    parseInt(hour),
+    parseInt(minute),
+    parseInt(second)
+  );
 }
 
 /** Format duration in seconds to MM:SS or MM:SS.mmm (3-digit ms) */
@@ -261,7 +267,7 @@ export function formatDuration(seconds: number, showMs: boolean = false): string
   const secs = Math.floor(seconds % 60);
   const ms = Math.round((seconds % 1) * 1000);
   
-  if (showMs && ms > 0) {
+  if (showMs) {
     return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;

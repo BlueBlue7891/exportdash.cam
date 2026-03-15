@@ -751,8 +751,8 @@ export function TelemetryTimeline({
           </div>
         )}
 
-        {/* Time interval lines */}
-        {timeMarkers.slice(1, -1).map((time) => (
+        {/* Time interval lines - including start (0) and end markers */}
+        {timeMarkers.map((time) => (
           <div
             key={time}
             className="absolute top-0 bottom-0 w-px bg-gray-600/50 z-[1] pointer-events-none"
