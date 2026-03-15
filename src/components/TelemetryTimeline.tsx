@@ -771,13 +771,21 @@ export function TelemetryTimeline({
         {tracks.map((track) => (
           <div
             key={track.id}
-            className="relative h-3 bg-gray-700/50 rounded-sm mb-0.5 overflow-visible"
+            className="relative h-3 rounded-sm mb-0.5 overflow-visible"
             title={track.label}
           >
+            {/* Background limited to actual video duration */}
+            <div 
+              className="absolute top-0 bottom-0 bg-gray-700/50 rounded-sm"
+              style={{ 
+                left: `${timeToPosition(0)}%`, 
+                width: `${((Math.min(duration, viewEnd) - 0) / viewDuration) * 100}%` 
+              }}
+            />
             {track.segments.map((segment, idx) => {
               if (segment.endTime < viewStart || segment.startTime > viewEnd) return null;
               const segStart = Math.max(segment.startTime, viewStart);
-              const segEnd = Math.min(segment.endTime, viewEnd);
+              const segEnd = Math.min(segment.endTime, duration); // Limit to actual video end, not viewEnd
               const left = timeToPosition(segStart);
               const width = ((segEnd - segStart) / viewDuration) * 100;
               const opacity = segment.intensity !== undefined ? 0.4 + segment.intensity * 0.6 : 0.9;
@@ -949,13 +957,21 @@ export function TelemetryTimeline({
           {/* Camera track - drop zone */}
           <div
             ref={cameraTrackRef}
-            className={`relative h-10 bg-gray-700/30 rounded-lg overflow-visible border-2 border-dashed transition-all ${
-              draggingAngle
-                ? 'border-purple-500 bg-purple-500/10'
-                : 'border-gray-600/50'
-            }`}
+            className="relative h-10 w-full overflow-visible"
             onMouseUp={draggingAngle ? handleCameraTrackDrop : undefined}
           >
+            {/* Background with border limited to actual video duration */}
+            <div 
+              className={`absolute top-0 bottom-0 rounded-lg transition-all ${
+                draggingAngle
+                  ? 'bg-purple-500/10 border-2 border-dashed border-purple-500'
+                  : 'bg-gray-700/30 border-2 border-dashed border-gray-600/50'
+              }`}
+              style={{ 
+                left: `${timeToPosition(0)}%`, 
+                width: `${((Math.min(duration, viewEnd) - 0) / viewDuration) * 100}%` 
+              }}
+            />
             {visibleCameraSegments.map((segment, idx) => {
               const left = timeToPosition(segment.startTime);
               const width = ((segment.endTime - segment.startTime) / viewDuration) * 100;
