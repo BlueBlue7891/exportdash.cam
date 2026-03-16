@@ -79,24 +79,24 @@ export function TelemetryCard({
         <div className="telemetry-column">
           <div className="telemetry-circle telemetry-gear">{gearLetter}</div>
           <div className={`telemetry-circle telemetry-brake ${seiData.brake_applied ? 'active' : ''}`}>
-            <Image src="/left-pedal.png" alt="Brake" width={16} height={16} className="pedal-icon" />
+            <Image src="/left-pedal.png" alt="Brake" width={12} height={12} className="pedal-icon" />
           </div>
         </div>
 
         {/* Left Blinker */}
         <div className={`telemetry-blinker left ${seiData.blinker_on_left ? 'active' : ''}`}>
-          <Image src="/blinker.svg" alt="Left" width={20} height={20} />
+          <Image src="/blinker.svg" alt="Left" width={16} height={16} />
         </div>
 
         {/* Speed Display */}
         <div className="telemetry-speed" onClick={onSpeedUnitToggle}>
           <div className="speed-value">{displaySpeed}</div>
-          <div className="speed-unit">{speedUnit === 'mph' ? 'mph' : 'km/h'}</div>
+          <div className="speed-unit">{speedUnit === 'mph' ? 'MPH' : 'km/h'}</div>
         </div>
 
         {/* Right Blinker */}
         <div className={`telemetry-blinker right ${seiData.blinker_on_right ? 'active' : ''}`}>
-          <Image src="/blinker.svg" alt="Right" width={20} height={20} className="rotate-180" />
+          <Image src="/blinker.svg" alt="Right" width={16} height={16} className="rotate-180" />
         </div>
 
         {/* Column 2: Steering + Accelerator */}
@@ -113,7 +113,7 @@ export function TelemetryCard({
           </div>
           <div className="telemetry-circle telemetry-accelerator">
             <div className="accelerator-fill" style={{ height: `${acceleratorPosition}%` }} />
-            <Image src="/right-pedal.png" alt="Accelerator" width={8} height={8} className="pedal-icon overlay" />
+            <Image src="/right-pedal.png" alt="Accelerator" width={6} height={6} className="pedal-icon overlay" />
           </div>
         </div>
       </div>
@@ -146,8 +146,8 @@ export function TelemetryCard({
         }
 
         .telemetry-circle {
-          width: 28px;
-          height: 28px;
+          width: 22px;
+          height: 22px;
           border-radius: 50%;
           background: #3f3f3fde;
           display: flex;
@@ -156,7 +156,7 @@ export function TelemetryCard({
         }
 
         .telemetry-gear {
-          font-size: 16px;
+          font-size: 14px;
           font-weight: 700;
           color: #c0c0c0;
         }
@@ -170,12 +170,12 @@ export function TelemetryCard({
         }
 
         .telemetry-steering :global(.wheel-icon) {
-          filter: brightness(0.6) invert(0.8);
+          filter: brightness(0.5) invert(0.8);
           transition: transform 0.1s ease-out;
         }
 
         .telemetry-steering.autopilot :global(.wheel-icon) {
-          filter: brightness(0.6) invert(0.8);
+          filter: brightness(0.5) invert(0.8);
         }
 
         .telemetry-accelerator {
@@ -194,7 +194,7 @@ export function TelemetryCard({
         }
 
         :global(.pedal-icon) {
-          filter: brightness(0.4) invert(1);
+          filter: brightness(0.6) invert(1);
         }
 
         :global(.pedal-icon.overlay) {
@@ -222,14 +222,14 @@ export function TelemetryCard({
         }
 
         .speed-value {
-          font-size: 32px;
+          font-size: 28px;
           font-weight: 600;
           line-height: 1;
           color: #c0c0c0;
         }
 
         .speed-unit {
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 600;
           color: #9ca3af;
         }
@@ -252,30 +252,29 @@ export function TelemetryCard({
         @media (max-width: 640px) {
           .telemetry-card {
             gap: 10px;
-            padding: 10px 15px;
+            padding: 8px 10px;
           }
 
           .telemetry-circle {
-            width: 32px;
-            height: 32px;
+            width: 22px;
+            height: 22px;
           }
 
           .telemetry-gear {
-            font-size: 18px;
+            font-size: 16px;
           }
 
           .speed-value {
-            font-size: 40px;
+            font-size: 28px;
           }
 
           .speed-unit {
-            font-size: 14px;
-            color: #c0c0c0;
+            font-size: 10px;
           }
 
           .telemetry-blinker :global(img) {
-            width: 22px;
-            height: 22px;
+            width: 16px;
+            height: 16px;
           }
         }
       `}</style>
