@@ -588,7 +588,12 @@ export function TelemetryTimeline({
     // Check if playhead is at the edges (within 0.5s of start or end)
     const isAtStart = currentTime <= trimPoints.inPoint + 0.5;
     const isAtEnd = currentTime >= trimPoints.outPoint - 0.5;
-    const isFreeDropMode = isAtStart || isAtEnd;
+    
+    // Check if playhead is at a segment boundary (within 0.3s of any boundary)
+    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+    const isAtBoundary = boundaries.some(boundary => Math.abs(currentTime - boundary) < 0.3);
+    
+    const isFreeDropMode = isAtStart || isAtEnd || isAtBoundary;
 
     if (isFreeDropMode) {
       // Free drop mode: use mouse position for drop location
@@ -1066,6 +1071,56 @@ export function TelemetryTimeline({
               </svg>
               <span>drag to track</span>
             </div>
+            
+            {/* Boundary navigation arrows - show when there are multiple segments */}
+            {cameraSegments.length > 1 && (
+              <div className="flex items-center gap-1 ml-1">
+                <button
+                  onClick={() => {
+                    // Find previous boundary or go to start
+                    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+                    const prevBoundaries = boundaries.filter(b => b < currentTime - 0.1);
+                    
+                    if (prevBoundaries.length > 0) {
+                      // Go to previous boundary
+                      onSeek(prevBoundaries[prevBoundaries.length - 1]);
+                    } else {
+                      // Go to start
+                      onSeek(cameraSegments[0].startTime);
+                    }
+                  }}
+                  disabled={currentTime <= cameraSegments[0].startTime + 0.1}
+                  className="p-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Previous boundary"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    // Find next boundary or go to end
+                    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+                    const nextBoundary = boundaries.find(b => b > currentTime + 0.1);
+                    
+                    if (nextBoundary !== undefined) {
+                      // Go to next boundary
+                      onSeek(nextBoundary);
+                    } else {
+                      // Go to end
+                      onSeek(cameraSegments[cameraSegments.length - 1].endTime);
+                    }
+                  }}
+                  disabled={currentTime >= cameraSegments[cameraSegments.length - 1].endTime - 0.1}
+                  className="p-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Next boundary"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Camera track - drop zone */}
