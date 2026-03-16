@@ -323,7 +323,7 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
     } catch (error) {
       console.error('Tauri folder select error:', error);
       // Fallback: show alert to use drag-drop instead
-      alert('Please drag and drop folders to import multiple folders, or use Open Folder for single folder.');
+      alert('Please drag and drop folders to import multiple folders, or use Open Folder(s) to explore via calendar.');
     }
   }, [hasTauri, onFilesAdded, onScanProgress]);
 
@@ -365,7 +365,7 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
             <p className="text-sm text-gray-500 mt-2 leading-relaxed">
               <span className="text-gray-400">Quick Load</span> — drop clips or a folder to import instantly<br />
               <span className="text-gray-400">Select Clips</span> — click <span className="text-gray-300 font-medium">Browse Files</span> to pick multiple clips<br />
-              <span className="text-gray-400">Browse by Date</span> — click <span className="text-gray-300 font-medium">Open Folder</span> to explore via <span className="text-gray-300 font-medium">calendar</span>
+              <span className="text-gray-400">Browse by Date</span> — click <span className="text-gray-300 font-medium">Open Folder(s)</span> to explore via <span className="text-gray-300 font-medium">calendar</span>
             </p>
           </div>
           <div className="flex items-center gap-3 mt-4">
@@ -382,7 +382,7 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
               </button>
             ) : (
               <label className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
-                <span>Open Folder</span>
+                <span>Open Folder(s)</span>
                 <input type="file" {...{ webkitdirectory: 'true', directory: 'true' } as any} onChange={handleFileInput} className="hidden" />
               </label>
             )}
