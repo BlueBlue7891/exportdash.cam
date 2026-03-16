@@ -10,8 +10,8 @@ import {
   IconArrowDown,
   IconArrowLeft,
   IconArrowRight,
-  IconArrowUpLeft,
-  IconArrowUpRight,
+  IconArrowDownLeft,
+  IconArrowDownRight,
   IconSquare,
   IconPictureInPicture,
   IconColumns3,
@@ -58,11 +58,14 @@ interface VideoPlayerProps {
 const ANGLE_ICONS: Record<string, ReactNode> = {
   front: <IconArrowUp size={14} />,
   back: <IconArrowDown size={14} />,
-  left_repeater: <IconArrowLeft size={14} />,
-  right_repeater: <IconArrowRight size={14} />,
-  left_pillar: <IconArrowUpLeft size={14} />,
-  right_pillar: <IconArrowUpRight size={14} />,
+  left_repeater: <IconArrowDownLeft size={14} />,
+  right_repeater: <IconArrowDownRight size={14} />,
+  left_pillar: <IconArrowLeft size={14} />,
+  right_pillar: <IconArrowRight size={14} />,
 };
+
+// Button order: back camera moved to last
+const BUTTON_ORDER = ['front', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar', 'back'];
 
 type LayoutType = 'single' | 'pip' | 'triple' | 'all';
 
@@ -1219,7 +1222,7 @@ export function VideoPlayer({
           {/* Camera buttons — always visible, disabled for triple/all unless in edit mode */}
           <div className="flex items-center gap-1">
             <span className="text-[10px] text-gray-500 mr-1">Cameras:</span>
-            {ANGLE_ORDER.map((angle) => {
+            {BUTTON_ORDER.map((angle) => {
               const isAvailable = availableAngles.includes(angle);
               const canSelect = layout === 'single' || layout === 'pip' || isEditMode || hasCustomCameraTrack;
               const isDisabled = !isAvailable || !canSelect;
