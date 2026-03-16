@@ -579,12 +579,31 @@ export function TelemetryTimeline({
     setDragPosition({ x: e.clientX, y: e.clientY });
   }, []);
 
-  // Handle drop on camera track - drops at playhead position
+  // Handle drop on camera track
   const handleCameraTrackDrop = useCallback((e: React.MouseEvent) => {
     if (!draggingAngle || !cameraTrackRef.current || !onCameraSegmentsChange || !trimPoints) return;
 
-    // Use current playhead position (currentTime) for the drop
-    const dropTime = Math.max(trimPoints.inPoint, Math.min(trimPoints.outPoint, currentTime));
+    let dropTime: number;
+    
+    // Check if playhead is at the edges (within 0.5s of start or end)
+    const isAtStart = currentTime <= trimPoints.inPoint + 0.5;
+    const isAtEnd = currentTime >= trimPoints.outPoint - 0.5;
+    const isFreeDropMode = isAtStart || isAtEnd;
+
+    if (isFreeDropMode) {
+      // Free drop mode: use mouse position for drop location
+      const rect = cameraTrackRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, x / rect.width));
+      
+      const trimStart = trimPoints.inPoint;
+      const trimEnd = trimPoints.outPoint;
+      const trimDuration = trimEnd - trimStart;
+      dropTime = trimStart + (percentage * trimDuration);
+    } else {
+      // Fixed mode: use current playhead position
+      dropTime = Math.max(trimPoints.inPoint, Math.min(trimPoints.outPoint, currentTime));
+    }
 
     // Find which segment was dropped on and split it
     const segIdx = cameraSegments.findIndex(
@@ -605,7 +624,7 @@ export function TelemetryTimeline({
       );
       onCameraSegmentsChange(newSegments);
     } else {
-      // Split the segment at playhead position
+      // Split the segment at drop position
       const newSegments = [...cameraSegments];
       newSegments.splice(segIdx, 1,
         { startTime: clickedSegment.startTime, endTime: dropTime, angle: clickedSegment.angle },
@@ -623,10 +642,13 @@ export function TelemetryTimeline({
         }
       }
       onCameraSegmentsChange(merged);
+      
+      // Move playhead to the split position (boundary)
+      onSeek(dropTime);
     }
 
     setDraggingAngle(null);
-  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime]);
+  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek]);
 
   // Track mouse movement and cancel drag on mouse up
   useEffect(() => {
