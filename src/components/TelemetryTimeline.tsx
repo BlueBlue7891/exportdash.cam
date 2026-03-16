@@ -322,6 +322,11 @@ export function TelemetryTimeline({
 
   // Handle mouse down - start dragging
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Don't start dragging if clicking on interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-no-seek]')) {
+      return;
+    }
     e.preventDefault();
     setIsDragging(true);
     const time = getTimeFromEvent(e.clientX);
@@ -330,6 +335,11 @@ export function TelemetryTimeline({
 
   // Handle touch start - start dragging
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    // Don't start dragging if touching interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-no-seek]')) {
+      return;
+    }
     setIsDragging(true);
     const time = getTimeFromEvent(e.touches[0].clientX);
     onSeek(time);
@@ -963,6 +973,7 @@ export function TelemetryTimeline({
 
             {/* In handle */}
             <div
+              data-no-seek
               className={`absolute top-0 bottom-0 w-4 bg-yellow-500 z-[15] cursor-ew-resize rounded-l-md ${
                 draggingTrimHandle === 'in' ? 'bg-yellow-400 w-5 shadow-lg shadow-yellow-500/50' : 'hover:bg-yellow-400'
               }`}
@@ -979,6 +990,7 @@ export function TelemetryTimeline({
 
             {/* Out handle */}
             <div
+              data-no-seek
               className={`absolute top-0 bottom-0 w-4 bg-yellow-500 z-[15] cursor-ew-resize rounded-r-md ${
                 draggingTrimHandle === 'out' ? 'bg-yellow-400 w-5 shadow-lg shadow-yellow-500/50' : 'hover:bg-yellow-400'
               }`}
@@ -1076,7 +1088,8 @@ export function TelemetryTimeline({
             {cameraSegments.length > 1 && (
               <div className="flex items-center gap-1 ml-1">
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     // Find previous boundary or go to start
                     const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
                     const prevBoundaries = boundaries.filter(b => b < currentTime - 0.1);
@@ -1098,7 +1111,8 @@ export function TelemetryTimeline({
                   </svg>
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     // Find next boundary or go to end
                     const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
                     const nextBoundary = boundaries.find(b => b > currentTime + 0.1);
@@ -1174,6 +1188,7 @@ export function TelemetryTimeline({
               return (
                 <div
                   key={`boundary-${idx}`}
+                  data-no-seek
                   className={`absolute top-0 bottom-0 w-4 cursor-ew-resize z-[5] group ${
                     draggingSegmentBoundary === idx + 1 ? 'z-[10]' : ''
                   }`}
