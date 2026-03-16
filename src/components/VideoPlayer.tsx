@@ -33,6 +33,7 @@ import {
   IconCheck,
   IconScissors,
   IconWand,
+  IconRefresh,
   IconClock,
   IconSettings2,
 } from '@tabler/icons-react';
@@ -586,8 +587,27 @@ export function VideoPlayer({
       }
     }
     
+    // Update the current segment's angle if camera segments exist
+    // This works both in CustomCameraTrack mode and normal mode
+    if (cameraSegments.length > 0) {
+      // Find which segment contains the current absolute time
+      const currentSegmentIndex = cameraSegments.findIndex(
+        seg => absoluteTime >= seg.startTime && absoluteTime < seg.endTime
+      );
+      
+      if (currentSegmentIndex !== -1) {
+        // Update the current segment's angle
+        const newSegments = [...cameraSegments];
+        newSegments[currentSegmentIndex] = {
+          ...newSegments[currentSegmentIndex],
+          angle: newAngle
+        };
+        setCameraSegments(newSegments);
+      }
+    }
+    
     setSelectedAngle(newAngle);
-  }, [selectedAngle, localTime, isPlaying, layout, layoutConfig]);
+  }, [selectedAngle, localTime, isPlaying, layout, layoutConfig, cameraSegments, absoluteTime, setCameraSegments]);
 
   // Fullscreen handler
   const toggleFullscreen = useCallback(() => {
@@ -1272,8 +1292,10 @@ export function VideoPlayer({
             <span className="text-[10px] text-gray-500 mr-1">Cameras:</span>
             {BUTTON_ORDER.map((angle) => {
               const isAvailable = availableAngles.includes(angle);
+              // In multi-view layouts (not single), disable camera buttons
+              const isMultiView = layout !== 'single';
               const canSelect = layout === 'single' || layout === 'pip' || isEditMode || hasCustomCameraTrack;
-              const isDisabled = !isAvailable || !canSelect;
+              const isDisabled = !isAvailable || isMultiView || !canSelect;
               const isActive = selectedAngle === angle && !useCustomCameraTrack && canSelect;
 
               return (
@@ -1315,6 +1337,37 @@ export function VideoPlayer({
                 </button>
               </Tooltip>
             )}
+            {/* Reset button for PIP layout in non-Track mode */}
+            {!hasCustomCameraTrack && layout === 'pip' && (
+              <Tooltip content="Reset PIP layout" position="top">
+                <button
+                  onClick={() => {
+                    handleLayoutConfigChange({ ...DEFAULT_LAYOUT_CONFIG });
+                    // Also reset main angle to front
+                    const frontAngle = 'front';
+                    handleAngleChange(frontAngle);
+                  }}
+                  className="p-1.5 rounded text-xs font-medium transition-all bg-gray-700 text-gray-300 hover:bg-gray-600"
+                >
+                  <IconRefresh size={14} />
+                </button>
+              </Tooltip>
+            )}
+            {/* Layout config button - show after camera buttons in multi-view layouts */}
+            {layout !== 'single' && (
+              <Tooltip content="Configure layout" position="top">
+                <button
+                  onClick={() => setShowLayoutConfig(prev => !prev)}
+                  className={`p-1.5 rounded-lg text-xs font-medium transition-all shadow-sm ml-1 ${
+                    showLayoutConfig
+                      ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-blue-500/30 ring-2 ring-blue-400/50'
+                      : 'bg-gradient-to-br from-gray-700 to-gray-800 text-cyan-400 hover:from-gray-600 hover:to-gray-700 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
+                  }`}
+                >
+                  <IconSettings2 size={14} />
+                </button>
+              </Tooltip>
+            )}
           </div>
 
           {/* Divider */}
@@ -1337,20 +1390,6 @@ export function VideoPlayer({
                 </button>
               </Tooltip>
             ))}
-            {layout !== 'single' && (
-              <Tooltip content="Configure layout" position="top">
-                <button
-                  onClick={() => setShowLayoutConfig(prev => !prev)}
-                  className={`p-1.5 rounded-lg text-xs font-medium transition-all shadow-sm ${
-                    showLayoutConfig
-                      ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-blue-500/30 ring-2 ring-blue-400/50'
-                      : 'bg-gradient-to-br from-gray-700 to-gray-800 text-cyan-400 hover:from-gray-600 hover:to-gray-700 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
-                  }`}
-                >
-                  <IconSettings2 size={14} />
-                </button>
-              </Tooltip>
-            )}
             {showLayoutConfig && layout !== 'single' && (
               <LayoutConfigPopover
                 layout={layout}
