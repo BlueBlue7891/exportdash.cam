@@ -251,8 +251,8 @@ export function TelemetryCard({
 
         @media (max-width: 640px) {
           .telemetry-card {
-            gap: 10px;
-            padding: 8px 10px;
+            gap: 8px;
+            padding: 6px;
           }
 
           .telemetry-circle {
@@ -273,8 +273,8 @@ export function TelemetryCard({
           }
 
           .telemetry-blinker :global(img) {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
           }
         }
       `}</style>
