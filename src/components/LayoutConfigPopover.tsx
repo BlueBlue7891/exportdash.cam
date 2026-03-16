@@ -168,12 +168,8 @@ export function LayoutConfigPopover({
   // All 6 config — screen simulation
   const renderAllConfig = () => {
     const { topRow, bottomRow } = config.all;
-    const columnEnabled = config.all.columnEnabled || [true, true, true];
 
     const updateTop = (index: number, newAngle: string) => {
-      // Only allow update if column is enabled
-      if (!columnEnabled[index]) return;
-      
       const currentAngle = topRow[index];
       if (newAngle === currentAngle) return;
 
@@ -203,9 +199,6 @@ export function LayoutConfigPopover({
     };
 
     const updateBottom = (index: number, newAngle: string) => {
-      // Only allow update if column is enabled
-      if (!columnEnabled[index]) return;
-      
       const currentAngle = bottomRow[index];
       if (newAngle === currentAngle) return;
 
@@ -234,12 +227,6 @@ export function LayoutConfigPopover({
       onChange({ ...config, all: { ...config.all, topRow: newTopRow, bottomRow: newBottomRow } });
     };
 
-    const toggleColumn = (index: number) => {
-      const newColumnEnabled = [...columnEnabled] as [boolean, boolean, boolean];
-      newColumnEnabled[index] = !newColumnEnabled[index];
-      onChange({ ...config, all: { ...config.all, columnEnabled: newColumnEnabled } });
-    };
-
     return (
       <div className="space-y-2">
         <div className="text-[10px] text-gray-400 text-center">Two rows of three cameras</div>
@@ -256,22 +243,6 @@ export function LayoutConfigPopover({
               <CameraSelect value={bottomRow[2]} onChange={(a) => updateBottom(2, a)} label="Bot R" />
             </div>
           </div>
-        </div>
-        {/* Column toggle buttons */}
-        <div className="flex justify-center gap-2 mt-2">
-          {[0, 1, 2].map((idx) => (
-            <button
-              key={idx}
-              onClick={() => toggleColumn(idx)}
-              className={`text-[10px] px-2 py-1 rounded transition-colors ${
-                columnEnabled[idx]
-                  ? 'bg-red-600/80 hover:bg-red-500 text-white'
-                  : 'bg-green-600/80 hover:bg-green-500 text-white'
-              }`}
-            >
-              {columnEnabled[idx] ? `Close Col ${idx + 1}` : `Enable Col ${idx + 1}`}
-            </button>
-          ))}
         </div>
       </div>
     );

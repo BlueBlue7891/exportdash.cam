@@ -140,7 +140,6 @@ export interface LayoutCameraConfig {
   all: { 
     topRow: [string, string, string]; 
     bottomRow: [string, string, string];
-    columnEnabled?: [boolean, boolean, boolean]; // Enable/disable each column (left, center, right)
   };
 }
 
@@ -155,7 +154,6 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutCameraConfig = {
   all: {
     topRow: ['left_repeater', 'front', 'right_repeater'],
     bottomRow: ['left_pillar', 'back', 'right_pillar'],
-    columnEnabled: [true, true, true], // All columns enabled by default
   },
 };
 
@@ -173,7 +171,6 @@ export function loadLayoutConfig(): LayoutCameraConfig {
       all: {
         topRow: parsed?.all?.topRow?.length === 3 ? parsed.all.topRow : [...DEFAULT_LAYOUT_CONFIG.all.topRow],
         bottomRow: parsed?.all?.bottomRow?.length === 3 ? parsed.all.bottomRow : [...DEFAULT_LAYOUT_CONFIG.all.bottomRow],
-        columnEnabled: parsed?.all?.columnEnabled?.length === 3 ? parsed.all.columnEnabled : [true, true, true],
       },
     };
   } catch {
