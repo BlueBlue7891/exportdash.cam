@@ -1292,10 +1292,11 @@ export function VideoPlayer({
             <span className="text-[10px] text-gray-500 mr-1">Cameras:</span>
             {BUTTON_ORDER.map((angle) => {
               const isAvailable = availableAngles.includes(angle);
-              // In multi-view layouts (not single), disable camera buttons
-              const isMultiView = layout !== 'single';
+              // In triple/all layouts, disable camera buttons (they show all cameras at once)
+              // PIP and single layouts allow camera switching
+              const isTripleOrAll = layout === 'triple' || layout === 'all';
               const canSelect = layout === 'single' || layout === 'pip' || isEditMode || hasCustomCameraTrack;
-              const isDisabled = !isAvailable || isMultiView || !canSelect;
+              const isDisabled = !isAvailable || isTripleOrAll || !canSelect;
               const isActive = selectedAngle === angle && !useCustomCameraTrack && canSelect;
 
               return (
