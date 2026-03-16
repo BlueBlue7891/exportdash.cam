@@ -1307,25 +1307,30 @@ export function VideoPlayer({
       );
     }
 
-    // All 6 cameras - 2 rows of 3
+    // All 6 cameras - 2 rows of 3 (or 2 if column disabled)
     if (layout === 'all') {
-      const rows = [
-        layoutConfig.all.topRow,
-        layoutConfig.all.bottomRow,
-      ];
+      const { topRow, bottomRow, columnEnabled = [true, true, true] } = layoutConfig.all;
+      
+      // Filter out disabled columns for display
+      const enabledIndices = columnEnabled.map((enabled, idx) => enabled ? idx : -1).filter(i => i !== -1);
+      
+      // If only 2 columns enabled, use 2x2 grid, otherwise 2x3
+      const displayTopRow = enabledIndices.map(idx => topRow[idx]);
+      const displayBottomRow = enabledIndices.map(idx => bottomRow[idx]);
+      const rows = [displayTopRow, displayBottomRow];
 
       return (
         <div key={`all-${selectedAngle}-${trackHighlightVersion}`} className="relative w-full bg-black flex items-center justify-center overflow-hidden aspect-video max-h-full">
           <div className="absolute inset-0 flex flex-col gap-1 p-1">
             {rows.map((row, rowIdx) => (
               <div key={rowIdx} className="flex-1 flex gap-1 min-h-0">
-                {row.map((angle, colIdx) => {
+                {row.map((angle, displayIdx) => {
                   const isMain = angle === selectedAngle;
                   const isAvailable = availableAngles.includes(angle);
 
                   return (
                     <div
-                      key={colIdx}
+                      key={displayIdx}
                       className={`relative flex-1 rounded overflow-hidden transition-all duration-150 ${
                         isMain ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : ''
                       } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
