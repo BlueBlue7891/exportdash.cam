@@ -113,16 +113,16 @@ function PipSwapAnimation({ overlay }: PipSwapOverlayProps) {
   
   return (
     <>
-      {/* Old main video shrinking to corner */}
-      <div style={fromStyle} className="rounded-lg overflow-hidden border-2 border-white/50 shadow-2xl pointer-events-none bg-black">
-        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-          <span className="text-white/50 text-xs">{ANGLE_LABELS[overlay.fromAngle]}</span>
+      {/* Old main video shrinking to corner - transparent overlay */}
+      <div style={fromStyle} className="rounded-lg overflow-hidden border-2 border-white/30 shadow-2xl pointer-events-none">
+        <div className="w-full h-full bg-black/30 backdrop-blur-[1px] flex items-center justify-center">
+          <span className="text-white/70 text-xs font-medium bg-black/40 px-2 py-1 rounded">{ANGLE_LABELS[overlay.fromAngle]}</span>
         </div>
       </div>
-      {/* Corner video expanding to main */}
-      <div style={toStyle} className="rounded-lg overflow-hidden border-2 border-green-400 shadow-2xl pointer-events-none bg-black">
-        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-          <span className="text-green-400 text-xs font-bold">{ANGLE_LABELS[overlay.toAngle]}</span>
+      {/* Corner video expanding to main - transparent overlay */}
+      <div style={toStyle} className="rounded-lg overflow-hidden border-2 border-green-400/60 shadow-2xl pointer-events-none">
+        <div className="w-full h-full bg-green-900/20 backdrop-blur-[1px] flex items-center justify-center">
+          <span className="text-green-300 text-xs font-bold bg-black/50 px-2 py-1 rounded">{ANGLE_LABELS[overlay.toAngle]}</span>
         </div>
       </div>
     </>
@@ -728,18 +728,37 @@ export function VideoPlayer({
     // Handle triple view compatibility with camera track
     if (newLayout === 'triple' && hasCustomCameraTrack) {
       if (cameraTrackUniqueAngles.length === 3) {
-        // Auto-adjust triple view layout to match camera track angles
-        // Use the order from camera track (by first appearance)
-        const orderedAngles = cameraSegments
-          .map(seg => seg.angle)
-          .filter((angle, idx, arr) => arr.indexOf(angle) === idx); // unique, preserve order
+        // Smart merge: only replace non-matching positions, keep matching ones in place
+        const currentTripleAngles = layoutConfig.triple.cameras;
+        const trackAngles = cameraTrackUniqueAngles;
         
-        if (orderedAngles.length === 3) {
-          handleLayoutConfigChange({
-            ...layoutConfig,
-            triple: { cameras: orderedAngles as [string, string, string] }
-          });
+        // Find which track angles are already in the layout and where
+        const newTripleAngles = [...currentTripleAngles];
+        const usedTrackAngles = new Set<string>();
+        
+        // First pass: keep matching angles in their current positions
+        for (let i = 0; i < 3; i++) {
+          if (trackAngles.includes(currentTripleAngles[i])) {
+            usedTrackAngles.add(currentTripleAngles[i]);
+          }
         }
+        
+        // Second pass: fill in non-matching positions with unused track angles
+        for (let i = 0; i < 3; i++) {
+          if (!trackAngles.includes(currentTripleAngles[i])) {
+            // Find an unused track angle
+            const unusedAngle = trackAngles.find(a => !usedTrackAngles.has(a));
+            if (unusedAngle) {
+              newTripleAngles[i] = unusedAngle;
+              usedTrackAngles.add(unusedAngle);
+            }
+          }
+        }
+        
+        handleLayoutConfigChange({
+          ...layoutConfig,
+          triple: { cameras: newTripleAngles as [string, string, string] }
+        });
       }
     }
     
@@ -1617,14 +1636,38 @@ export function VideoPlayer({
             {LAYOUTS.map((l) => {
               // Check if triple view is disabled due to camera track incompatibility
               const isTripleDisabled = l.id === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length !== 3;
-              const tooltipContent = isTripleDisabled 
-                ? `Triple view requires exactly 3 camera angles in track (current: ${cameraTrackUniqueAngles.length}). Add or remove tracks to enable.`
-                : l.label;
+              // Dynamic tooltip based on camera track count
+              let tooltipContent = l.label;
+              if (l.id === 'triple' && hasCustomCameraTrack) {
+                const count = cameraTrackUniqueAngles.length;
+                if (count < 3) {
+                  tooltipContent = `Triple view requires 3 camera angles (current: ${count}). Add ${3 - count} more track(s) to enable.`;
+                } else if (count > 3) {
+                  tooltipContent = `Triple view requires 3 camera angles (current: ${count}). Remove ${count - 3} track(s) to enable.`;
+                }
+              }
               
               return (
-                <Tooltip key={l.id} content={tooltipContent} position="top">
+                <Tooltip 
+                  key={l.id} 
+                  content={
+                    <div className="flex flex-col items-center">
+                      <span>{tooltipContent}</span>
+                      {l.id !== 'single' && <span className="text-[10px] text-gray-400 mt-1">Right-click to configure</span>}
+                    </div>
+                  } 
+                  position="top"
+                >
                   <button
                     onClick={() => !isTripleDisabled && handleLayoutChange(l.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (l.id !== 'single') {
+                        // Open layout config for this specific layout
+                        setLayout(l.id);
+                        setShowLayoutConfig(true);
+                      }
+                    }}
                     disabled={isTripleDisabled}
                     className={`p-1.5 rounded text-xs font-medium transition-all ${
                       layout === l.id

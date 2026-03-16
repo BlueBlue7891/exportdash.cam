@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, ReactNode, useEffect } from 'react';
 
 interface TooltipProps {
-  content: string;
+  content: ReactNode;
   children: ReactNode;
   position?: 'top' | 'bottom' | 'left' | 'right';
   delay?: number;
@@ -21,7 +21,8 @@ export function Tooltip({ content, children, position = 'top', delay = 0 }: Tool
 
     const triggerRect = triggerRef.current.getBoundingClientRect();
     // Get actual tooltip size if available, otherwise estimate
-    const tooltipWidth = tooltipRef.current?.offsetWidth || content.length * 7 + 16;
+    const contentStr = typeof content === 'string' ? content : '';
+    const tooltipWidth = tooltipRef.current?.offsetWidth || contentStr.length * 7 + 16;
     const tooltipHeight = tooltipRef.current?.offsetHeight || 28;
 
     let x = 0;
