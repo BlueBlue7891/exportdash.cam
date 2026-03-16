@@ -520,6 +520,17 @@ export function VideoPlayer({
     }
   }, [currentMomentIndex]);
 
+  // Track last camera track update for highlight refresh in triple/all layouts
+  const [trackHighlightVersion, setTrackHighlightVersion] = useState(0);
+  
+  // PiP layout camera switch animation state
+  const [pipSwitchAnim, setPipSwitchAnim] = useState<{
+    active: boolean;
+    fromAngle: string | null;
+    toAngle: string | null;
+    flashCorners: string[];
+  }>({ active: false, fromAngle: null, toAngle: null, flashCorners: [] });
+
   // Switch cameras based on camera segments (when custom track enabled)
   // Works both during playback AND when scrubbing timeline
   useEffect(() => {
@@ -562,6 +573,36 @@ export function VideoPlayer({
       }
       
       setSelectedAngle(currentSegment.angle);
+      
+      // Force highlight refresh in triple/all layouts
+      if (layout === 'triple' || layout === 'all') {
+        setTrackHighlightVersion(v => v + 1);
+      }
+      
+      // Trigger PiP switch animation
+      if (layout === 'pip') {
+        const newCorners = layoutConfig.pip.corners;
+        const swappedInCorners: string[] = [];
+        
+        // Find which corners now contain the new main angle (they were swapped in)
+        newCorners.forEach((cornerAngle, idx) => {
+          if (cornerAngle === currentSegment.angle) {
+            swappedInCorners.push(`${idx}-${currentSegment.angle}`);
+          }
+        });
+        
+        setPipSwitchAnim({
+          active: true,
+          fromAngle: selectedAngle,
+          toAngle: currentSegment.angle,
+          flashCorners: swappedInCorners
+        });
+        
+        // Clear animation after 600ms
+        setTimeout(() => {
+          setPipSwitchAnim({ active: false, fromAngle: null, toAngle: null, flashCorners: [] });
+        }, 600);
+      }
     }
   }, [useCustomCameraTrack, absoluteTime, cameraSegments, selectedAngle, localTime, isPlaying, layout, layoutConfig]);
 
@@ -883,11 +924,12 @@ export function VideoPlayer({
           onClick={() => isMain ? togglePlay() : handleAngleChange(angle)}
         />
         {isMain && layout !== 'single' && layout !== 'pip' && (
-          <div className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full" />
+          <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
         )}
-        {/* Angle label for all videos (blue for main, black for others) */}
+        {/* Angle label for all videos (green for main in multi-view, blue for pip main, black for others) */}
         {showLabel && (
           <div className={`absolute bottom-1 ${moreLabelSpacing ? 'left-2' : 'left-1'} px-1.5 py-0.5 backdrop-blur-sm rounded text-[10px] text-white/90 font-medium pointer-events-none ${
+            isMain && layout !== 'single' && layout !== 'pip' ? 'bg-green-600/70 border border-green-400/50' : 
             isMain ? 'bg-blue-600/50' : 'bg-black/50'
           }`}>
             {ANGLE_LABELS[angle] || angle}
@@ -932,6 +974,11 @@ export function VideoPlayer({
               Clip {currentMomentIndex + 1}/{sequence.clipCount}
             </div>
           )}
+          {/* Bottom center angle label */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm rounded-full px-4 py-1.5 text-sm font-medium flex items-center gap-2 border border-white/10 shadow-lg animate-fadeIn">
+            <span className="text-blue-400">{ANGLE_ICONS[selectedAngle]}</span>
+            <span className="text-white">{ANGLE_LABELS[selectedAngle]}</span>
+          </div>
           {renderPlayOverlay()}
         </div>
       );
@@ -1004,10 +1051,17 @@ export function VideoPlayer({
                 );
               }
               if (!availableAngles.includes(value)) return null;
+              
+              // Check if this corner should show flash animation
+              const cornerKey = `${idx}-${value}`;
+              const shouldFlash = pipSwitchAnim.active && pipSwitchAnim.flashCorners.includes(cornerKey);
+              
               return (
                 <div
                   key={`pip-${idx}-${value}`}
-                  className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 transition-all`}
+                  className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 transition-all ${
+                    shouldFlash ? 'animate-pipFlash' : ''
+                  }`}
                   onClick={() => handlePipCornerClick(value, idx)}
                 >
                   {renderVideo(value, false, 'w-full', true)}
@@ -1035,8 +1089,8 @@ export function VideoPlayer({
               return (
                 <div
                   key={idx}
-                  className={`relative overflow-hidden ${
-                    isMain ? 'ring-2 ring-inset ring-blue-500' : ''
+                  className={`relative overflow-hidden transition-all duration-150 ${
+                    isMain ? 'ring-2 ring-inset ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : ''
                   } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
                   onClick={() => isAvailable && handleAngleChange(angle)}
                 >
@@ -1069,8 +1123,8 @@ export function VideoPlayer({
                   return (
                     <div
                       key={colIdx}
-                      className={`relative flex-1 rounded overflow-hidden ${
-                        isMain ? 'ring-2 ring-blue-500' : ''
+                      className={`relative flex-1 rounded overflow-hidden transition-all duration-150 ${
+                        isMain ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : ''
                       } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
                       onClick={() => isAvailable && handleAngleChange(angle)}
                     >
@@ -1148,6 +1202,18 @@ export function VideoPlayer({
                   speedUnit={speedUnit}
                   onSpeedUnitToggle={() => setSpeedUnit(prev => prev === 'mph' ? 'kmh' : 'mph')}
                 />
+              </div>
+            )}
+
+            {/* Main Camera label for PiP layout - Below Telemetry */}
+            {layout === 'pip' && (
+              <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-none ${
+                showTelemetry ? (showDateTime ? 'top-[120px]' : 'top-[88px]') : (showDateTime ? 'top-8' : 'top-1')
+              }`}>
+                <div className="px-2 py-0.5 rounded-md bg-blue-600/80 backdrop-blur-sm text-white text-[10px] font-medium flex items-center gap-1">
+                  <span>Main:</span>
+                  <span className="font-semibold">{ANGLE_LABELS[selectedAngle]}</span>
+                </div>
               </div>
             )}
 
@@ -1373,18 +1439,20 @@ export function VideoPlayer({
               const needsReset = !isDefaultLayout || !isDefaultAngle;
               
               return (
-                <Tooltip content="Reset PIP layout" position="top">
+                <Tooltip content={needsReset ? "Reset PIP layout" : "Already default layout"} position="top">
                   <button
                     onClick={() => {
+                      if (!needsReset) return;
                       handleLayoutConfigChange({ ...DEFAULT_LAYOUT_CONFIG });
                       // Also reset main angle to front
                       const frontAngle = 'front';
                       handleAngleChange(frontAngle);
                     }}
+                    disabled={!needsReset}
                     className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
                       needsReset
-                        ? 'bg-blue-500 text-white ring-2 ring-blue-400/50'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        ? 'bg-blue-500 text-white ring-2 ring-blue-400/50 hover:bg-blue-600 cursor-pointer'
+                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     }`}
                   >
                     <IconRefresh size={14} />
