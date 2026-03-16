@@ -290,6 +290,18 @@ export function VideoPlayer({
     }
   }, [hasCustomCameraTrack, useCustomCameraTrack]);
 
+  // Auto-disable custom camera track when only one segment remains
+  // and sync selectedAngle with the remaining segment
+  useEffect(() => {
+    if (!hasCustomCameraTrack && useCustomCameraTrack) {
+      setUseCustomCameraTrack(false);
+      // Sync selectedAngle with the remaining segment's angle
+      if (cameraSegments.length === 1) {
+        setSelectedAngle(cameraSegments[0].angle);
+      }
+    }
+  }, [hasCustomCameraTrack, useCustomCameraTrack, cameraSegments]);
+
   // Auto-adjust overlay visibility based on data availability
   // Auto-enable when switching to a new sequence or when data becomes available
   useEffect(() => {
@@ -1322,12 +1334,27 @@ export function VideoPlayer({
                 </Tooltip>
               );
             })}
-            {/* Custom camera track button */}
+            {/* Layout config button - show after camera buttons in multi-view layouts */}
+            {layout !== 'single' && (
+              <Tooltip content="Configure layout" position="top">
+                <button
+                  onClick={() => setShowLayoutConfig(prev => !prev)}
+                  className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
+                    showLayoutConfig
+                      ? 'bg-blue-500 text-white ring-2 ring-blue-400/50'
+                      : 'bg-gray-700 text-cyan-400 hover:bg-gray-600 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
+                  }`}
+                >
+                  <IconSettings2 size={14} />
+                </button>
+              </Tooltip>
+            )}
+            {/* Custom camera track button - show to the right of config button */}
             {hasCustomCameraTrack && (
               <Tooltip content="Use custom camera track" position="top">
                 <button
                   onClick={() => setUseCustomCameraTrack(true)}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
+                  className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ml-1 ${
                     useCustomCameraTrack
                       ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1339,36 +1366,32 @@ export function VideoPlayer({
               </Tooltip>
             )}
             {/* Reset button for PIP layout in non-Track mode */}
-            {!hasCustomCameraTrack && layout === 'pip' && (
-              <Tooltip content="Reset PIP layout" position="top">
-                <button
-                  onClick={() => {
-                    handleLayoutConfigChange({ ...DEFAULT_LAYOUT_CONFIG });
-                    // Also reset main angle to front
-                    const frontAngle = 'front';
-                    handleAngleChange(frontAngle);
-                  }}
-                  className="p-1.5 rounded text-xs font-medium transition-all bg-gray-700 text-gray-300 hover:bg-gray-600"
-                >
-                  <IconRefresh size={14} />
-                </button>
-              </Tooltip>
-            )}
-            {/* Layout config button - show after camera buttons in multi-view layouts */}
-            {layout !== 'single' && (
-              <Tooltip content="Configure layout" position="top">
-                <button
-                  onClick={() => setShowLayoutConfig(prev => !prev)}
-                  className={`p-1.5 rounded-lg text-xs font-medium transition-all shadow-sm ml-1 ${
-                    showLayoutConfig
-                      ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-blue-500/30 ring-2 ring-blue-400/50'
-                      : 'bg-gradient-to-br from-gray-700 to-gray-800 text-cyan-400 hover:from-gray-600 hover:to-gray-700 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
-                  }`}
-                >
-                  <IconSettings2 size={14} />
-                </button>
-              </Tooltip>
-            )}
+            {!hasCustomCameraTrack && layout === 'pip' && (() => {
+              // Check if layout differs from default or angle is not front
+              const isDefaultLayout = JSON.stringify(layoutConfig.pip.corners) === JSON.stringify(DEFAULT_LAYOUT_CONFIG.pip.corners);
+              const isDefaultAngle = selectedAngle === 'front';
+              const needsReset = !isDefaultLayout || !isDefaultAngle;
+              
+              return (
+                <Tooltip content="Reset PIP layout" position="top">
+                  <button
+                    onClick={() => {
+                      handleLayoutConfigChange({ ...DEFAULT_LAYOUT_CONFIG });
+                      // Also reset main angle to front
+                      const frontAngle = 'front';
+                      handleAngleChange(frontAngle);
+                    }}
+                    className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
+                      needsReset
+                        ? 'bg-blue-500 text-white ring-2 ring-blue-400/50'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <IconRefresh size={14} />
+                  </button>
+                </Tooltip>
+              );
+            })()}
           </div>
 
           {/* Divider */}
