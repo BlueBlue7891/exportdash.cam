@@ -581,20 +581,33 @@ export function VideoPlayer({
       
       // Trigger PiP switch animation
       if (layout === 'pip') {
-        const newCorners = layoutConfig.pip.corners;
-        const swappedInCorners: string[] = [];
+        // Calculate what the new corners will be after the swap
+        const currentCorners = layoutConfig.pip.corners;
+        const newMainAngle = currentSegment.angle;
+        const newAngleIdx = currentCorners.findIndex(c => c === newMainAngle);
+        let nextCorners = [...currentCorners];
         
-        // Find which corners now contain the new main angle (they were swapped in)
-        newCorners.forEach((cornerAngle, idx) => {
-          if (cornerAngle === currentSegment.angle) {
-            swappedInCorners.push(`${idx}-${currentSegment.angle}`);
+        if (newAngleIdx !== -1) {
+          // New angle is in corners, swap with current main angle
+          nextCorners[newAngleIdx] = selectedAngle;
+          const currentAngleIdx = currentCorners.findIndex(c => c === selectedAngle);
+          if (currentAngleIdx !== -1 && currentAngleIdx !== newAngleIdx) {
+            nextCorners[currentAngleIdx] = newMainAngle;
+          }
+        }
+        
+        // Find which corners will contain the OLD main angle after swap (the swapped-in corners)
+        const swappedInCorners: string[] = [];
+        nextCorners.forEach((cornerAngle, idx) => {
+          if (cornerAngle === selectedAngle) {
+            swappedInCorners.push(`${idx}-${selectedAngle}`);
           }
         });
         
         setPipSwitchAnim({
           active: true,
           fromAngle: selectedAngle,
-          toAngle: currentSegment.angle,
+          toAngle: newMainAngle,
           flashCorners: swappedInCorners
         });
         
@@ -975,7 +988,10 @@ export function VideoPlayer({
             </div>
           )}
           {/* Bottom center angle label */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm rounded-full px-4 py-1.5 text-sm font-medium flex items-center gap-2 border border-white/10 shadow-lg animate-fadeIn">
+          <div 
+            key={`angle-label-${selectedAngle}`}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md rounded-full px-4 py-1.5 text-sm font-medium flex items-center gap-2 border border-white/20 shadow-lg animate-fadeIn"
+          >
             <span className="text-blue-400">{ANGLE_ICONS[selectedAngle]}</span>
             <span className="text-white">{ANGLE_LABELS[selectedAngle]}</span>
           </div>
@@ -1080,7 +1096,7 @@ export function VideoPlayer({
       const tripleAngles = layoutConfig.triple.cameras;
 
       return (
-        <div className="relative w-full bg-black flex items-center justify-center overflow-hidden aspect-video max-h-full">
+        <div key={`triple-${selectedAngle}-${trackHighlightVersion}`} className="relative w-full bg-black flex items-center justify-center overflow-hidden aspect-video max-h-full">
           <div className="grid grid-cols-3 w-full">
             {tripleAngles.map((angle, idx) => {
               const isMain = angle === selectedAngle;
@@ -1112,7 +1128,7 @@ export function VideoPlayer({
       ];
 
       return (
-        <div className="relative w-full bg-black flex items-center justify-center overflow-hidden aspect-video max-h-full">
+        <div key={`all-${selectedAngle}-${trackHighlightVersion}`} className="relative w-full bg-black flex items-center justify-center overflow-hidden aspect-video max-h-full">
           <div className="absolute inset-0 flex flex-col gap-1 p-1">
             {rows.map((row, rowIdx) => (
               <div key={rowIdx} className="flex-1 flex gap-1 min-h-0">
@@ -1210,7 +1226,7 @@ export function VideoPlayer({
               <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-none ${
                 showTelemetry ? (showDateTime ? 'top-[120px]' : 'top-[88px]') : (showDateTime ? 'top-8' : 'top-1')
               }`}>
-                <div className="px-2 py-0.5 rounded-md bg-blue-600/80 backdrop-blur-sm text-white text-[10px] font-medium flex items-center gap-1">
+                <div className="px-2 py-0.5 rounded-md bg-green-600/50 backdrop-blur-md text-white text-[10px] font-medium flex items-center gap-1 border border-green-400/30">
                   <span>Main:</span>
                   <span className="font-semibold">{ANGLE_LABELS[selectedAngle]}</span>
                 </div>
@@ -1451,8 +1467,8 @@ export function VideoPlayer({
                     disabled={!needsReset}
                     className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
                       needsReset
-                        ? 'bg-blue-500 text-white ring-2 ring-blue-400/50 hover:bg-blue-600 cursor-pointer'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                        : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'
                     }`}
                   >
                     <IconRefresh size={14} />
