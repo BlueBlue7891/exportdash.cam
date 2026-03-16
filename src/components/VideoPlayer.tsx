@@ -524,9 +524,33 @@ export function VideoPlayer({
     if (currentSegment && currentSegment.angle !== selectedAngle) {
       // Save playback state before switching so video resumes after remount
       pendingRestoreRef.current = { time: localTime, playing: isPlaying };
+      
+      // In PiP layout, swap the new angle with current angle in corners
+      if (layout === 'pip') {
+        const corners = layoutConfig.pip.corners;
+        const newAngleIdx = corners.findIndex(c => c === currentSegment.angle);
+        
+        if (newAngleIdx !== -1) {
+          // New angle is in corners, swap with current main angle
+          const newCorners = [...corners];
+          newCorners[newAngleIdx] = selectedAngle;
+          
+          // Find if current angle is already in corners
+          const currentAngleIdx = corners.findIndex(c => c === selectedAngle);
+          if (currentAngleIdx !== -1 && currentAngleIdx !== newAngleIdx) {
+            newCorners[currentAngleIdx] = currentSegment.angle;
+          }
+          
+          handleLayoutConfigChange({
+            ...layoutConfig,
+            pip: { corners: newCorners as [string, string, string, string, string] }
+          });
+        }
+      }
+      
       setSelectedAngle(currentSegment.angle);
     }
-  }, [useCustomCameraTrack, absoluteTime, cameraSegments, selectedAngle, localTime, isPlaying]);
+  }, [useCustomCameraTrack, absoluteTime, cameraSegments, selectedAngle, localTime, isPlaying, layout, layoutConfig]);
 
   // Custom setters that preserve playback state
   const handleLayoutChange = useCallback((newLayout: LayoutType) => {
@@ -538,8 +562,32 @@ export function VideoPlayer({
   const handleAngleChange = useCallback((newAngle: string) => {
     if (newAngle === selectedAngle) return;
     pendingRestoreRef.current = { time: localTime, playing: isPlaying };
+    
+    // In PiP layout, swap the new angle with current angle in corners
+    if (layout === 'pip') {
+      const corners = layoutConfig.pip.corners;
+      const newAngleIdx = corners.findIndex(c => c === newAngle);
+      
+      if (newAngleIdx !== -1) {
+        // New angle is in corners, swap with current main angle
+        const newCorners = [...corners];
+        newCorners[newAngleIdx] = selectedAngle;
+        
+        // Find if current angle is already in corners (shouldn't happen normally)
+        const currentAngleIdx = corners.findIndex(c => c === selectedAngle);
+        if (currentAngleIdx !== -1 && currentAngleIdx !== newAngleIdx) {
+          newCorners[currentAngleIdx] = newAngle;
+        }
+        
+        handleLayoutConfigChange({
+          ...layoutConfig,
+          pip: { corners: newCorners as [string, string, string, string, string] }
+        });
+      }
+    }
+    
     setSelectedAngle(newAngle);
-  }, [selectedAngle, localTime, isPlaying]);
+  }, [selectedAngle, localTime, isPlaying, layout, layoutConfig]);
 
   // Fullscreen handler
   const toggleFullscreen = useCallback(() => {
