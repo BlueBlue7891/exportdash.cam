@@ -77,6 +77,58 @@ interface LayoutConfig {
   description: string;
 }
 
+// PiP Swap Animation Component
+interface PipSwapOverlayProps {
+  overlay: {
+    active: boolean;
+    fromAngle: string;
+    toAngle: string;
+    fromRect: DOMRect | null;
+    toRect: DOMRect | null;
+  };
+}
+
+function PipSwapAnimation({ overlay }: PipSwapOverlayProps) {
+  if (!overlay.fromRect || !overlay.toRect) return null;
+  
+  const fromStyle: React.CSSProperties = {
+    position: 'fixed',
+    left: overlay.fromRect.left,
+    top: overlay.fromRect.top,
+    width: overlay.fromRect.width,
+    height: overlay.fromRect.height,
+    zIndex: 100,
+    animation: 'pipSwapOut 400ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
+  };
+  
+  const toStyle: React.CSSProperties = {
+    position: 'fixed',
+    left: overlay.toRect.left,
+    top: overlay.toRect.top,
+    width: overlay.toRect.width,
+    height: overlay.toRect.height,
+    zIndex: 101,
+    animation: 'pipSwapIn 400ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
+  };
+  
+  return (
+    <>
+      {/* Old main video shrinking to corner */}
+      <div style={fromStyle} className="rounded-lg overflow-hidden border-2 border-white/50 shadow-2xl pointer-events-none bg-black">
+        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+          <span className="text-white/50 text-xs">{ANGLE_LABELS[overlay.fromAngle]}</span>
+        </div>
+      </div>
+      {/* Corner video expanding to main */}
+      <div style={toStyle} className="rounded-lg overflow-hidden border-2 border-green-400 shadow-2xl pointer-events-none bg-black">
+        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+          <span className="text-green-400 text-xs font-bold">{ANGLE_LABELS[overlay.toAngle]}</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
 const LAYOUTS: LayoutConfig[] = [
   {
     id: 'single',
@@ -180,6 +232,23 @@ export function VideoPlayer({
   const hasCustomCameraTrack = useMemo(() => {
     return cameraSegments.length > 1;
   }, [cameraSegments]);
+  
+  // Get unique angles from camera track
+  const cameraTrackUniqueAngles = useMemo(() => {
+    const angles = new Set(cameraSegments.map(seg => seg.angle));
+    return Array.from(angles);
+  }, [cameraSegments]);
+  
+  // Check if triple view is compatible with current camera track
+  const isTripleViewCompatible = useMemo(() => {
+    if (!hasCustomCameraTrack) return true; // No custom track, always compatible
+    return cameraTrackUniqueAngles.length === 3;
+  }, [hasCustomCameraTrack, cameraTrackUniqueAngles]);
+  
+  // Get available angles for triple view palette (when no custom track)
+  const tripleViewLayoutAngles = useMemo(() => {
+    return layoutConfig.triple.cameras;
+  }, [layoutConfig.triple.cameras]);
 
   // Video URL management
   const [videoUrls, setVideoUrls] = useState<Record<string, string>>({});
@@ -530,6 +599,19 @@ export function VideoPlayer({
     toAngle: string | null;
     flashCorners: string[];
   }>({ active: false, fromAngle: null, toAngle: null, flashCorners: [] });
+  
+  // PiP swap animation overlay state
+  const [pipSwapOverlay, setPipSwapOverlay] = useState<{
+    active: boolean;
+    fromAngle: string;
+    toAngle: string;
+    fromRect: DOMRect | null;
+    toRect: DOMRect | null;
+  } | null>(null);
+  
+  // Refs for measuring video elements
+  const mainVideoContainerRef = useRef<HTMLDivElement>(null);
+  const cornerVideoRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   // Switch cameras based on camera segments (when custom track enabled)
   // Works both during playback AND when scrubbing timeline
@@ -581,40 +663,59 @@ export function VideoPlayer({
       
       // Trigger PiP switch animation
       if (layout === 'pip') {
-        // Calculate what the new corners will be after the swap
         const currentCorners = layoutConfig.pip.corners;
         const newMainAngle = currentSegment.angle;
         const newAngleIdx = currentCorners.findIndex(c => c === newMainAngle);
-        let nextCorners = [...currentCorners];
         
         if (newAngleIdx !== -1) {
-          // New angle is in corners, swap with current main angle
+          // Get positions for swap animation
+          const mainRect = mainVideoContainerRef.current?.getBoundingClientRect();
+          const cornerRect = cornerVideoRefs.current[newAngleIdx]?.getBoundingClientRect();
+          
+          if (mainRect && cornerRect) {
+            // Start swap overlay animation
+            setPipSwapOverlay({
+              active: true,
+              fromAngle: selectedAngle,
+              toAngle: newMainAngle,
+              fromRect: mainRect,
+              toRect: cornerRect
+            });
+            
+            // Clear swap animation after 400ms
+            setTimeout(() => {
+              setPipSwapOverlay(null);
+            }, 400);
+          }
+          
+          // Calculate what the new corners will be after the swap
+          let nextCorners = [...currentCorners];
           nextCorners[newAngleIdx] = selectedAngle;
           const currentAngleIdx = currentCorners.findIndex(c => c === selectedAngle);
           if (currentAngleIdx !== -1 && currentAngleIdx !== newAngleIdx) {
             nextCorners[currentAngleIdx] = newMainAngle;
           }
+          
+          // Find which corners will contain the OLD main angle after swap
+          const swappedInCorners: string[] = [];
+          nextCorners.forEach((cornerAngle, idx) => {
+            if (cornerAngle === selectedAngle) {
+              swappedInCorners.push(`${idx}-${selectedAngle}`);
+            }
+          });
+          
+          setPipSwitchAnim({
+            active: true,
+            fromAngle: selectedAngle,
+            toAngle: newMainAngle,
+            flashCorners: swappedInCorners
+          });
+          
+          // Clear flash animation after 600ms
+          setTimeout(() => {
+            setPipSwitchAnim({ active: false, fromAngle: null, toAngle: null, flashCorners: [] });
+          }, 600);
         }
-        
-        // Find which corners will contain the OLD main angle after swap (the swapped-in corners)
-        const swappedInCorners: string[] = [];
-        nextCorners.forEach((cornerAngle, idx) => {
-          if (cornerAngle === selectedAngle) {
-            swappedInCorners.push(`${idx}-${selectedAngle}`);
-          }
-        });
-        
-        setPipSwitchAnim({
-          active: true,
-          fromAngle: selectedAngle,
-          toAngle: newMainAngle,
-          flashCorners: swappedInCorners
-        });
-        
-        // Clear animation after 600ms
-        setTimeout(() => {
-          setPipSwitchAnim({ active: false, fromAngle: null, toAngle: null, flashCorners: [] });
-        }, 600);
       }
     }
   }, [useCustomCameraTrack, absoluteTime, cameraSegments, selectedAngle, localTime, isPlaying, layout, layoutConfig]);
@@ -623,8 +724,27 @@ export function VideoPlayer({
   const handleLayoutChange = useCallback((newLayout: LayoutType) => {
     if (newLayout === layout) return;
     pendingRestoreRef.current = { time: localTime, playing: isPlaying };
+    
+    // Handle triple view compatibility with camera track
+    if (newLayout === 'triple' && hasCustomCameraTrack) {
+      if (cameraTrackUniqueAngles.length === 3) {
+        // Auto-adjust triple view layout to match camera track angles
+        // Use the order from camera track (by first appearance)
+        const orderedAngles = cameraSegments
+          .map(seg => seg.angle)
+          .filter((angle, idx, arr) => arr.indexOf(angle) === idx); // unique, preserve order
+        
+        if (orderedAngles.length === 3) {
+          handleLayoutConfigChange({
+            ...layoutConfig,
+            triple: { cameras: orderedAngles as [string, string, string] }
+          });
+        }
+      }
+    }
+    
     setLayout(newLayout);
-  }, [layout, localTime, isPlaying]);
+  }, [layout, localTime, isPlaying, hasCustomCameraTrack, cameraTrackUniqueAngles, cameraSegments, layoutConfig]);
 
   const handleAngleChange = useCallback((newAngle: string) => {
     if (newAngle === selectedAngle) return;
@@ -1046,6 +1166,7 @@ export function VideoPlayer({
       return (
         <div className="relative w-full bg-black flex items-center justify-center aspect-video max-h-full overflow-hidden">
           <div
+            ref={mainVideoContainerRef}
             className="relative max-w-full max-h-full"
             style={{ aspectRatio: `${ar}` }}
           >
@@ -1075,6 +1196,7 @@ export function VideoPlayer({
               return (
                 <div
                   key={`pip-${idx}-${value}`}
+                  ref={el => { cornerVideoRefs.current[idx] = el; }}
                   className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 transition-all ${
                     shouldFlash ? 'animate-pipFlash' : ''
                   }`}
@@ -1084,6 +1206,11 @@ export function VideoPlayer({
                 </div>
               );
             })}
+
+            {/* Swap animation overlay */}
+            {pipSwapOverlay?.active && (
+              <PipSwapAnimation overlay={pipSwapOverlay} />
+            )}
 
             {renderPlayOverlay()}
           </div>
@@ -1223,9 +1350,12 @@ export function VideoPlayer({
 
             {/* Main Camera label for PiP layout - Below Telemetry */}
             {layout === 'pip' && (
-              <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-none ${
-                showTelemetry ? (showDateTime ? 'top-[120px]' : 'top-[88px]') : (showDateTime ? 'top-8' : 'top-1')
-              }`}>
+              <div 
+                key={`pip-main-label-${selectedAngle}`}
+                className={`absolute left-1/2 -translate-x-1/2 pointer-events-none animate-fadeIn ${
+                  showTelemetry ? (showDateTime ? 'top-[120px]' : 'top-[88px]') : (showDateTime ? 'top-8' : 'top-1')
+                }`}
+              >
                 <div className="px-2 py-0.5 rounded-md bg-green-600/50 backdrop-blur-md text-white text-[10px] font-medium flex items-center gap-1 border border-green-400/30">
                   <span>Main:</span>
                   <span className="font-semibold">{ANGLE_LABELS[selectedAngle]}</span>
@@ -1467,7 +1597,7 @@ export function VideoPlayer({
                     disabled={!needsReset}
                     className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
                       needsReset
-                        ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                        ? 'bg-gray-700 text-cyan-400 hover:bg-gray-600 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
                         : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'
                     }`}
                   >
@@ -1484,20 +1614,31 @@ export function VideoPlayer({
           {/* Layout buttons */}
           <div className="flex items-center gap-1 relative">
             <span className="text-[10px] text-gray-500 mr-1">Layout:</span>
-            {LAYOUTS.map((l) => (
-              <Tooltip key={l.id} content={l.label} position="top">
-                <button
-                  onClick={() => handleLayoutChange(l.id)}
-                  className={`p-1.5 rounded text-xs font-medium transition-all ${
-                    layout === l.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                  }`}
-                >
-                  {l.icon}
-                </button>
-              </Tooltip>
-            ))}
+            {LAYOUTS.map((l) => {
+              // Check if triple view is disabled due to camera track incompatibility
+              const isTripleDisabled = l.id === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length !== 3;
+              const tooltipContent = isTripleDisabled 
+                ? `Triple view requires exactly 3 camera angles in track (current: ${cameraTrackUniqueAngles.length}). Add or remove tracks to enable.`
+                : l.label;
+              
+              return (
+                <Tooltip key={l.id} content={tooltipContent} position="top">
+                  <button
+                    onClick={() => !isTripleDisabled && handleLayoutChange(l.id)}
+                    disabled={isTripleDisabled}
+                    className={`p-1.5 rounded text-xs font-medium transition-all ${
+                      layout === l.id
+                        ? 'bg-blue-600 text-white'
+                        : isTripleDisabled
+                          ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                    }`}
+                  >
+                    {l.icon}
+                  </button>
+                </Tooltip>
+              );
+            })}
             {showLayoutConfig && layout !== 'single' && (
               <LayoutConfigPopover
                 layout={layout}
@@ -1811,6 +1952,9 @@ export function VideoPlayer({
             availableAngles={availableAngles}
             disableEventTooltip={showSequenceMenu}
             showEventMarker={showEventMarker}
+            layout={layout}
+            tripleViewAngles={layoutConfig.triple.cameras}
+            hasCustomCameraTrack={hasCustomCameraTrack}
           />
         )}
       </div>
