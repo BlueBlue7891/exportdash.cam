@@ -1036,7 +1036,7 @@ export function VideoPlayer({
           >
             {/* Date/Time Overlay - Top Center */}
             {showDateTime && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 pointer-events-none">
+              <div className="absolute top-1 left-1/2 -translate-x-1/2 pointer-events-none">
                 <div className="px-2 py-1 rounded-md bg-black/50 backdrop-blur-sm text-white/90 text-xs font-medium">
                   {(() => {
                     const realTime = new Date(currentMoment.timestamp.getTime() + localTime * 1000);
@@ -1056,7 +1056,7 @@ export function VideoPlayer({
             {/* Telemetry Overlay - Below Date/Time */}
             {showTelemetry && (
               <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-auto ${
-                showDateTime ? 'top-[42px]' : 'top-2'
+                showDateTime ? 'top-8' : 'top-1'
               }`}>
                 <TelemetryCard
                   seiData={seiData}
@@ -1414,12 +1414,12 @@ export function VideoPlayer({
                 </div>
               </button>
             </Tooltip>
-            <Tooltip content={`Speed: ${speedUnit === 'mph' ? 'mph' : 'km/h'} (click to switch)`} position="top">
+            <Tooltip content={`Speed: ${speedUnit === 'mph' ? 'MPH' : 'km/h'} (click to switch)`} position="top">
               <button
                 onClick={() => setSpeedUnit(prev => prev === 'mph' ? 'kmh' : 'mph')}
                 className="px-1.5 h-[28px] flex items-center rounded transition-all bg-gray-700 text-gray-300 hover:bg-gray-600 text-[10px] font-bold leading-none"
               >
-                {speedUnit === 'mph' ? 'mph' : 'km/h'}
+                {speedUnit === 'mph' ? 'MPH' : 'km/h'}
               </button>
             </Tooltip>
 
