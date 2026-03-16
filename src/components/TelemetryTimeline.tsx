@@ -7,6 +7,22 @@ import { SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { TrimPoints, CameraSegment, ANGLE_COLORS, ANGLE_LABELS, TeslaEvent } from '@/types/video';
 import { Tooltip } from './Tooltip';
 
+// Helper function to merge adjacent segments with the angle
+function mergeAdjacentSegments(segments: CameraSegment[]): CameraSegment[] {
+  if (segments.length <= 1) return segments;
+  
+  const merged: CameraSegment[] = [];
+  for (const seg of segments) {
+    const last = merged[merged.length - 1];
+    if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
+      last.endTime = seg.endTime;
+    } else {
+      merged.push({ ...seg });
+    }
+  }
+  return merged;
+}
+
 // Event Tooltip Component with fixed positioning to avoid clipping
 interface EventTooltipProps {
   event: TeslaEvent;
@@ -389,7 +405,7 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            onCameraSegmentsChange(newSegments);
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           } else if (newBoundary >= currSeg.endTime) {
             // Dragged all the way right - previous (left) segment wins, remove current
             const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
@@ -398,7 +414,7 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            onCameraSegmentsChange(newSegments);
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           } else {
             const newSegments = cameraSegments.map((seg, idx) => {
               if (idx === segIdx - 1) {
@@ -408,7 +424,8 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            onCameraSegmentsChange(newSegments);
+            // Check if the two segments now have the same angle and should be merged
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           }
           onTrimPreview?.(newBoundary);
         }
@@ -449,7 +466,7 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            onCameraSegmentsChange(newSegments);
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           } else if (newBoundary >= currSeg.endTime) {
             // Dragged all the way right - previous (left) segment wins
             const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
@@ -458,7 +475,7 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            onCameraSegmentsChange(newSegments);
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           } else {
             const newSegments = cameraSegments.map((seg, idx) => {
               if (idx === segIdx - 1) {
@@ -468,7 +485,8 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            onCameraSegmentsChange(newSegments);
+            // Check if the two segments now have the same angle and should be merged
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           }
           onTrimPreview?.(newBoundary);
         }
@@ -554,7 +572,8 @@ export function TelemetryTimeline({
       });
     }
     
-    onCameraSegmentsChange(newSegments);
+    // Merge adjacent segments with same angle
+    onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
   }, [cameraSegments, onCameraSegmentsChange]);
 
   // Handle segment click to change its angle
@@ -571,16 +590,7 @@ export function TelemetryTimeline({
     });
 
     // Merge adjacent segments with the same angle
-    const merged: CameraSegment[] = [];
-    for (const seg of newSegments) {
-      const last = merged[merged.length - 1];
-      if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
-        last.endTime = seg.endTime;
-      } else {
-        merged.push({ ...seg });
-      }
-    }
-    onCameraSegmentsChange(merged);
+    onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
   }, [cameraSegments, onCameraSegmentsChange]);
 
   // Handle drag start from angle palette
@@ -637,7 +647,8 @@ export function TelemetryTimeline({
       const newSegments = cameraSegments.map((seg, idx) =>
         idx === segIdx ? { ...seg, angle: draggingAngle } : seg
       );
-      onCameraSegmentsChange(newSegments);
+      // Merge adjacent segments with the same angle
+      onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
     } else {
       // Split the segment at drop position
       const newSegments = [...cameraSegments];
@@ -647,16 +658,7 @@ export function TelemetryTimeline({
       );
 
       // Merge adjacent segments with same angle
-      const merged: CameraSegment[] = [];
-      for (const seg of newSegments) {
-        const last = merged[merged.length - 1];
-        if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
-          last.endTime = seg.endTime;
-        } else {
-          merged.push({ ...seg });
-        }
-      }
-      onCameraSegmentsChange(merged);
+      onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
       
       // Move playhead to the split position (boundary)
       onSeek(dropTime);
