@@ -515,19 +515,89 @@ export function VideoPlayer({
     };
   }, [sequence?.id, currentMomentIndex]);
 
+  // Track play promises to handle abort errors
+  const playPromisesRef = useRef<Record<string, Promise<void> | null>>({});
+  
+  // Get currently visible angles based on layout
+  const getVisibleAngles = useCallback((): string[] => {
+    if (!currentMoment) return [];
+    const available = currentMoment.videos.map(v => v.angle);
+    
+    switch (layout) {
+      case 'single':
+        return [selectedAngle];
+      case 'pip':
+        return [selectedAngle, ...layoutConfig.pip.corners.filter(c => c !== 'none' && c !== 'map' && available.includes(c))];
+      case 'triple':
+        return layoutConfig.triple.cameras.filter(c => available.includes(c));
+      case 'all':
+        return [...layoutConfig.all.topRow, ...layoutConfig.all.bottomRow].filter(c => available.includes(c));
+      default:
+        return [selectedAngle];
+    }
+  }, [layout, selectedAngle, layoutConfig, currentMoment]);
+  
+  // Safe play function that handles abort errors
+  const safePlay = useCallback(async (video: HTMLVideoElement | null, angle: string) => {
+    if (!video || video.paused === false) return;
+    
+    // Cancel any existing play promise for this angle
+    const existingPromise = playPromisesRef.current[angle];
+    if (existingPromise) {
+      try {
+        await existingPromise;
+      } catch {
+        // Ignore errors from previous play attempts
+      }
+    }
+    
+    try {
+      const playPromise = video.play();
+      playPromisesRef.current[angle] = playPromise;
+      await playPromise;
+    } catch (err: any) {
+      // Ignore AbortError as it's expected when switching layouts
+      if (err?.name !== 'AbortError') {
+        console.warn(`Failed to play video ${angle}:`, err);
+      }
+    } finally {
+      playPromisesRef.current[angle] = null;
+    }
+  }, []);
+  
+  // Safe pause function
+  const safePause = useCallback((video: HTMLVideoElement | null, angle: string) => {
+    if (!video || video.paused) return;
+    
+    try {
+      video.pause();
+    } catch (err: any) {
+      // Ignore errors from pause attempts
+      if (err?.name !== 'AbortError') {
+        console.warn(`Failed to pause video ${angle}:`, err);
+      }
+    }
+  }, []);
+  
   // Sync all videos to main video time
   const syncVideos = useCallback((targetTime?: number) => {
     const mainTime = targetTime ?? mainVideoRef.current?.currentTime ?? 0;
+    const visibleAngles = getVisibleAngles();
+    
+    // Only sync visible videos to reduce overhead
     Object.entries(videoRefs.current).forEach(([angle, video]) => {
-      if (video && angle !== selectedAngle && Math.abs(video.currentTime - mainTime) > 0.1) {
-        video.currentTime = mainTime;
+      if (video && angle !== selectedAngle && visibleAngles.includes(angle)) {
+        // Only update if difference is significant (> 0.2s) to reduce jitter
+        if (Math.abs(video.currentTime - mainTime) > 0.2) {
+          video.currentTime = mainTime;
+        }
       }
     });
     if (targetTime !== undefined && mainVideoRef.current) {
       mainVideoRef.current.currentTime = targetTime;
       setLocalTime(targetTime);
     }
-  }, [selectedAngle]);
+  }, [selectedAngle, getVisibleAngles]);
 
   // Use requestAnimationFrame for smooth progress bar updates
   useEffect(() => {
@@ -598,30 +668,49 @@ export function VideoPlayer({
       if (videoWidth && videoHeight) {
         setVideoAspectRatio(videoWidth / videoHeight);
       }
+      
       // Restore playback position if pending
       if (pendingRestoreRef.current) {
         const { time, playing } = pendingRestoreRef.current;
         mainVideoRef.current.currentTime = time;
-        Object.values(videoRefs.current).forEach(v => {
+        Object.entries(videoRefs.current).forEach(([angle, v]) => {
           if (v) v.currentTime = time;
         });
+        
         if (playing) {
-          mainVideoRef.current.play().catch(() => {});
-          Object.values(videoRefs.current).forEach(v => v?.play().catch(() => {}));
+          // Use safe play with staggered timing
           setIsPlaying(true);
+          safePlay(mainVideoRef.current, 'main');
+          
+          const visibleAngles = getVisibleAngles();
+          let delay = 50;
+          Object.entries(videoRefs.current).forEach(([angle, v]) => {
+            if (v && angle !== selectedAngle && visibleAngles.includes(angle)) {
+              setTimeout(() => safePlay(v, angle), delay);
+              delay += 50;
+            }
+          });
         }
         pendingRestoreRef.current = null;
       }
 
       // Auto-play after advancing to next clip
       if (shouldAutoPlayRef.current) {
-        mainVideoRef.current.play().catch(() => {});
-        Object.values(videoRefs.current).forEach(v => v?.play().catch(() => {}));
         setIsPlaying(true);
+        safePlay(mainVideoRef.current, 'main');
+        
+        const visibleAngles = getVisibleAngles();
+        let delay = 50;
+        Object.entries(videoRefs.current).forEach(([angle, v]) => {
+          if (v && angle !== selectedAngle && visibleAngles.includes(angle)) {
+            setTimeout(() => safePlay(v, angle), delay);
+            delay += 50;
+          }
+        });
         shouldAutoPlayRef.current = false;
       }
     }
-  }, []);
+  }, [safePlay, selectedAngle, getVisibleAngles]);
 
   // When moment index changes, check if we should auto-play
   useEffect(() => {
@@ -764,6 +853,17 @@ export function VideoPlayer({
   // Custom setters that preserve playback state
   const handleLayoutChange = useCallback((newLayout: LayoutType) => {
     if (newLayout === layout) return;
+    
+    // Pause all videos before switching layout to prevent AbortError
+    if (isPlaying) {
+      safePause(mainVideoRef.current, 'main');
+      Object.entries(videoRefs.current).forEach(([angle, v]) => safePause(v, angle));
+      // Clear any pending play promises
+      Object.keys(playPromisesRef.current).forEach(key => {
+        playPromisesRef.current[key] = null;
+      });
+    }
+    
     pendingRestoreRef.current = { time: localTime, playing: isPlaying };
     
     // Handle triple view compatibility with camera track
@@ -804,10 +904,21 @@ export function VideoPlayer({
     }
     
     setLayout(newLayout);
-  }, [layout, localTime, isPlaying, hasCustomCameraTrack, cameraTrackUniqueAngles, cameraSegments, layoutConfig]);
+  }, [layout, localTime, isPlaying, hasCustomCameraTrack, cameraTrackUniqueAngles, cameraSegments, layoutConfig, safePause]);
 
   const handleAngleChange = useCallback((newAngle: string) => {
     if (newAngle === selectedAngle) return;
+    
+    // Pause all videos before switching angle to prevent AbortError
+    if (isPlaying) {
+      safePause(mainVideoRef.current, 'main');
+      Object.entries(videoRefs.current).forEach(([angle, v]) => safePause(v, angle));
+      // Clear any pending play promises
+      Object.keys(playPromisesRef.current).forEach(key => {
+        playPromisesRef.current[key] = null;
+      });
+    }
+    
     pendingRestoreRef.current = { time: localTime, playing: isPlaying };
     
     // In PiP layout, swap the new angle with current angle in corners
@@ -853,7 +964,7 @@ export function VideoPlayer({
     }
     
     setSelectedAngle(newAngle);
-  }, [selectedAngle, localTime, isPlaying, layout, layoutConfig, cameraSegments, absoluteTime, setCameraSegments]);
+  }, [selectedAngle, localTime, isPlaying, layout, layoutConfig, cameraSegments, absoluteTime, setCameraSegments, safePause]);
 
   // Fullscreen handler
   const toggleFullscreen = useCallback(() => {
@@ -900,18 +1011,30 @@ export function VideoPlayer({
     setTrimPoints(newTrimPoints);
   }, []);
 
-  const togglePlay = useCallback(() => {
-    if (mainVideoRef.current) {
-      if (isPlaying) {
-        mainVideoRef.current.pause();
-        Object.values(videoRefs.current).forEach(v => v?.pause());
-      } else {
-        mainVideoRef.current.play();
-        Object.values(videoRefs.current).forEach(v => v?.play().catch(() => {}));
-      }
-      setIsPlaying(!isPlaying);
+  const togglePlay = useCallback(async () => {
+    if (!mainVideoRef.current) return;
+    
+    if (isPlaying) {
+      // Pause all videos
+      safePause(mainVideoRef.current, 'main');
+      Object.entries(videoRefs.current).forEach(([angle, v]) => safePause(v, angle));
+      setIsPlaying(false);
+    } else {
+      // Play main video first
+      setIsPlaying(true);
+      await safePlay(mainVideoRef.current, 'main');
+      
+      // Then play visible videos with staggered timing to reduce load
+      const visibleAngles = getVisibleAngles();
+      let delay = 0;
+      Object.entries(videoRefs.current).forEach(([angle, v]) => {
+        if (v && angle !== selectedAngle && visibleAngles.includes(angle)) {
+          setTimeout(() => safePlay(v, angle), delay);
+          delay += 50; // 50ms stagger between each video
+        }
+      });
     }
-  }, [isPlaying]);
+  }, [isPlaying, selectedAngle, safePlay, safePause]);
 
   // Seek to absolute time (handles cross-clip seeking)
   const seekToAbsoluteTime = useCallback((targetAbsoluteTime: number) => {
@@ -1109,6 +1232,8 @@ export function VideoPlayer({
           src={url}
           className="w-full h-full object-contain bg-black"
           muted={!isMain}
+          preload={isMain ? "auto" : "metadata"}
+          playsInline
           onTimeUpdate={isMain ? handleTimeUpdate : undefined}
           onLoadedMetadata={isMain ? handleLoadedMetadata : undefined}
           onEnded={isMain ? handleVideoEnded : undefined}
