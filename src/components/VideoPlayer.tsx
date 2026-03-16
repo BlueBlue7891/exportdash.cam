@@ -210,11 +210,6 @@ export function VideoPlayer({
     setMapSize(loadMapSize());
   }, []);
 
-  const handleLayoutConfigChange = useCallback((newConfig: LayoutCameraConfig) => {
-    setLayoutConfig(newConfig);
-    saveLayoutConfig(newConfig);
-  }, []);
-
   const handleMapSizeChange = useCallback((newSize: number) => {
     const clampedSize = Math.max(MIN_MAP_SIZE, Math.min(MAX_MAP_SIZE, newSize));
     setMapSize(clampedSize);
@@ -249,6 +244,52 @@ export function VideoPlayer({
   const tripleViewLayoutAngles = useMemo(() => {
     return layoutConfig.triple.cameras;
   }, [layoutConfig.triple.cameras]);
+
+  // Handle layout config change with Camera Track sync
+  const handleLayoutConfigChange = useCallback((newConfig: LayoutCameraConfig) => {
+    const oldTripleAngles = layoutConfig.triple.cameras;
+    
+    setLayoutConfig(newConfig);
+    saveLayoutConfig(newConfig);
+    
+    // Sync Camera Track with triple view layout changes
+    if (layout === 'triple' && hasCustomCameraTrack && cameraSegments.length > 0) {
+      const newTripleAngles = newConfig.triple.cameras;
+      
+      // Check if triple view angles changed
+      const hasChanged = newTripleAngles.some((angle, idx) => angle !== oldTripleAngles[idx]);
+      
+      if (hasChanged) {
+        // Create mapping from old angles to new angles
+        const angleMapping: Record<string, string> = {};
+        oldTripleAngles.forEach((oldAngle, idx) => {
+          const newAngle = newTripleAngles[idx];
+          if (oldAngle !== newAngle) {
+            angleMapping[oldAngle] = newAngle;
+          }
+        });
+        
+        // Update camera segments: replace old angles with new ones
+        const updatedSegments = cameraSegments.map(seg => ({
+          ...seg,
+          angle: angleMapping[seg.angle] || seg.angle
+        }));
+        
+        // Merge adjacent segments with same angle
+        const merged: typeof cameraSegments = [];
+        for (const seg of updatedSegments) {
+          const last = merged[merged.length - 1];
+          if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
+            last.endTime = seg.endTime;
+          } else {
+            merged.push({ ...seg });
+          }
+        }
+        
+        setCameraSegments(merged);
+      }
+    }
+  }, [layout, hasCustomCameraTrack, cameraSegments, layoutConfig]);
 
   // Video URL management
   const [videoUrls, setVideoUrls] = useState<Record<string, string>>({});
