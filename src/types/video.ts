@@ -131,7 +131,7 @@ export const ANGLE_LABELS: Record<string, string> = {
   right_pillar: 'R Pillar',
 };
 
-export const ANGLE_ORDER = ['front', 'left_repeater', 'right_repeater', 'back', 'left_pillar', 'right_pillar'];
+export const ANGLE_ORDER = ['front', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar', 'back'];
 
 /** Camera layout configuration for multi-camera views */
 export interface LayoutCameraConfig {
