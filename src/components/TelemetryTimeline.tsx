@@ -358,25 +358,48 @@ export function TelemetryTimeline({
         // Preview video at the trim position
         onTrimPreview?.(previewTime);
       } else if (draggingSegmentBoundary !== null && onCameraSegmentsChange) {
-        // Dragging a segment boundary - adjust the start time of this segment (and end time of previous)
+        // Dragging a segment boundary - allow merging by dragging to edges
         const segIdx = draggingSegmentBoundary;
         if (segIdx > 0 && segIdx < cameraSegments.length) {
           const prevSeg = cameraSegments[segIdx - 1];
           const currSeg = cameraSegments[segIdx];
-          // Boundary can't go before previous segment's start + 0.5s or after current segment's end - 0.5s
-          const minTime = prevSeg.startTime + 0.5;
-          const maxTime = currSeg.endTime - 0.5;
+          // Allow boundary to go all the way to previous segment's start or current segment's end
+          // This enables one segment to completely cover another
+          const minTime = prevSeg.startTime;
+          const maxTime = currSeg.endTime;
           const newBoundary = Math.max(minTime, Math.min(maxTime, time));
 
-          const newSegments = cameraSegments.map((seg, idx) => {
-            if (idx === segIdx - 1) {
-              return { ...seg, endTime: newBoundary };
-            } else if (idx === segIdx) {
-              return { ...seg, startTime: newBoundary };
-            }
-            return seg;
-          });
-          onCameraSegmentsChange(newSegments);
+          // If dragged to the edge, merge the segments based on direction
+          if (newBoundary <= prevSeg.startTime) {
+            // Dragged all the way left - current (right) segment wins, remove previous
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                // This was the current segment, now extends to cover previous
+                return { ...seg, startTime: prevSeg.startTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(newSegments);
+          } else if (newBoundary >= currSeg.endTime) {
+            // Dragged all the way right - previous (left) segment wins, remove current
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: currSeg.endTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(newSegments);
+          } else {
+            const newSegments = cameraSegments.map((seg, idx) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: newBoundary };
+              } else if (idx === segIdx) {
+                return { ...seg, startTime: newBoundary };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(newSegments);
+          }
           onTrimPreview?.(newBoundary);
         }
       } else if (isDragging) {
@@ -404,19 +427,39 @@ export function TelemetryTimeline({
         if (segIdx > 0 && segIdx < cameraSegments.length) {
           const prevSeg = cameraSegments[segIdx - 1];
           const currSeg = cameraSegments[segIdx];
-          const minTime = prevSeg.startTime + 0.5;
-          const maxTime = currSeg.endTime - 0.5;
+          const minTime = prevSeg.startTime;
+          const maxTime = currSeg.endTime;
           const newBoundary = Math.max(minTime, Math.min(maxTime, time));
 
-          const newSegments = cameraSegments.map((seg, idx) => {
-            if (idx === segIdx - 1) {
-              return { ...seg, endTime: newBoundary };
-            } else if (idx === segIdx) {
-              return { ...seg, startTime: newBoundary };
-            }
-            return seg;
-          });
-          onCameraSegmentsChange(newSegments);
+          if (newBoundary <= prevSeg.startTime) {
+            // Dragged all the way left - current (right) segment wins
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, startTime: prevSeg.startTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(newSegments);
+          } else if (newBoundary >= currSeg.endTime) {
+            // Dragged all the way right - previous (left) segment wins
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: currSeg.endTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(newSegments);
+          } else {
+            const newSegments = cameraSegments.map((seg, idx) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: newBoundary };
+              } else if (idx === segIdx) {
+                return { ...seg, startTime: newBoundary };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(newSegments);
+          }
           onTrimPreview?.(newBoundary);
         }
       } else if (isDragging) {
@@ -461,21 +504,46 @@ export function TelemetryTimeline({
     setDraggingSegmentBoundary(segmentIndex);
   }, []);
 
-  // Handle segment boundary double-click to remove
-  const handleSegmentBoundaryDoubleClick = useCallback((segmentIndex: number) => (e: React.MouseEvent) => {
+  // Handle segment double-click to remove (merge with adjacent)
+  const handleSegmentDoubleClick = useCallback((segmentIndex: number) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!onCameraSegmentsChange || segmentIndex <= 0 || segmentIndex >= cameraSegments.length) return;
+    if (!onCameraSegmentsChange || cameraSegments.length <= 1) return;
 
-    // Merge this segment with the previous one (remove the boundary)
-    const newSegments = cameraSegments.filter((_, idx) => idx !== segmentIndex).map((seg, idx, arr) => {
-      // Extend the previous segment to cover the removed one's time
-      if (idx === segmentIndex - 1) {
-        const removedSeg = cameraSegments[segmentIndex];
-        return { ...seg, endTime: removedSeg.endTime };
-      }
-      return seg;
-    });
+    // Cannot remove the only segment
+    if (cameraSegments.length === 1) return;
+
+    const targetSeg = cameraSegments[segmentIndex];
+    let newSegments: CameraSegment[];
+
+    if (segmentIndex === 0) {
+      // First segment: merge with next, keep next segment's angle but extend backwards
+      const nextSeg = cameraSegments[1];
+      newSegments = cameraSegments.filter((_, idx) => idx !== 0).map((seg, idx) => {
+        if (idx === 0) {
+          return { ...seg, startTime: targetSeg.startTime };
+        }
+        return seg;
+      });
+    } else if (segmentIndex === cameraSegments.length - 1) {
+      // Last segment: merge with previous, extend previous segment
+      const prevSeg = cameraSegments[segmentIndex - 1];
+      newSegments = cameraSegments.filter((_, idx) => idx !== segmentIndex).map((seg, idx) => {
+        if (idx === segmentIndex - 1) {
+          return { ...seg, endTime: targetSeg.endTime };
+        }
+        return seg;
+      });
+    } else {
+      // Middle segment: merge with previous by extending previous to cover this one
+      newSegments = cameraSegments.filter((_, idx) => idx !== segmentIndex).map((seg, idx, arr) => {
+        if (idx === segmentIndex - 1) {
+          return { ...seg, endTime: targetSeg.endTime };
+        }
+        return seg;
+      });
+    }
+    
     onCameraSegmentsChange(newSegments);
   }, [cameraSegments, onCameraSegmentsChange]);
 
@@ -511,19 +579,12 @@ export function TelemetryTimeline({
     setDragPosition({ x: e.clientX, y: e.clientY });
   }, []);
 
-  // Handle drop on camera track
+  // Handle drop on camera track - drops at playhead position
   const handleCameraTrackDrop = useCallback((e: React.MouseEvent) => {
     if (!draggingAngle || !cameraTrackRef.current || !onCameraSegmentsChange || !trimPoints) return;
 
-    const rect = cameraTrackRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, x / rect.width));
-
-    // Calculate time relative to trimmed portion
-    const trimStart = trimPoints.inPoint;
-    const trimEnd = trimPoints.outPoint;
-    const trimDuration = trimEnd - trimStart;
-    const dropTime = trimStart + (percentage * trimDuration);
+    // Use current playhead position (currentTime) for the drop
+    const dropTime = Math.max(trimPoints.inPoint, Math.min(trimPoints.outPoint, currentTime));
 
     // Find which segment was dropped on and split it
     const segIdx = cameraSegments.findIndex(
@@ -544,7 +605,7 @@ export function TelemetryTimeline({
       );
       onCameraSegmentsChange(newSegments);
     } else {
-      // Split the segment
+      // Split the segment at playhead position
       const newSegments = [...cameraSegments];
       newSegments.splice(segIdx, 1,
         { startTime: clickedSegment.startTime, endTime: dropTime, angle: clickedSegment.angle },
@@ -565,7 +626,7 @@ export function TelemetryTimeline({
     }
 
     setDraggingAngle(null);
-  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints]);
+  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime]);
 
   // Track mouse movement and cancel drag on mouse up
   useEffect(() => {
@@ -950,7 +1011,7 @@ export function TelemetryTimeline({
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-purple-400 font-medium">Camera Track</span>
             <span className="text-[10px] text-gray-500">
-              {cameraSegments.length > 1 ? 'Drag boundaries • Double-click to remove' : ''}
+              {cameraSegments.length > 1 ? 'Drag boundaries • Double-click segment to remove' : ''}
             </span>
           </div>
 
@@ -1010,13 +1071,14 @@ export function TelemetryTimeline({
               return (
                 <div
                   key={idx}
-                  className="absolute top-1 bottom-1 flex items-center justify-center rounded transition-all hover:brightness-110"
+                  className="absolute top-1 bottom-1 flex items-center justify-center rounded transition-all hover:brightness-110 cursor-pointer"
                   style={{
                     left: `${left}%`,
                     width: `${Math.max(width, 1)}%`,
                     backgroundColor: ANGLE_COLORS[segment.angle] || '#6B7280',
                   }}
-                  title={ANGLE_LABELS[segment.angle]}
+                  title={`${ANGLE_LABELS[segment.angle]} • Double-click to remove`}
+                  onDoubleClick={handleSegmentDoubleClick(idx)}
                 >
                   {width > 8 && (
                     <span className="text-[10px] text-white/90 font-medium truncate px-1 pointer-events-none">
@@ -1040,8 +1102,7 @@ export function TelemetryTimeline({
                   }`}
                   style={{ left: `${position}%`, transform: 'translateX(-50%)' }}
                   onMouseDown={handleSegmentBoundaryMouseDown(idx + 1)}
-                  onDoubleClick={handleSegmentBoundaryDoubleClick(idx + 1)}
-                  title="Drag to adjust • Double-click to remove"
+                  title="Drag to adjust boundary"
                 >
                   <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 ${
                     draggingSegmentBoundary === idx + 1 ? 'bg-white w-1.5 shadow-lg' : 'bg-white/60 group-hover:bg-white'
