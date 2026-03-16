@@ -1233,7 +1233,28 @@ export function VideoPlayer({
     const url = videoUrls[angle];
     const isAvailable = availableAngles.includes(angle);
 
+    // Debug: Log when main view URL is missing
+    if (isMain && (!url || !isAvailable)) {
+      console.log('[RenderVideo] Main view URL issue:', {
+        angle,
+        hasUrl: !!url,
+        isAvailable,
+        availableAngles,
+        videoUrlsKeys: Object.keys(videoUrls),
+        currentMomentId: currentMoment?.id
+      });
+    }
+
     if (!url || !isAvailable) {
+      // For main view, show last frame or black to minimize flicker
+      if (isMain) {
+        return (
+          <div className={`bg-black flex items-center justify-center ${className}`}>
+            {/* Show subtle loading indicator only briefly */}
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full animate-spin opacity-50" />
+          </div>
+        );
+      }
       return (
         <div className={`bg-gray-900 flex items-center justify-center text-gray-600 text-xs ${className}`}>
           {ANGLE_LABELS[angle] || angle}
@@ -1244,6 +1265,7 @@ export function VideoPlayer({
     return (
       <div className={`relative ${className}`}>
         <video
+          key={`video-${angle}`}
           ref={(el) => {
             videoRefs.current[angle] = el;
             if (isMain) {
