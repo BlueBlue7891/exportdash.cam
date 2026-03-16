@@ -132,7 +132,7 @@ export function TelemetryCard({
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 8px 12px;
+          padding: 5px;
           background: rgba(12, 12, 12, 0.65);
           backdrop-filter: blur(5px);
           border-radius: 12px;
@@ -142,7 +142,7 @@ export function TelemetryCard({
         .telemetry-column {
           display: flex;
           flex-direction: column;
-          gap: 5px;
+          gap: 8px;
         }
 
         .telemetry-circle {
@@ -158,7 +158,7 @@ export function TelemetryCard({
         .telemetry-gear {
           font-size: 14px;
           font-weight: 700;
-          color: #c0c0c0;
+          color: #c0c0c0ff;
         }
 
         .telemetry-brake.active {
@@ -170,7 +170,7 @@ export function TelemetryCard({
         }
 
         .telemetry-steering :global(.wheel-icon) {
-          filter: brightness(0.5) invert(0.8);
+          filter: brightness(0.5) invert(0.7);
           transition: transform 0.1s ease-out;
         }
 
@@ -194,7 +194,7 @@ export function TelemetryCard({
         }
 
         :global(.pedal-icon) {
-          filter: brightness(0.6) invert(1);
+          filter: brightness(1.2);
         }
 
         :global(.pedal-icon.overlay) {
@@ -203,7 +203,7 @@ export function TelemetryCard({
         }
 
         .telemetry-blinker {
-          opacity: 0.3;
+          opacity: 0.2;
           transition: opacity 0.2s;
         }
 
@@ -222,8 +222,8 @@ export function TelemetryCard({
         }
 
         .speed-value {
-          font-size: 28px;
-          font-weight: 600;
+          font-size: 32px;
+          font-weight: 500;
           line-height: 1;
           color: #c0c0c0;
         }
@@ -251,9 +251,13 @@ export function TelemetryCard({
 
         @media (max-width: 640px) {
           .telemetry-card {
-            gap: 8px;
-            padding: 6px;
+            gap: 5px;
+            padding: 4px;
           }
+
+          .telemetry-column {
+            gap: 4px;
+          }  
 
           .telemetry-circle {
             width: 22px;
@@ -273,8 +277,8 @@ export function TelemetryCard({
           }
 
           .telemetry-blinker :global(img) {
-            width: 14px;
-            height: 14px;
+            width: 12px;
+            height: 12px;
           }
         }
       `}</style>
