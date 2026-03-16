@@ -260,33 +260,47 @@ export function VideoPlayer({
       const hasChanged = newTripleAngles.some((angle, idx) => angle !== oldTripleAngles[idx]);
       
       if (hasChanged) {
-        // Create mapping from old angles to new angles
-        const angleMapping: Record<string, string> = {};
-        oldTripleAngles.forEach((oldAngle, idx) => {
-          const newAngle = newTripleAngles[idx];
-          if (oldAngle !== newAngle) {
-            angleMapping[oldAngle] = newAngle;
-          }
-        });
+        // Check if this is just a swap/rearrangement (same angles, different positions)
+        // or if new angles are introduced
+        const oldSet = new Set(oldTripleAngles);
+        const newSet = new Set(newTripleAngles);
         
-        // Update camera segments: replace old angles with new ones
-        const updatedSegments = cameraSegments.map(seg => ({
-          ...seg,
-          angle: angleMapping[seg.angle] || seg.angle
-        }));
+        // Find angles that are completely new (not in old triple view)
+        const newAnglesIntroduced = newTripleAngles.filter(a => !oldSet.has(a));
+        // Find angles that are removed (not in new triple view)
+        const anglesRemoved = oldTripleAngles.filter(a => !newSet.has(a));
         
-        // Merge adjacent segments with same angle
-        const merged: typeof cameraSegments = [];
-        for (const seg of updatedSegments) {
-          const last = merged[merged.length - 1];
-          if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
-            last.endTime = seg.endTime;
-          } else {
-            merged.push({ ...seg });
+        // Only update Camera Track if new angles are introduced (not just rearrangement)
+        if (newAnglesIntroduced.length > 0 && anglesRemoved.length > 0) {
+          // Create mapping: removed angle -> new angle
+          const angleMapping: Record<string, string> = {};
+          anglesRemoved.forEach((removedAngle, idx) => {
+            const newAngle = newAnglesIntroduced[idx];
+            if (newAngle) {
+              angleMapping[removedAngle] = newAngle;
+            }
+          });
+          
+          // Update camera segments: only replace removed angles with new ones
+          const updatedSegments = cameraSegments.map(seg => ({
+            ...seg,
+            angle: angleMapping[seg.angle] || seg.angle
+          }));
+          
+          // Merge adjacent segments with same angle
+          const merged: typeof cameraSegments = [];
+          for (const seg of updatedSegments) {
+            const last = merged[merged.length - 1];
+            if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
+              last.endTime = seg.endTime;
+            } else {
+              merged.push({ ...seg });
+            }
           }
+          
+          setCameraSegments(merged);
         }
-        
-        setCameraSegments(merged);
+        // If it's just a rearrangement (swap), don't update Camera Track
       }
     }
   }, [layout, hasCustomCameraTrack, cameraSegments, layoutConfig]);
