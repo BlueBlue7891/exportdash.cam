@@ -918,17 +918,16 @@ export function VideoExporter({
           ctx.fillStyle = '#000';
           ctx.fillRect(0, 0, width, height);
           
-          // Use consistent gap and padding for uniform spacing (match six-view)
-          const gap = 4; // Gap between cells
-          const padding = 4; // Outer padding (black border around the grid)
-          // Available space for videos after padding
-          const availW = width - padding * 2;
-          const availH = height - padding * 2;
+          // Uniform spacing: gap between cells equals outer padding
+          const spacing = 4; // Unified spacing value for both gap and padding
+          // Available space for videos
+          const availW = width - spacing * 4; // spacing on both sides + between cells
+          const availH = height - spacing * 2; // spacing on top and bottom
           const cellW = Math.floor(availW / 3);
-          const cellH = availH; // Single row, use full available height
+          const cellH = availH; // Single row
           // Use width-based scale for consistent UI sizing across layouts
-          const baseUIScale = width / 1920; // Base scale without 1.25x multiplier
-          const uiScale = baseUIScale * 1.25; // Scale with 1.25x for most elements
+          const baseUIScale = width / 1920;
+          const uiScale = baseUIScale * 1.25;
           
           for (let i = 0; i < tripleAngles.length; i++) {
             const angle = tripleAngles[i];
@@ -937,11 +936,11 @@ export function VideoExporter({
             const srcW = ev.el.videoWidth || cellW;
             const srcH = ev.el.videoHeight || cellH;
             
-            // Calculate position with gaps and outer padding
-            const px = padding + i * cellW + gap / 2;
-            const py = padding + gap / 2;
-            const pw = cellW - gap;
-            const ph = cellH - gap;
+            // Calculate position: spacing on left + i * (cell + spacing)
+            const px = spacing + i * (cellW + spacing);
+            const py = spacing;
+            const pw = cellW;
+            const ph = cellH;
             
             // Fit each video into its cell preserving aspect ratio
             const videoScale = Math.min(pw / srcW, ph / srcH);
@@ -1155,17 +1154,16 @@ export function VideoExporter({
           // Six views layout: 3 columns x 2 rows
           const { topRow, bottomRow } = layoutConfig.all;
           const rows = [topRow, bottomRow];
-          // Use consistent gap and padding for uniform spacing
-          const gap = 4; // Gap between cells
-          const padding = 4; // Outer padding (black border around the grid)
-          // Available space for videos after padding
-          const availW = width - padding * 2;
-          const availH = height - padding * 2;
+          // Uniform spacing: gap between cells equals outer padding
+          const spacing = 4; // Unified spacing value for gap and padding
+          // Available space for videos: subtract outer spacing + internal gaps
+          const availW = width - spacing * 4; // spacing on both sides + between 3 cells
+          const availH = height - spacing * 3; // spacing on top/bottom + between 2 rows
           const cellW = Math.floor(availW / 3);
           const cellH = Math.floor(availH / 2);
           // Use width-based scale for consistent UI sizing across layouts
-          const baseUIScale = width / 1920; // Base scale without 1.25x multiplier
-          const uiScale = baseUIScale * 1.25; // Scale with 1.25x for most elements
+          const baseUIScale = width / 1920;
+          const uiScale = baseUIScale * 1.25;
 
           // Load and seek all 6 angles
           for (const angle of sixViewAngles) {
@@ -1195,10 +1193,10 @@ export function VideoExporter({
               
               if (!ev || !moment.videos.some(v => v.angle === angle)) {
                 // Draw placeholder for unavailable angle
-                const px = padding + colIdx * cellW + gap / 2;
-                const py = padding + rowIdx * cellH + gap / 2;
-                const pw = cellW - gap;
-                const ph = cellH - gap;
+                const px = spacing + colIdx * (cellW + spacing);
+                const py = spacing + rowIdx * (cellH + spacing);
+                const pw = cellW;
+                const ph = cellH;
                 ctx.fillStyle = '#1a1a1a';
                 ctx.fillRect(px, py, pw, ph);
                 
@@ -1215,11 +1213,11 @@ export function VideoExporter({
               const srcW = ev.el.videoWidth || cellW;
               const srcH = ev.el.videoHeight || cellH;
               
-              // Calculate position with gaps and outer padding
-              const px = padding + colIdx * cellW + gap / 2;
-              const py = padding + rowIdx * cellH + gap / 2;
-              const pw = cellW - gap;
-              const ph = cellH - gap;
+              // Calculate position: uniform spacing
+              const px = spacing + colIdx * (cellW + spacing);
+              const py = spacing + rowIdx * (cellH + spacing);
+              const pw = cellW;
+              const ph = cellH;
               
               // Fit video into cell preserving aspect ratio
               const videoScale = Math.min(pw / srcW, ph / srcH);
