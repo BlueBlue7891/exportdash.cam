@@ -1197,7 +1197,7 @@ export function VideoExporter({
               ctx.textAlign = 'center';
               // Use middle baseline for vertical centering
               ctx.textBaseline = 'middle';
-              // Slight upward offset for visual balance (Canvas middle baseline is slightly low)
+              // Slight downward offset for visual balance (Canvas middle baseline is slightly high)
               const visualOffset = 2 * scale;
               ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + visualOffset);
             }
