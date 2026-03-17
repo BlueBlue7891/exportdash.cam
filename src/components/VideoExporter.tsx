@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { IconDownload, IconPlayerStop, IconLoader2, IconCheck } from '@tabler/icons-react';
 import { SeiData, SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { Output, Mp4OutputFormat, BufferTarget, VideoSampleSource, VideoSample } from 'mediabunny';
-import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG } from '@/types/video';
+import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, ANGLE_LABELS } from '@/types/video';
 import { Tooltip } from './Tooltip';
 
 type LayoutType = 'single' | 'pip' | 'triple' | 'all';
@@ -168,7 +168,18 @@ export function VideoExporter({
     [cameraSegments, selectedAngle]
   );
 
-  // Draw telemetry overlay on canvas - matches TelemetryCard.tsx layout
+  // Apply CSS-like filter to canvas context
+  const applyFilter = (ctx: CanvasRenderingContext2D, filter: string) => {
+    // Parse simple brightness and invert filters
+    const brightnessMatch = filter.match(/brightness\(([^)]+)\)/);
+    const invertMatch = filter.match(/invert\(([^)]+)\)/);
+    
+    if (brightnessMatch || invertMatch) {
+      ctx.filter = filter;
+    }
+  };
+
+  // Draw telemetry overlay on canvas - matches TelemetryCard.tsx layout exactly
   const drawTelemetry = (
     ctx: CanvasRenderingContext2D,
     seiData: SeiData | null,
@@ -178,73 +189,98 @@ export function VideoExporter({
   ) => {
     if (!seiData) return;
 
+    // Match TelemetryCard.tsx exact dimensions
     const scale = Math.min(width / 1280, height / 720);
-    const padding = 12 * scale;
-    const circleSize = 28 * scale;
-    const circleGap = 5 * scale;
-    const columnWidth = circleSize;
+    
+    // From TelemetryCard.tsx:
+    // .telemetry-card: padding: 5px, gap: 10px, border-radius: 12px
+    // .telemetry-column: gap: 8px
+    // .telemetry-circle: width: 22px, height: 22px
+    const cardPadding = 5 * scale;
+    const columnGap = 10 * scale; // gap between columns
+    const innerGap = 8 * scale; // gap between circles in a column
+    const circleSize = 22 * scale; // 22px as in CSS
     const blinkerWidth = 20 * scale;
-    const speedWidth = 60 * scale;
-    const gap = 10 * scale;
-
+    const speedWidth = 50 * scale; // min-width: 50px
+    
     // Calculate total width
-    const boxWidth = columnWidth + gap + blinkerWidth + gap + speedWidth + gap + blinkerWidth + gap + columnWidth + padding * 2;
-    const boxHeight = circleSize * 2 + circleGap + padding * 2;
+    // Layout: [Column] gap [Blinker] gap [Speed] gap [Blinker] gap [Column]
+    const columnWidth = circleSize;
+    const boxWidth = columnWidth + columnGap + blinkerWidth + columnGap + speedWidth + columnGap + blinkerWidth + columnGap + columnWidth + cardPadding * 2;
+    const boxHeight = circleSize * 2 + innerGap + cardPadding * 2;
 
-    // Position at TOP CENTER
+    // Position at TOP CENTER, below the date/time display
+    // Date/time box has height of 28 * scale + 12 * scale top margin + 8 * scale gap
     const x = (width - boxWidth) / 2;
-    const y = 12 * scale;
+    const dateBoxHeight = 28 * scale;
+    const dateTopMargin = 12 * scale;
+    const gapBetweenDateAndTelemetry = 8 * scale;
+    const y = dateTopMargin + dateBoxHeight + gapBetweenDateAndTelemetry;
 
-    // Draw background
-    ctx.fillStyle = 'rgba(225, 225, 225, 0.85)';
+    // Draw background - dark theme to match edit page
+    // .telemetry-card: background: rgba(12, 12, 12, 0.65), border-radius: 12px
+    ctx.fillStyle = 'rgba(12, 12, 12, 0.65)';
     ctx.beginPath();
     ctx.roundRect(x, y, boxWidth, boxHeight, 12 * scale);
     ctx.fill();
 
-    // Calculate positions
-    let posX = x + padding;
-    const topCircleY = y + padding + circleSize / 2;
-    const bottomCircleY = y + padding + circleSize + circleGap + circleSize / 2;
+    // Calculate positions starting from left with padding
+    let posX = x + cardPadding;
+    // Center circles vertically in each column
+    const columnCenterY = y + boxHeight / 2;
+    const topCircleY = columnCenterY - innerGap / 2 - circleSize / 2;
+    const bottomCircleY = columnCenterY + innerGap / 2 + circleSize / 2;
     const centerY = y + boxHeight / 2;
+    // Icon size should fill most of the circle (16px for 22px circle)
     const iconSize = 16 * scale;
 
     // === Left Column: Gear + Brake ===
-    // Gear circle
-    ctx.fillStyle = '#a4a4a4';
+    // Gear circle - .telemetry-circle: background: #3f3f3fde
+    ctx.fillStyle = '#3f3f3fde';
     ctx.beginPath();
-    ctx.arc(posX + circleSize / 2, topCircleY, circleSize / 2, 0, Math.PI * 2);
+    ctx.arc(posX + columnWidth / 2, topCircleY, circleSize / 2, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Gear letter - .telemetry-gear: font-size: 14px, font-weight: 700, color: #c0c0c0ff
     const gearLetter = ['P', 'D', 'R', 'N'][seiData.gear_state ?? 0] || 'P';
-    ctx.fillStyle = '#006deb';
-    ctx.font = `bold ${16 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.fillStyle = '#c0c0c0ff';
+    ctx.font = `700 ${14 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(gearLetter, posX + circleSize / 2, topCircleY);
+    ctx.fillText(gearLetter, posX + columnWidth / 2, topCircleY);
 
-    // Brake circle with pedal icon
-    ctx.fillStyle = seiData.brake_applied ? '#ff4444' : '#a4a4a4';
+    // Brake circle - .telemetry-brake.active: background: #ff4444
+    ctx.fillStyle = seiData.brake_applied ? '#ff4444' : '#3f3f3fde';
     ctx.beginPath();
-    ctx.arc(posX + circleSize / 2, bottomCircleY, circleSize / 2, 0, Math.PI * 2);
+    ctx.arc(posX + columnWidth / 2, bottomCircleY, circleSize / 2, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Brake pedal icon - :global(.pedal-icon): filter: brightness(1.2)
     if (icons.leftPedal) {
       ctx.save();
-      ctx.globalAlpha = 0.6;
+      // Apply brightness filter to match CSS
+      applyFilter(ctx, 'brightness(1.2)');
+      // Draw pedal icon centered in circle
+      const pedalW = iconSize * 0.6; // Maintain aspect ratio, slightly smaller
+      const pedalH = iconSize;
       ctx.drawImage(
         icons.leftPedal,
-        posX + circleSize / 2 - iconSize / 2,
-        bottomCircleY - iconSize / 2,
-        iconSize,
-        iconSize
+        posX + columnWidth / 2 - pedalW / 2,
+        bottomCircleY - pedalH / 2,
+        pedalW,
+        pedalH
       );
+      ctx.filter = 'none';
       ctx.restore();
     }
 
-    posX += columnWidth + gap;
+    posX += columnWidth + columnGap;
 
     // === Left Blinker ===
+    // .telemetry-blinker: opacity: 0.2, .telemetry-blinker.active: opacity: 1
     if (icons.blinker) {
       ctx.save();
-      ctx.globalAlpha = seiData.blinker_on_left ? 1 : 0.3;
+      ctx.globalAlpha = seiData.blinker_on_left ? 1 : 0.2;
       ctx.drawImage(
         icons.blinker,
         posX,
@@ -254,7 +290,7 @@ export function VideoExporter({
       );
       ctx.restore();
     } else {
-      ctx.fillStyle = seiData.blinker_on_left ? '#22c55e' : 'rgba(100, 100, 100, 0.3)';
+      ctx.fillStyle = seiData.blinker_on_left ? '#22c55e' : 'rgba(100, 100, 100, 0.2)';
       ctx.beginPath();
       ctx.moveTo(posX, centerY);
       ctx.lineTo(posX + blinkerWidth, centerY - 10 * scale);
@@ -263,31 +299,34 @@ export function VideoExporter({
       ctx.fill();
     }
 
-    posX += blinkerWidth + gap;
+    posX += blinkerWidth + columnGap;
 
     // === Speed Display ===
+    // .telemetry-speed: min-width: 50px
     const speed = seiData.vehicle_speed_mps
       ? speedUnit === 'mph'
         ? Math.round(seiData.vehicle_speed_mps * 2.23694)
         : Math.round(seiData.vehicle_speed_mps * 3.6)
       : 0;
 
-    ctx.fillStyle = '#333';
-    ctx.font = `600 ${32 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    // .speed-value: font-size: 32px, font-weight: 500, color: #c0c0c0
+    ctx.fillStyle = '#c0c0c0';
+    ctx.font = `500 ${32 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(speed), posX + speedWidth / 2, centerY - 8 * scale);
+    ctx.fillText(String(speed), posX + speedWidth / 2, centerY - 6 * scale);
 
-    ctx.fillStyle = '#666';
-    ctx.font = `600 ${12 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
-    ctx.fillText(speedUnit.toUpperCase(), posX + speedWidth / 2, centerY + 18 * scale);
+    // .speed-unit: font-size: 10px, font-weight: 600, color: #9ca3af
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = `600 ${10 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.fillText(speedUnit === 'mph' ? 'MPH' : 'km/h', posX + speedWidth / 2, centerY + 14 * scale);
 
-    posX += speedWidth + gap;
+    posX += speedWidth + columnGap;
 
     // === Right Blinker (rotated 180°) ===
     if (icons.blinker) {
       ctx.save();
-      ctx.globalAlpha = seiData.blinker_on_right ? 1 : 0.3;
+      ctx.globalAlpha = seiData.blinker_on_right ? 1 : 0.2;
       ctx.translate(posX + blinkerWidth / 2, centerY);
       ctx.rotate(Math.PI);
       ctx.drawImage(
@@ -299,7 +338,7 @@ export function VideoExporter({
       );
       ctx.restore();
     } else {
-      ctx.fillStyle = seiData.blinker_on_right ? '#22c55e' : 'rgba(100, 100, 100, 0.3)';
+      ctx.fillStyle = seiData.blinker_on_right ? '#22c55e' : 'rgba(100, 100, 100, 0.2)';
       ctx.beginPath();
       ctx.moveTo(posX + blinkerWidth, centerY);
       ctx.lineTo(posX, centerY - 10 * scale);
@@ -308,77 +347,91 @@ export function VideoExporter({
       ctx.fill();
     }
 
-    posX += blinkerWidth + gap;
+    posX += blinkerWidth + columnGap;
 
     // === Right Column: Steering + Accelerator ===
-    // Steering circle with wheel icon (blue when autopilot active)
+    // Steering circle - .telemetry-steering.autopilot: background: #006deb
     const isAutopilotActive = (seiData.autopilot_state ?? 0) > 0;
-    ctx.fillStyle = isAutopilotActive ? '#006deb' : '#a4a4a4';
+    ctx.fillStyle = isAutopilotActive ? '#006deb' : '#3f3f3fde';
     ctx.beginPath();
-    ctx.arc(posX + circleSize / 2, topCircleY, circleSize / 2, 0, Math.PI * 2);
+    ctx.arc(posX + columnWidth / 2, topCircleY, circleSize / 2, 0, Math.PI * 2);
     ctx.fill();
 
+    // Steering wheel icon
+    // .telemetry-steering :global(.wheel-icon): filter: brightness(0.5) invert(0.7)
     const steeringAngle = seiData.steering_wheel_angle || 0;
     if (icons.wheel) {
       ctx.save();
-      ctx.translate(posX + circleSize / 2, topCircleY);
+      ctx.translate(posX + columnWidth / 2, topCircleY);
       ctx.rotate((steeringAngle * Math.PI) / 180);
-      ctx.globalAlpha = 0.5;
+      // Apply CSS filter: brightness(0.5) invert(0.7)
+      applyFilter(ctx, 'brightness(0.5) invert(0.7)');
+      // Draw wheel icon to fill most of the circle
       ctx.drawImage(icons.wheel, -iconSize / 2, -iconSize / 2, iconSize, iconSize);
+      ctx.filter = 'none';
       ctx.restore();
     } else {
+      // Fallback: draw simple steering wheel
       ctx.save();
-      ctx.translate(posX + circleSize / 2, topCircleY);
+      ctx.translate(posX + columnWidth / 2, topCircleY);
       ctx.rotate((steeringAngle * Math.PI) / 180);
-      ctx.strokeStyle = '#555';
+      ctx.strokeStyle = '#aaa';
       ctx.lineWidth = 2 * scale;
       ctx.beginPath();
-      ctx.arc(0, 0, 8 * scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, circleSize / 2 - 4 * scale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(0, -8 * scale);
-      ctx.lineTo(0, 8 * scale);
+      ctx.moveTo(0, -circleSize / 2 + 4 * scale);
+      ctx.lineTo(0, circleSize / 2 - 4 * scale);
       ctx.stroke();
       ctx.restore();
     }
 
-    // Accelerator circle with fill and pedal icon
+    // Accelerator circle
     const rawAccel = seiData.accelerator_pedal_position || 0;
     const accelPercent = Math.min(100, rawAccel > 1 ? rawAccel : rawAccel * 100);
 
-    ctx.fillStyle = '#a4a4a4';
+    ctx.fillStyle = '#3f3f3fde';
     ctx.beginPath();
-    ctx.arc(posX + circleSize / 2, bottomCircleY, circleSize / 2, 0, Math.PI * 2);
+    ctx.arc(posX + columnWidth / 2, bottomCircleY, circleSize / 2, 0, Math.PI * 2);
     ctx.fill();
 
+    // Accelerator fill - .accelerator-fill: linear-gradient(to top, #4caf50, #8bc34a)
     if (accelPercent > 0) {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(posX + circleSize / 2, bottomCircleY, circleSize / 2, 0, Math.PI * 2);
+      ctx.arc(posX + columnWidth / 2, bottomCircleY, circleSize / 2, 0, Math.PI * 2);
       ctx.clip();
       const fillHeight = (accelPercent / 100) * circleSize;
       const gradient = ctx.createLinearGradient(0, bottomCircleY + circleSize / 2, 0, bottomCircleY - circleSize / 2);
       gradient.addColorStop(0, '#4caf50');
       gradient.addColorStop(1, '#8bc34a');
       ctx.fillStyle = gradient;
-      ctx.fillRect(posX, bottomCircleY + circleSize / 2 - fillHeight, circleSize, fillHeight);
+      ctx.fillRect(posX + columnWidth / 2 - circleSize / 2, bottomCircleY + circleSize / 2 - fillHeight, circleSize, fillHeight);
       ctx.restore();
     }
 
+    // Accelerator pedal icon - :global(.pedal-icon): filter: brightness(1.2)
     if (icons.rightPedal) {
       ctx.save();
-      ctx.globalAlpha = 0.6;
+      // Apply brightness filter to match CSS
+      applyFilter(ctx, 'brightness(1.2)');
+      // Draw pedal icon centered in circle
+      const pedalW = iconSize * 0.6; // Maintain aspect ratio
+      const pedalH = iconSize;
       ctx.drawImage(
         icons.rightPedal,
-        posX + circleSize / 2 - iconSize / 2,
-        bottomCircleY - iconSize / 2,
-        iconSize,
-        iconSize
+        posX + columnWidth / 2 - pedalW / 2,
+        bottomCircleY - pedalH / 2,
+        pedalW,
+        pedalH
       );
+      ctx.filter = 'none';
       ctx.restore();
     }
 
     // === Autopilot label ===
+    // .telemetry-autopilot: background: rgba(59, 130, 246, 0.9), border-radius: 0 0 8px 8px
     if (isAutopilotActive) {
       const autopilotLabels: Record<number, string> = { 1: 'Self Driving', 2: 'Autosteer', 3: 'TACC' };
       const label = autopilotLabels[seiData.autopilot_state ?? 0] || '';
@@ -388,14 +441,16 @@ export function VideoExporter({
         const labelX = (width - labelWidth) / 2;
         const labelY = y + boxHeight - 1;
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        // .telemetry-autopilot: background: rgba(59, 130, 246, 0.9)
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
         ctx.beginPath();
         ctx.roundRect(labelX, labelY, labelWidth, 20 * scale, [0, 0, 8 * scale, 8 * scale]);
         ctx.fill();
 
-        ctx.fillStyle = '#006deb';
+        // Label text - color matches .telemetry-autopilot color
+        ctx.fillStyle = '#c0c0c0';
         ctx.textAlign = 'center';
-        ctx.fillText(label, width / 2, labelY + 12 * scale);
+        ctx.fillText(label, width / 2, labelY + 11 * scale);
       }
     }
   };
@@ -420,22 +475,9 @@ export function VideoExporter({
     const boxWidth = textWidth + padding * 2;
     const boxHeight = 28 * scale;
 
-    // Position: if telemetry is visible, position below it; otherwise top center
+    // Position: Always at top center, telemetry will be drawn below it
     const x = (width - boxWidth) / 2;
-    let y: number;
-
-    if (telemetryVisible) {
-      // Calculate telemetry box height (same logic as in drawTelemetry)
-      const circleSize = 28 * scale;
-      const circleGap = 5 * scale;
-      const telemetryBoxHeight = circleSize * 2 + circleGap + padding * 2;
-      const telemetryY = 12 * scale;
-      // Position just below telemetry with a small gap
-      y = telemetryY + telemetryBoxHeight + 8 * scale;
-    } else {
-      // Position at top center
-      y = 12 * scale;
-    }
+    const y = 12 * scale; // Top margin
 
     // Draw background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -680,6 +722,22 @@ export function VideoExporter({
         }
         width = width - (width % 2);
         height = height - (height % 2);
+      } else if (layout === 'all') {
+        // Six views: 3 columns x 2 rows
+        const cellW = srcWidth;
+        const cellH = srcHeight;
+        // 3 videos side by side, 2 rows stacked
+        width = cellW * 3;
+        height = cellH * 2;
+        // Scale down if too large
+        const maxDim = Math.max(width, height);
+        if (maxDim > maxDimension) {
+          const s = maxDimension / maxDim;
+          width = Math.floor(width * s);
+          height = Math.floor(height * s);
+        }
+        width = width - (width % 2);
+        height = height - (height % 2);
       } else {
         width = srcWidth;
         height = srcHeight;
@@ -778,8 +836,10 @@ export function VideoExporter({
       };
 
       // Prepare extra video elements for multi-angle layouts
+      const sixViewAngles = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
       const layoutAngles = layout === 'triple' ? tripleAngles
         : layout === 'pip' ? pipAngles
+        : layout === 'all' ? sixViewAngles
         : [];
 
       for (const angle of layoutAngles) {
@@ -941,8 +1001,116 @@ export function VideoExporter({
             }
           }
 
+        } else if (layout === 'all') {
+          // Six views layout: 3 columns x 2 rows
+          const { topRow, bottomRow } = layoutConfig.all;
+          const rows = [topRow, bottomRow];
+          const cellW = Math.floor(width / 3);
+          const cellH = Math.floor(height / 2);
+          const gap = 4; // Gap between cells in pixels
+          const scale = Math.min(width / 1920, height / 1080); // Scale factor for UI elements
+
+          // Load and seek all 6 angles
+          for (const angle of sixViewAngles) {
+            const ev = extraVideos[angle];
+            if (!ev) continue;
+            const video = moment.videos.find(v => v.angle === angle);
+            if (!video) continue;
+            if (ev.loadedClipIdx !== clipIdx) {
+              ev.blobUrl = await loadVideoInto(ev.el, video.file, video.url, ev.blobUrl);
+              ev.loadedClipIdx = clipIdx;
+            }
+            await seekVideoEl(ev.el, localTime);
+          }
+          await new Promise((r) => setTimeout(r, 10));
+
+          // Draw background
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, width, height);
+
+          // Draw 6 videos in 2x3 grid with gaps
+          for (let rowIdx = 0; rowIdx < 2; rowIdx++) {
+            const row = rows[rowIdx];
+            for (let colIdx = 0; colIdx < 3; colIdx++) {
+              const angle = row[colIdx];
+              const ev = extraVideos[angle];
+              const isMain = angle === frameAngle;
+              
+              if (!ev || !moment.videos.some(v => v.angle === angle)) {
+                // Draw placeholder for unavailable angle
+                const px = colIdx * cellW + gap / 2;
+                const py = rowIdx * cellH + gap / 2;
+                const pw = cellW - gap;
+                const ph = cellH - gap;
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(px, py, pw, ph);
+                
+                // Draw angle label
+                ctx.fillStyle = '#666';
+                ctx.font = `600 ${14 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const label = ANGLE_LABELS[angle] || angle;
+                ctx.fillText(label, px + pw / 2, py + ph / 2);
+                continue;
+              }
+
+              const srcW = ev.el.videoWidth || cellW;
+              const srcH = ev.el.videoHeight || cellH;
+              
+              // Calculate position with gaps
+              const px = colIdx * cellW + gap / 2;
+              const py = rowIdx * cellH + gap / 2;
+              const pw = cellW - gap;
+              const ph = cellH - gap;
+              
+              // Fit video into cell preserving aspect ratio
+              const videoScale = Math.min(pw / srcW, ph / srcH);
+              const dw = Math.floor(srcW * videoScale);
+              const dh = Math.floor(srcH * videoScale);
+              const dx = px + Math.floor((pw - dw) / 2);
+              const dy = py + Math.floor((ph - dh) / 2);
+              
+              ctx.drawImage(ev.el, dx, dy, dw, dh);
+
+              // Draw green highlight border for main angle (selected by camera track)
+              if (isMain) {
+                const borderWidth = Math.max(2, Math.floor(4 * scale));
+                ctx.strokeStyle = '#22c55e'; // green-500
+                ctx.lineWidth = borderWidth;
+                ctx.strokeRect(px + borderWidth / 2, py + borderWidth / 2, pw - borderWidth, ph - borderWidth);
+                
+                // Add glow effect
+                ctx.shadowColor = 'rgba(34, 197, 94, 0.5)';
+                ctx.shadowBlur = 15 * scale;
+                ctx.strokeRect(px + borderWidth / 2, py + borderWidth / 2, pw - borderWidth, ph - borderWidth);
+                ctx.shadowBlur = 0;
+              }
+
+              // Draw angle label at bottom left of each cell
+              const label = ANGLE_LABELS[angle] || angle;
+              const labelPadding = 6 * scale;
+              const labelFontSize = Math.max(10, Math.floor(11 * scale));
+              ctx.font = `600 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+              const labelWidth = ctx.measureText(label).width + labelPadding * 2;
+              const labelHeight = labelFontSize + labelPadding;
+              
+              // Label background
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+              ctx.beginPath();
+              ctx.roundRect(px + 4, py + ph - labelHeight - 4, labelWidth, labelHeight, 4);
+              ctx.fill();
+              
+              // Label text
+              ctx.fillStyle = isMain ? '#4ade80' : 'rgba(255, 255, 255, 0.9)'; // green-400 for main, white for others
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(label, px + 4 + labelPadding, py + ph - labelHeight / 2 - 4);
+            }
+          }
+
         } else {
-          // Single / All layout - export single angle
+          // Single layout - export single angle
           const needReload = currentLoadedClipIdx !== clipIdx || currentLoadedAngle !== frameAngle;
           if (needReload) {
             const video = moment.videos.find(v => v.angle === frameAngle) || moment.videos[0];
@@ -965,9 +1133,7 @@ export function VideoExporter({
             : rawSeiData;
 
         // Draw overlays based on toggle states
-        if (showTelemetry) {
-          drawTelemetry(ctx, seiData, width, height, telemetryIcons);
-        }
+        // Draw date/time FIRST (on top), then telemetry below it
         if (showDateTime) {
           const realTime = new Date(moment.timestamp.getTime() + localTime * 1000);
           // Use local time formatting to avoid UTC conversion
@@ -980,6 +1146,9 @@ export function VideoExporter({
           const dynamicDate = `${year}-${month}-${day}`;
           const dynamicTime = `${hours}:${minutes}:${seconds}`;
           drawDateTime(ctx, width, height, dynamicDate, dynamicTime, showTelemetry);
+        }
+        if (showTelemetry) {
+          drawTelemetry(ctx, seiData, width, height, telemetryIcons);
         }
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {
           drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
