@@ -1571,7 +1571,9 @@ export function VideoExporter({
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'middle';
-          ctx.fillText(angleLabel, iconX + iconSize + iconSpacing, capsuleY + labelHeight / 2);
+          // Small downward offset for visual centering
+          const textYOffset = 1.5 * capsuleScale;
+          ctx.fillText(angleLabel, iconX + iconSize + iconSpacing, capsuleY + labelHeight / 2 + textYOffset);
         }
 
         // Get SEI data for this absolute time, with event.json GPS fallback
