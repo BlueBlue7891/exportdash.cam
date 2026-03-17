@@ -79,7 +79,7 @@ export function TelemetryCard({
         <div className="telemetry-column">
           <div className="telemetry-circle telemetry-gear">{gearLetter}</div>
           <div className={`telemetry-circle telemetry-brake ${seiData.brake_applied ? 'active' : ''}`}>
-            <Image src="/left-pedal.png" alt="Brake" width={12} height={12} className="pedal-icon" />
+            <Image src="/left-pedal.png" alt="Brake" width={13} height={13} className="pedal-icon" />
           </div>
         </div>
 
@@ -170,7 +170,7 @@ export function TelemetryCard({
         }
 
         .telemetry-steering :global(.wheel-icon) {
-          filter: brightness(0.5) invert(0.7);
+          filter: brightness(0.5) invert(0.8);
           transition: transform 0.1s ease-out;
         }
 
@@ -194,7 +194,7 @@ export function TelemetryCard({
         }
 
         :global(.pedal-icon) {
-          filter: brightness(1.2);
+          filter: brightness(1);
         }
 
         :global(.pedal-icon.overlay) {
