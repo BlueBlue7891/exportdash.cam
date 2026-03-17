@@ -925,9 +925,10 @@ export function VideoExporter({
           // Use EXACT same scale as six-view layout for consistent UI element sizing
           // Both layouts use width/1920 vs height/1080, but six-view has height/2 per cell
           // We use the same scale calculation to ensure UI elements look the same size
-          // Use width-based scale only for consistent UI sizing across layouts
+          // Use width-based scale for consistent UI sizing across layouts
           // Don't use height in calculation since triple and all layouts have different heights
-          const uiScale = (width / 1920) * 1.25;
+          const baseUIScale = width / 1920; // Base scale without 1.25x multiplier
+          const uiScale = baseUIScale * 1.25; // Scale with 1.25x for most elements
           
           for (let i = 0; i < tripleAngles.length; i++) {
             const angle = tripleAngles[i];
@@ -1001,24 +1002,23 @@ export function VideoExporter({
             }
             
             // Draw angle label at bottom left of each cell
-            // Match six-view layout styles exactly
+            // Use baseUIScale (no 1.25x multiplier) for labels
             const label = ANGLE_LABELS[angle] || angle;
-            // Use same scale as six-view for consistent label size
-            const labelFontSize = Math.max(20, Math.floor(20 * uiScale));
+            const labelFontSize = Math.max(16, Math.floor(16 * baseUIScale));
             ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
             
-            // Even padding all around: 12px (scaled)
-            const labelPadding = 12 * uiScale;
+            // Even padding all around: 10px (scaled, no 1.25x)
+            const labelPadding = 10 * baseUIScale;
             const labelWidth = ctx.measureText(label).width + labelPadding * 2;
             const labelHeight = labelFontSize + labelPadding * 2;
             
-            // Position: margin from border (scaled)
-            const labelMargin = 12 * uiScale;
+            // Position: margin from border (scaled, no 1.25x)
+            const labelMargin = 10 * baseUIScale;
             const labelX = px + labelMargin;
             const labelY = py + ph - labelHeight - labelMargin;
             
             // Label style for main angle: bg-green-600/70 border border-green-400/50
-            const labelCornerRadius = 8 * uiScale;
+            const labelCornerRadius = 6 * baseUIScale;
             if (isMain) {
               // Background: bg-green-600/70
               ctx.fillStyle = 'rgba(22, 163, 74, 0.7)';
@@ -1028,7 +1028,7 @@ export function VideoExporter({
               
               // Border: border-green-400/50
               ctx.strokeStyle = 'rgba(74, 222, 128, 0.5)';
-              ctx.lineWidth = 2 * uiScale;
+              ctx.lineWidth = Math.max(1, 1.5 * baseUIScale);
               ctx.beginPath();
               ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
               ctx.stroke();
@@ -1048,7 +1048,7 @@ export function VideoExporter({
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             // Slight downward offset for visual balance
-            const visualOffset = 2 * uiScale;
+            const visualOffset = 1.5 * baseUIScale;
             ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + visualOffset);
           }
 
@@ -1158,10 +1158,9 @@ export function VideoExporter({
           const cellW = Math.floor(width / 3);
           const cellH = Math.floor(height / 2);
           const gap = 4; // Gap between cells in pixels
-          // Use EXACT same scale calculation as triple view for consistent UI sizing
-          // Use width-based scale only for consistent UI sizing across layouts
-          // Don't use height in calculation since triple and all layouts have different heights
-          const uiScale = (width / 1920) * 1.25;
+          // Use width-based scale for consistent UI sizing across layouts
+          const baseUIScale = width / 1920; // Base scale without 1.25x multiplier
+          const uiScale = baseUIScale * 1.25; // Scale with 1.25x for most elements
 
           // Load and seek all 6 angles
           for (const angle of sixViewAngles) {
@@ -1279,37 +1278,35 @@ export function VideoExporter({
               }
 
               // Draw angle label at bottom left of each cell
-              // Match VideoPlayer.tsx styles, enlarged 2x
+              // Use baseUIScale (no 1.25x multiplier) for labels
               const label = ANGLE_LABELS[angle] || angle;
-              
-              // Font: text-[10px] -> 20px (2x), font-medium text-white/90
-              const labelFontSize = Math.max(20, Math.floor(20 * uiScale));
+              const labelFontSize = Math.max(16, Math.floor(16 * baseUIScale));
               ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
               
-              // Even padding all around: 12px (2x from 6px)
-              const labelPadding = 12 * uiScale;
+              // Even padding all around: 10px (scaled, no 1.25x)
+              const labelPadding = 10 * baseUIScale;
               const labelWidth = ctx.measureText(label).width + labelPadding * 2;
-              // Use exact font size for height calculation
               const labelHeight = labelFontSize + labelPadding * 2;
               
-              // Position: increased margin from border to 12px
-              const labelMargin = 12 * uiScale;
+              // Position: margin from border (scaled, no 1.25x)
+              const labelMargin = 10 * baseUIScale;
               const labelX = px + labelMargin;
               const labelY = py + ph - labelHeight - labelMargin;
               
-              // Label style for main angle: bg-green-600/70 border border-green-400/50 backdrop-blur-sm rounded
+              // Label style for main angle: bg-green-600/70 border border-green-400/50
+              const labelCornerRadius = 6 * baseUIScale;
               if (isMain) {
-                // Background: bg-green-600/70 = rgba(22, 163, 74, 0.7)
+                // Background: bg-green-600/70
                 ctx.fillStyle = 'rgba(22, 163, 74, 0.7)';
                 ctx.beginPath();
-                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * uiScale); // rounded = 8px (2x)
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
                 ctx.fill();
                 
-                // Border: border-green-400/50 = rgba(74, 222, 128, 0.5)
+                // Border: border-green-400/50
                 ctx.strokeStyle = 'rgba(74, 222, 128, 0.5)';
-                ctx.lineWidth = 2 * uiScale; // 2x border width
+                ctx.lineWidth = Math.max(1, 1.5 * baseUIScale);
                 ctx.beginPath();
-                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * uiScale);
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
                 ctx.stroke();
                 
                 // Text: text-white/90
@@ -1318,17 +1315,16 @@ export function VideoExporter({
                 // Non-main: bg-black/50
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                 ctx.beginPath();
-                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * uiScale);
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
                 ctx.fill();
                 
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
               }
               
               ctx.textAlign = 'center';
-              // Use middle baseline for vertical centering
               ctx.textBaseline = 'middle';
-              // Slight downward offset for visual balance (Canvas middle baseline is slightly high)
-              const visualOffset = 2 * uiScale;
+              // Slight downward offset for visual balance
+              const visualOffset = 1.5 * baseUIScale;
               ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + visualOffset);
             }
           }
