@@ -1149,9 +1149,23 @@ export function VideoExporter({
           const pipW = Math.floor(width * 0.18);
           const pipMargin = Math.floor(width * 0.02);
 
-          // Track animation state for PiP corner flash
-          const pipFlashProgress = cameraSegments.length > 0 ? 
-            Math.min(1, Math.max(0, 1 - (absoluteTime % 1) * 2)) : 0; // 0.5s flash
+          // Calculate PiP flash progress based on angle change time
+          // This applies to both main label flash and PiP corner flash
+          let pipFlashProgress = 0;
+          if (pipAngleChangeTime >= 0) {
+            const timeSinceChange = absoluteTime - pipAngleChangeTime;
+            const flashDuration = 0.4;
+            if (timeSinceChange < flashDuration) {
+              pipFlashProgress = 1 - (timeSinceChange / flashDuration);
+              pipFlashProgress = pipFlashProgress * pipFlashProgress; // quadratic ease out
+            }
+          }
+          
+          // Main label style - used for both main label and PiP labels
+          const mainLabelScale = width / 1920 * 1.25;
+          const mainLabelFontSize = Math.max(12, Math.floor(14 * mainLabelScale));
+          const mainLabelPaddingX = 12 * mainLabelScale;
+          const mainLabelPaddingY = 6 * mainLabelScale;
           
           const drawPipAt = (angle: string, px: number, py: number, cornerIdx: number) => {
             const ev = extraVideos[angle];
@@ -1161,12 +1175,16 @@ export function VideoExporter({
             const pipH = Math.floor(pipW * (srcH / srcW));
             const cornerRadius = 8 * (width / 1920);
             
-            // Draw green flash shadow if this angle was just swapped in
+            // Draw green flash shadow if this angle was just swapped in (became the main angle)
             const isRecentlySwapped = pipFlashProgress > 0 && frameAngle === angle;
             if (isRecentlySwapped) {
               ctx.save();
               ctx.shadowColor = '#22c55e';
-              ctx.shadowBlur = (20 * pipFlashProgress) * (width / 1920);
+              ctx.shadowBlur = (25 * pipFlashProgress) * (width / 1920);
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 0;
+              ctx.strokeStyle = '#22c55e';
+              ctx.lineWidth = Math.max(2, 3 * (width / 1920));
               ctx.beginPath();
               ctx.roundRect(px, py, pipW, pipH, cornerRadius);
               ctx.stroke();
@@ -1188,29 +1206,35 @@ export function VideoExporter({
             ctx.roundRect(px, py, pipW, pipH, cornerRadius);
             ctx.stroke();
             
-            // Draw angle label at bottom-left of PiP
+            // Draw angle label at bottom-left of PiP - same style as main label
             const label = ANGLE_LABELS[angle] || angle;
-            const labelScale = width / 1920;
-            const labelFontSize = Math.max(10, Math.floor(12 * labelScale));
-            ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-            const labelPaddingX = 8 * labelScale;
-            const labelPaddingY = 4 * labelScale;
-            const labelWidth = ctx.measureText(label).width + labelPaddingX * 2;
-            const labelHeight = labelFontSize + labelPaddingY * 2;
-            const labelX = px + 6 * labelScale;
-            const labelY = py + pipH - labelHeight - 6 * labelScale;
+            ctx.font = `500 ${mainLabelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+            const labelWidth = ctx.measureText(label).width + mainLabelPaddingX * 2;
+            const labelHeight = mainLabelFontSize + mainLabelPaddingY * 2;
+            const labelX = px + 8 * mainLabelScale;
+            const labelY = py + pipH - labelHeight - 8 * mainLabelScale;
             
-            // Label background
+            // Label background - always dark (no green for main)
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.beginPath();
-            ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 4 * labelScale);
+            ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 6 * mainLabelScale);
             ctx.fill();
+            
+            // Green border when this angle is the main angle
+            if (frameAngle === angle) {
+              ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)';
+              ctx.lineWidth = Math.max(1.5, 2 * mainLabelScale);
+              ctx.beginPath();
+              ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 6 * mainLabelScale);
+              ctx.stroke();
+            }
             
             // Label text
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
+            const textYOffset = 1.5 * mainLabelScale;
+            ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + textYOffset);
           };
 
           // Compute pip height for positioning (use first available pip video)
@@ -1288,18 +1312,18 @@ export function VideoExporter({
           }
           
           const mainLabel = `Main: ${ANGLE_LABELS[frameAngle] || frameAngle}`;
-          const mainLabelScale = width / 1920 * 1.25;
-          const mainLabelFontSize = Math.max(12, Math.floor(14 * mainLabelScale));
           ctx.font = `600 ${mainLabelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-          const mainLabelPaddingX = 16 * mainLabelScale;
-          const mainLabelPaddingY = 6 * mainLabelScale;
           const mainLabelWidth = ctx.measureText(mainLabel).width + mainLabelPaddingX * 2;
           const mainLabelHeight = mainLabelFontSize + mainLabelPaddingY * 2;
           
-          // Position below telemetry panel
-          const telemetryBottomY = 16 * mainLabelScale + 24 * mainLabelScale + 10 * mainLabelScale + 70 * mainLabelScale;
+          // Position below telemetry panel with larger gap
+          // Telemetry panel: date(16+24+10) + telemetry(80) = ~130px at 1.25x scale
+          const dateBoxHeight = 24 * mainLabelScale;
+          const dateToTelemetryGap = 10 * mainLabelScale;
+          const telemetryPanelHeight = 80 * mainLabelScale; // approximate telemetry height
+          const telemetryBottomY = 16 * mainLabelScale + dateBoxHeight + dateToTelemetryGap + telemetryPanelHeight;
           const mainLabelX = (width - mainLabelWidth) / 2;
-          const mainLabelY = telemetryBottomY + 8 * mainLabelScale;
+          const mainLabelY = telemetryBottomY + 48 * mainLabelScale; // much larger gap after telemetry
           
           // Draw flash glow behind the label
           if (flashIntensity > 0) {
