@@ -193,8 +193,8 @@ export function VideoExporter({
 
     // Use width-based scale for consistent sizing across different layouts
     const baseScale = width / 1920;
-    // Single/PiP layouts use 1.5x larger scale
-    const scaleMultiplier = isSingleOrPip ? 1.5 : 1.25;
+    // Single/PiP layouts use 2x scale
+    const scaleMultiplier = isSingleOrPip ? 2.0 : 1.25;
     const scale = baseScale * scaleMultiplier;
     
     // From TelemetryCard.tsx:
@@ -215,11 +215,11 @@ export function VideoExporter({
     const boxHeight = circleSize * 2 + innerGap + cardPadding * 2;
 
     // Position at TOP CENTER, below the date/time display
-    // Use baseScale for positioning to match the date which uses baseScale
     const x = (width - boxWidth) / 2;
-    const dateTopMargin = 4 * baseScale + 8; // top-1 + extra offset for white border
-    const dateBoxHeight = 24 * baseScale; // based on py-1
-    const dateToTelemetryGap = 10 * baseScale; // Increased gap to prevent overlap
+    // For single/pip: use same top margin as dateTime; for others: add offset for white border
+    const dateTopMargin = isSingleOrPip ? 8 * baseScale + 4 : 4 * baseScale + 8;
+    const dateBoxHeight = 24 * (isSingleOrPip ? scale : baseScale); // Use correct scale for height
+    const dateToTelemetryGap = isSingleOrPip ?  baseScale : 10 * baseScale;
     const y = dateTopMargin + dateBoxHeight + dateToTelemetryGap;
 
     // Draw background - dark theme to match edit page
@@ -490,13 +490,13 @@ export function VideoExporter({
   ) => {
     // Use width-based scale for consistent sizing across different layouts
     const baseScale = width / 1920;
-    // Single/PiP layouts use 1.5x larger scale
-    const scaleMultiplier = isSingleOrPip ? 1.5 : 1.25;
+    // Single/PiP layouts use 2x scale
+    const scaleMultiplier = isSingleOrPip ? 2.0 : 1.25;
     const scale = baseScale * scaleMultiplier;
     
     // Match VideoPlayer.tsx: top-1 = 4px, px-2 = 8px, py-1 = 4px
-    // Add extra offset for single/pip layouts
-    const topMargin = isSingleOrPip ? 16 * scale : 4 * scale + 8 * baseScale;
+    // Single/pip layouts need smaller top margin since they use 2x scale
+    const topMargin = isSingleOrPip ? 8 * baseScale : 4 * scale + 8 * baseScale;
     const paddingX = 8 * scale; // px-2
     const paddingY = 4 * scale; // py-1
 
