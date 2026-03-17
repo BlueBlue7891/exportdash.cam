@@ -185,7 +185,8 @@ export function VideoExporter({
     seiData: SeiData | null,
     width: number,
     height: number,
-    icons: TelemetryIcons
+    icons: TelemetryIcons,
+    frameTime: number // for blinker animation
   ) => {
     if (!seiData) return;
 
@@ -200,22 +201,22 @@ export function VideoExporter({
     const columnGap = 10 * scale; // gap between columns
     const innerGap = 8 * scale; // gap between circles in a column
     const circleSize = 22 * scale; // 22px as in CSS
-    const blinkerWidth = 20 * scale;
+    const blinkerSize = 16 * scale; // Image width=16 height=16
     const speedWidth = 50 * scale; // min-width: 50px
     
     // Calculate total width
     // Layout: [Column] gap [Blinker] gap [Speed] gap [Blinker] gap [Column]
     const columnWidth = circleSize;
-    const boxWidth = columnWidth + columnGap + blinkerWidth + columnGap + speedWidth + columnGap + blinkerWidth + columnGap + columnWidth + cardPadding * 2;
+    const boxWidth = columnWidth + columnGap + blinkerSize + columnGap + speedWidth + columnGap + blinkerSize + columnGap + columnWidth + cardPadding * 2;
     const boxHeight = circleSize * 2 + innerGap + cardPadding * 2;
 
     // Position at TOP CENTER, below the date/time display
-    // Date/time box has height of 28 * scale + 12 * scale top margin + 8 * scale gap
+    // Match VideoPlayer.tsx: date at top-1 (4px), telemetry at top-8 (32px) when date visible
     const x = (width - boxWidth) / 2;
-    const dateBoxHeight = 28 * scale;
-    const dateTopMargin = 12 * scale;
-    const gapBetweenDateAndTelemetry = 8 * scale;
-    const y = dateTopMargin + dateBoxHeight + gapBetweenDateAndTelemetry;
+    const dateTopMargin = 4 * scale; // top-1
+    const dateBoxHeight = 24 * scale; // based on py-1
+    const dateToTelemetryGap = 4 * scale; // Small gap between date and telemetry
+    const y = dateTopMargin + dateBoxHeight + dateToTelemetryGap;
 
     // Draw background - dark theme to match edit page
     // .telemetry-card: background: rgba(12, 12, 12, 0.65), border-radius: 12px
@@ -256,13 +257,14 @@ export function VideoExporter({
     ctx.fill();
     
     // Brake pedal icon - :global(.pedal-icon): filter: brightness(1.2)
+    // Match TelemetryCard.tsx: Image width={12} height={12}
     if (icons.leftPedal) {
       ctx.save();
       // Apply brightness filter to match CSS
       applyFilter(ctx, 'brightness(1.2)');
-      // Draw pedal icon centered in circle
-      const pedalW = iconSize * 0.6; // Maintain aspect ratio, slightly smaller
-      const pedalH = iconSize;
+      // Fixed height to match circle, width auto to maintain aspect ratio
+      const pedalH = 12 * scale; // Fixed height as in CSS
+      const pedalW = (icons.leftPedal.width / icons.leftPedal.height) * pedalH;
       ctx.drawImage(
         icons.leftPedal,
         posX + columnWidth / 2 - pedalW / 2,
@@ -277,77 +279,92 @@ export function VideoExporter({
     posX += columnWidth + columnGap;
 
     // === Left Blinker ===
-    // .telemetry-blinker: opacity: 0.2, .telemetry-blinker.active: opacity: 1
+    // .telemetry-blinker: opacity: 0.2, .telemetry-blinker.active: opacity: 1, animation: blink 1s steps(1) infinite
+    // Blink animation: 1s cycle, 50% on, 50% off
+    const blinkPhase = Math.floor(frameTime * 1) % 2; // Toggle every 1 second
+    const leftBlinkerOn = seiData.blinker_on_left && blinkPhase === 0;
     if (icons.blinker) {
       ctx.save();
-      ctx.globalAlpha = seiData.blinker_on_left ? 1 : 0.2;
+      ctx.globalAlpha = leftBlinkerOn ? 1 : 0.2;
+      // Match TelemetryCard.tsx: Image width={16} height={16}
       ctx.drawImage(
         icons.blinker,
-        posX,
-        centerY - blinkerWidth / 2,
-        blinkerWidth,
-        blinkerWidth
+        posX + (blinkerSize - 16 * scale) / 2, // Center horizontally
+        centerY - 8 * scale, // 16px height, center vertically
+        16 * scale,
+        16 * scale
       );
       ctx.restore();
     } else {
-      ctx.fillStyle = seiData.blinker_on_left ? '#22c55e' : 'rgba(100, 100, 100, 0.2)';
+      ctx.fillStyle = leftBlinkerOn ? '#22c55e' : 'rgba(100, 100, 100, 0.2)';
       ctx.beginPath();
       ctx.moveTo(posX, centerY);
-      ctx.lineTo(posX + blinkerWidth, centerY - 10 * scale);
-      ctx.lineTo(posX + blinkerWidth, centerY + 10 * scale);
+      ctx.lineTo(posX + blinkerSize, centerY - 8 * scale);
+      ctx.lineTo(posX + blinkerSize, centerY + 8 * scale);
       ctx.closePath();
       ctx.fill();
     }
 
-    posX += blinkerWidth + columnGap;
+    posX += blinkerSize + columnGap;
 
     // === Speed Display ===
-    // .telemetry-speed: min-width: 50px
+    // .telemetry-speed: min-width: 50px, flex-direction: column, align-items: center
     const speed = seiData.vehicle_speed_mps
       ? speedUnit === 'mph'
         ? Math.round(seiData.vehicle_speed_mps * 2.23694)
         : Math.round(seiData.vehicle_speed_mps * 3.6)
       : 0;
 
-    // .speed-value: font-size: 32px, font-weight: 500, color: #c0c0c0
+    // Calculate total height of speed display for vertical centering
+    // .speed-value: font-size: 32px, line-height: 1
+    // .speed-unit: font-size: 10px
+    const speedValueHeight = 32 * scale; // line-height: 1
+    const speedUnitHeight = 10 * scale;
+    const totalSpeedHeight = speedValueHeight + speedUnitHeight;
+    const speedTop = centerY - totalSpeedHeight / 2;
+
+    // .speed-value: font-size: 32px, font-weight: 500, color: #c0c0c0, line-height: 1
     ctx.fillStyle = '#c0c0c0';
     ctx.font = `500 ${32 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(speed), posX + speedWidth / 2, centerY - 6 * scale);
+    ctx.textBaseline = 'top'; // Use top baseline for precise positioning
+    ctx.fillText(String(speed), posX + speedWidth / 2, speedTop);
 
     // .speed-unit: font-size: 10px, font-weight: 600, color: #9ca3af
     ctx.fillStyle = '#9ca3af';
     ctx.font = `600 ${10 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
-    ctx.fillText(speedUnit === 'mph' ? 'MPH' : 'km/h', posX + speedWidth / 2, centerY + 14 * scale);
+    ctx.fillText(speedUnit === 'mph' ? 'MPH' : 'km/h', posX + speedWidth / 2, speedTop + speedValueHeight);
 
     posX += speedWidth + columnGap;
 
     // === Right Blinker (rotated 180°) ===
+    // Same blink animation as left
+    const rightBlinkerOn = seiData.blinker_on_right && blinkPhase === 0;
     if (icons.blinker) {
       ctx.save();
-      ctx.globalAlpha = seiData.blinker_on_right ? 1 : 0.2;
-      ctx.translate(posX + blinkerWidth / 2, centerY);
+      ctx.globalAlpha = rightBlinkerOn ? 1 : 0.2;
+      ctx.translate(posX + 8 * scale, centerY);
       ctx.rotate(Math.PI);
+      // Match TelemetryCard.tsx: Image width={16} height={16}
       ctx.drawImage(
         icons.blinker,
-        -blinkerWidth / 2,
-        -blinkerWidth / 2,
-        blinkerWidth,
-        blinkerWidth
+        -8 * scale,
+        -8 * scale,
+        16 * scale,
+        16 * scale
       );
       ctx.restore();
     } else {
-      ctx.fillStyle = seiData.blinker_on_right ? '#22c55e' : 'rgba(100, 100, 100, 0.2)';
+      ctx.fillStyle = rightBlinkerOn ? '#22c55e' : 'rgba(100, 100, 100, 0.2)';
       ctx.beginPath();
-      ctx.moveTo(posX + blinkerWidth, centerY);
-      ctx.lineTo(posX, centerY - 10 * scale);
-      ctx.lineTo(posX, centerY + 10 * scale);
+      ctx.moveTo(posX + blinkerSize, centerY);
+      ctx.lineTo(posX, centerY - 8 * scale);
+      ctx.lineTo(posX, centerY + 8 * scale);
       ctx.closePath();
       ctx.fill();
     }
 
-    posX += blinkerWidth + columnGap;
+    posX += blinkerSize + columnGap;
 
     // === Right Column: Steering + Accelerator ===
     // Steering circle - .telemetry-steering.autopilot: background: #006deb
@@ -412,13 +429,14 @@ export function VideoExporter({
     }
 
     // Accelerator pedal icon - :global(.pedal-icon): filter: brightness(1.2)
+    // Match TelemetryCard.tsx: Image width={6} height={6}
     if (icons.rightPedal) {
       ctx.save();
       // Apply brightness filter to match CSS
       applyFilter(ctx, 'brightness(1.2)');
-      // Draw pedal icon centered in circle
-      const pedalW = iconSize * 0.6; // Maintain aspect ratio
-      const pedalH = iconSize;
+      // Fixed height to match circle, width auto to maintain aspect ratio
+      const pedalH = 12 * scale; // Fixed height
+      const pedalW = (icons.rightPedal.width / icons.rightPedal.height) * pedalH;
       ctx.drawImage(
         icons.rightPedal,
         posX + columnWidth / 2 - pedalW / 2,
@@ -455,37 +473,42 @@ export function VideoExporter({
     }
   };
 
-  // Draw date/time overlay
+  // Draw date/time overlay - matches VideoPlayer.tsx: absolute top-1, px-2 py-1
   const drawDateTime = (
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
     date: string,
     time: string,
-    telemetryVisible: boolean
+    frameTime: number // for potential animation
   ) => {
     const scale = Math.min(width / 1280, height / 720);
-    const padding = 12 * scale;
+    
+    // Match VideoPlayer.tsx: top-1 = 4px, px-2 = 8px, py-1 = 4px
+    const topMargin = 4 * scale;
+    const paddingX = 8 * scale; // px-2
+    const paddingY = 4 * scale; // py-1
 
     // Format the date/time string
     const dateTimeStr = `${date}  ${time}`;
 
-    ctx.font = `600 ${14 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    // Match VideoPlayer.tsx: text-xs font-medium = 12px, font-weight 500
+    ctx.font = `500 ${12 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
     const textWidth = ctx.measureText(dateTimeStr).width;
-    const boxWidth = textWidth + padding * 2;
-    const boxHeight = 28 * scale;
+    const boxWidth = textWidth + paddingX * 2;
+    const boxHeight = 24 * scale; // Smaller height to match py-1
 
-    // Position: Always at top center, telemetry will be drawn below it
+    // Position at top center
     const x = (width - boxWidth) / 2;
-    const y = 12 * scale; // Top margin
+    const y = topMargin;
 
-    // Draw background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    // Draw background - bg-black/50 backdrop-blur-sm
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.beginPath();
     ctx.roundRect(x, y, boxWidth, boxHeight, 6 * scale);
     ctx.fill();
 
-    // Draw text
+    // Draw text - text-white/90
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1145,10 +1168,10 @@ export function VideoExporter({
           const seconds = String(realTime.getSeconds()).padStart(2, '0');
           const dynamicDate = `${year}-${month}-${day}`;
           const dynamicTime = `${hours}:${minutes}:${seconds}`;
-          drawDateTime(ctx, width, height, dynamicDate, dynamicTime, showTelemetry);
+          drawDateTime(ctx, width, height, dynamicDate, dynamicTime, absoluteTime);
         }
         if (showTelemetry) {
-          drawTelemetry(ctx, seiData, width, height, telemetryIcons);
+          drawTelemetry(ctx, seiData, width, height, telemetryIcons, absoluteTime);
         }
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {
           drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
