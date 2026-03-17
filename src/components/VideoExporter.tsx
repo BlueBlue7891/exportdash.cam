@@ -979,8 +979,8 @@ export function VideoExporter({
               
               // Draw pulsing indicator dot in top-right corner
               // Use baseUIScale for smaller size in triple view
-              const dotRadius = 6 * baseUIScale;
-              const dotMargin = 10 * baseUIScale;
+              const dotRadius = 6 * uiScale;
+              const dotMargin = 10 * uiScale;
               const dotX = px + pw - dotRadius - dotMargin;
               const dotY = py + dotRadius + dotMargin;
               
@@ -1256,8 +1256,7 @@ export function VideoExporter({
                 ctx.restore();
                 
                 // Draw pulsing indicator dot in top-right corner
-                // Use uiScale (with 1.25x) for larger size in six-view layout
-                const dotRadius = 8 * uiScale;
+                const dotRadius = 6 * uiScale;
                 const dotMargin = 12 * uiScale;
                 const dotX = px + pw - dotRadius - dotMargin; // right margin
                 const dotY = py + dotRadius + dotMargin; // top margin
