@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { IconDownload, IconPlayerStop, IconLoader2, IconCheck } from '@tabler/icons-react';
+import { IconDownload, IconPlayerStop, IconLoader2, IconCheck, IconArrowUp, IconArrowDown, IconArrowLeft, IconArrowRight, IconArrowDownLeft, IconArrowDownRight } from '@tabler/icons-react';
 import { SeiData, SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { Output, Mp4OutputFormat, BufferTarget, VideoSampleSource, VideoSample } from 'mediabunny';
 import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, ANGLE_LABELS } from '@/types/video';
@@ -37,6 +37,16 @@ interface TelemetryIcons {
   blinker: HTMLImageElement | null;
 }
 
+// Angle icon cache for single view
+interface AngleIcons {
+  front: HTMLImageElement | null;
+  back: HTMLImageElement | null;
+  left_repeater: HTMLImageElement | null;
+  right_repeater: HTMLImageElement | null;
+  left_pillar: HTMLImageElement | null;
+  right_pillar: HTMLImageElement | null;
+}
+
 // Load an image with promise
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -57,6 +67,45 @@ async function loadTelemetryIcons(): Promise<TelemetryIcons> {
     loadImage('/blinker.svg'),
   ]);
   return { wheel, leftPedal, rightPedal, blinker };
+}
+
+// Load angle icons as SVG data URLs (matching VideoPlayer.tsx Tabler Icons)
+async function loadAngleIcons(): Promise<AngleIcons> {
+  // Tabler Icons SVG paths extracted from @tabler/icons-react
+  const iconSize = 24;
+  const strokeWidth = 2;
+  const color = '#60a5fa'; // blue-400
+  
+  const createSvgDataUrl = (pathD: string) => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${pathD}</svg>`;
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+  };
+  
+  const icons = {
+    // IconArrowUp: M12 5l0 14M5 12l7-7 7 7
+    front: createSvgDataUrl('<path d="M12 5l0 14M5 12l7-7 7 7"/>'),
+    // IconArrowDown: M12 5l0 14M5 12l7 7 7-7
+    back: createSvgDataUrl('<path d="M12 5l0 14M5 12l7 7 7-7"/>'),
+    // IconArrowLeft: M5 12l14 0M12 5l-7 7 7 7
+    left_pillar: createSvgDataUrl('<path d="M5 12l14 0M12 5l-7 7 7 7"/>'),
+    // IconArrowRight: M5 12l14 0M12 5l7 7-7 7
+    right_pillar: createSvgDataUrl('<path d="M5 12l14 0M12 5l7 7-7 7"/>'),
+    // IconArrowDownLeft: M17 7L7 17M7 17h10M7 17V7
+    left_repeater: createSvgDataUrl('<path d="M17 7L7 17M7 17h10M7 17V7"/>'),
+    // IconArrowDownRight: M7 7l10 10M17 17H7M17 17V7
+    right_repeater: createSvgDataUrl('<path d="M7 7l10 10M17 17H7M17 17V7"/>'),
+  };
+  
+  const [front, back, left_repeater, right_repeater, left_pillar, right_pillar] = await Promise.all([
+    loadImage(icons.front),
+    loadImage(icons.back),
+    loadImage(icons.left_repeater),
+    loadImage(icons.right_repeater),
+    loadImage(icons.left_pillar),
+    loadImage(icons.right_pillar),
+  ]);
+  
+  return { front, back, left_repeater, right_repeater, left_pillar, right_pillar };
 }
 
 // Convert lat/lng to tile coordinates
@@ -803,6 +852,9 @@ export function VideoExporter({
 
       setStatus('Loading telemetry icons...');
       const telemetryIcons = await loadTelemetryIcons();
+      
+      setStatus('Loading angle icons...');
+      const angleIcons = await loadAngleIcons();
 
       setStatus('Pre-loading map tiles...');
 
@@ -888,6 +940,10 @@ export function VideoExporter({
       let frameCount = 0;
       let currentLoadedClipIdx = -1;
       let currentLoadedAngle = '';
+      
+      // Track PiP main angle changes for flash animation
+      let prevPipMainAngle = '';
+      let pipAngleChangeTime = -1;
 
       for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
         if (abortRef.current) break;
@@ -1211,24 +1267,27 @@ export function VideoExporter({
           }
           
           // Draw main angle label below telemetry for PiP layout
-          // Calculate fade animation based on segment boundary proximity
-          let mainLabelOpacity = 1;
-          if (cameraSegments.length > 0) {
-            // Find current segment and calculate fade at boundaries
-            const currentSeg = cameraSegments.find(seg => 
-              absoluteTime >= seg.startTime && absoluteTime < seg.endTime
-            );
-            if (currentSeg) {
-              const segDuration = currentSeg.endTime - currentSeg.startTime;
-              const timeInSeg = absoluteTime - currentSeg.startTime;
-              const fadeDuration = 0.3; // 0.3s fade at start
-              if (timeInSeg < fadeDuration) {
-                mainLabelOpacity = Math.min(1, timeInSeg / fadeDuration);
-              }
+          // Format: "Main: xxx" with flash animation on angle switch
+          
+          // Detect angle change for flash animation
+          if (prevPipMainAngle !== frameAngle) {
+            pipAngleChangeTime = absoluteTime;
+            prevPipMainAngle = frameAngle;
+          }
+          
+          // Calculate flash intensity (0.4s duration, quick fade out)
+          let flashIntensity = 0;
+          if (pipAngleChangeTime >= 0) {
+            const timeSinceChange = absoluteTime - pipAngleChangeTime;
+            const flashDuration = 0.4;
+            if (timeSinceChange < flashDuration) {
+              // Ease out flash
+              flashIntensity = 1 - (timeSinceChange / flashDuration);
+              flashIntensity = flashIntensity * flashIntensity; // quadratic ease out
             }
           }
           
-          const mainLabel = ANGLE_LABELS[frameAngle] || frameAngle;
+          const mainLabel = `Main: ${ANGLE_LABELS[frameAngle] || frameAngle}`;
           const mainLabelScale = width / 1920 * 1.25;
           const mainLabelFontSize = Math.max(12, Math.floor(14 * mainLabelScale));
           ctx.font = `600 ${mainLabelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
@@ -1237,13 +1296,25 @@ export function VideoExporter({
           const mainLabelWidth = ctx.measureText(mainLabel).width + mainLabelPaddingX * 2;
           const mainLabelHeight = mainLabelFontSize + mainLabelPaddingY * 2;
           
-          // Position below telemetry panel (estimated position)
+          // Position below telemetry panel
           const telemetryBottomY = 16 * mainLabelScale + 24 * mainLabelScale + 10 * mainLabelScale + 70 * mainLabelScale;
           const mainLabelX = (width - mainLabelWidth) / 2;
           const mainLabelY = telemetryBottomY + 8 * mainLabelScale;
           
-          // Draw label with fade opacity
-          ctx.globalAlpha = mainLabelOpacity;
+          // Draw flash glow behind the label
+          if (flashIntensity > 0) {
+            ctx.save();
+            const glowSize = 20 * flashIntensity * mainLabelScale;
+            ctx.shadowColor = '#22c55e';
+            ctx.shadowBlur = glowSize;
+            ctx.fillStyle = `rgba(34, 197, 94, ${0.3 * flashIntensity})`;
+            ctx.beginPath();
+            ctx.roundRect(mainLabelX - 4, mainLabelY - 4, mainLabelWidth + 8, mainLabelHeight + 8, 8 * mainLabelScale);
+            ctx.fill();
+            ctx.restore();
+          }
+          
+          // Draw label background (green tint for main)
           ctx.fillStyle = 'rgba(34, 197, 94, 0.5)'; // green-500/50
           ctx.beginPath();
           ctx.roundRect(mainLabelX, mainLabelY, mainLabelWidth, mainLabelHeight, 6 * mainLabelScale);
@@ -1256,7 +1327,6 @@ export function VideoExporter({
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(mainLabel, width / 2, mainLabelY + mainLabelHeight / 2);
-          ctx.globalAlpha = 1; // Reset opacity
 
         } else if (layout === 'all') {
           // Six views layout: 3 columns x 2 rows
@@ -1456,32 +1526,52 @@ export function VideoExporter({
           ctx.drawImage(tempVideo, 0, 0, width, height);
           
           // Draw bottom center angle label capsule for single layout
-          // Match VideoPlayer.tsx: bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md rounded-full
-          const capsuleScale = width / 1920;
-          const capsulePaddingX = 24 * capsuleScale;
-          const capsulePaddingY = 6 * capsuleScale;
-          const capsuleFontSize = Math.max(14, Math.floor(16 * capsuleScale));
+          // Match VideoPlayer.tsx: bottom-4 bg-black/50 backdrop-blur-md rounded-full with icon
+          // Larger scale for better visibility in single view exports
+          const capsuleScale = width / 1920 * 1.5; // 1.5x larger for single view
+          const capsulePaddingX = 20 * capsuleScale;
+          const capsulePaddingY = 14 * capsuleScale; // Increased vertical padding
+          const capsuleFontSize = Math.max(16, Math.floor(20 * capsuleScale));
           ctx.font = `500 ${capsuleFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-          const angleLabel = ANGLE_LABELS[selectedAngle] || selectedAngle;
-          const labelWidth = ctx.measureText(angleLabel).width + capsulePaddingX * 2;
+          
+          // Use frameAngle to ensure it updates with camera track
+          const currentAngle = frameAngle;
+          const angleLabel = ANGLE_LABELS[currentAngle] || currentAngle;
+          
+          // Icon (arrow) settings - blue color like in edit page
+          const iconSize = 22 * capsuleScale; // Slightly larger icon
+          const iconSpacing = 10 * capsuleScale;
+          
+          // Calculate dimensions including icon
+          const textWidth = ctx.measureText(angleLabel).width;
+          const contentWidth = iconSize + iconSpacing + textWidth;
+          const labelWidth = contentWidth + capsulePaddingX * 2;
           const labelHeight = capsuleFontSize + capsulePaddingY * 2;
           const capsuleX = (width - labelWidth) / 2;
-          const capsuleY = height - labelHeight - 16 * capsuleScale; // bottom-4 equivalent
+          const capsuleY = height - labelHeight - 24 * capsuleScale; // bottom-6 equivalent (larger margin)
           
-          // Draw capsule background with border
+          // Draw capsule background with border (bg-black/50 + border-white/20)
           ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
           ctx.beginPath();
           ctx.roundRect(capsuleX, capsuleY, labelWidth, labelHeight, labelHeight / 2);
           ctx.fill();
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.lineWidth = Math.max(1, capsuleScale);
+          ctx.lineWidth = Math.max(1, 1.5 * capsuleScale);
           ctx.stroke();
           
-          // Draw angle label text
+          // Draw blue arrow icon using pre-loaded Tabler Icons SVG
+          const iconX = capsuleX + capsulePaddingX;
+          const iconY = capsuleY + (labelHeight - iconSize) / 2;
+          const iconImg = angleIcons[currentAngle as keyof AngleIcons];
+          if (iconImg) {
+            ctx.drawImage(iconImg, iconX, iconY, iconSize, iconSize);
+          }
+          
+          // Draw angle label text (text-white)
           ctx.fillStyle = '#ffffff';
-          ctx.textAlign = 'center';
+          ctx.textAlign = 'left';
           ctx.textBaseline = 'middle';
-          ctx.fillText(angleLabel, width / 2, capsuleY + labelHeight / 2);
+          ctx.fillText(angleLabel, iconX + iconSize + iconSpacing, capsuleY + labelHeight / 2);
         }
 
         // Get SEI data for this absolute time, with event.json GPS fallback
