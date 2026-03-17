@@ -190,8 +190,10 @@ export function VideoExporter({
   ) => {
     if (!seiData) return;
 
-    // Match TelemetryCard.tsx exact dimensions
-    const scale = Math.min(width / 1280, height / 720);
+    // Match TelemetryCard.tsx exact dimensions, scaled up by 1.25x (250px / 200px)
+    const baseScale = Math.min(width / 1280, height / 720);
+    const scaleMultiplier = 1.25; // Scale up from 200px to 250px
+    const scale = baseScale * scaleMultiplier;
     
     // From TelemetryCard.tsx:
     // .telemetry-card: padding: 5px, gap: 10px, border-radius: 12px
@@ -211,11 +213,11 @@ export function VideoExporter({
     const boxHeight = circleSize * 2 + innerGap + cardPadding * 2;
 
     // Position at TOP CENTER, below the date/time display
-    // Match VideoPlayer.tsx: date at top-1 (4px), telemetry at top-8 (32px) when date visible
+    // Use baseScale for positioning to match the date which uses baseScale
     const x = (width - boxWidth) / 2;
-    const dateTopMargin = 4 * scale; // top-1
-    const dateBoxHeight = 24 * scale; // based on py-1
-    const dateToTelemetryGap = 4 * scale; // Small gap between date and telemetry
+    const dateTopMargin = 4 * baseScale; // top-1
+    const dateBoxHeight = 24 * baseScale; // based on py-1
+    const dateToTelemetryGap = 8 * baseScale; // Increased gap to prevent overlap
     const y = dateTopMargin + dateBoxHeight + dateToTelemetryGap;
 
     // Draw background - dark theme to match edit page
@@ -242,13 +244,14 @@ export function VideoExporter({
     ctx.arc(posX + columnWidth / 2, topCircleY, circleSize / 2, 0, Math.PI * 2);
     ctx.fill();
     
-    // Gear letter - .telemetry-gear: font-size: 14px, font-weight: 700, color: #c0c0c0ff
+    // Gear letter - .telemetry-gear: font-size: 16px, font-weight: 700, color: #c0c0c0ff
     const gearLetter = ['P', 'D', 'R', 'N'][seiData.gear_state ?? 0] || 'P';
     ctx.fillStyle = '#c0c0c0ff';
-    ctx.font = `700 ${14 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.font = `700 ${16 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(gearLetter, posX + columnWidth / 2, topCircleY);
+    // Center in circle with slight downward offset for visual balance
+    ctx.fillText(gearLetter, posX + columnWidth / 2, topCircleY + 1.5 * scale);
 
     // Brake circle - .telemetry-brake.active: background: #ff4444
     ctx.fillStyle = seiData.brake_applied ? '#ff4444' : '#3f3f3fde';
@@ -257,13 +260,13 @@ export function VideoExporter({
     ctx.fill();
     
     // Brake pedal icon - :global(.pedal-icon): filter: brightness(1.2)
-    // Match TelemetryCard.tsx: Image width={12} height={12}
+    // Increased to 14px for better visibility
     if (icons.leftPedal) {
       ctx.save();
       // Apply brightness filter to match CSS
       applyFilter(ctx, 'brightness(1.2)');
-      // Fixed height to match circle, width auto to maintain aspect ratio
-      const pedalH = 12 * scale; // Fixed height as in CSS
+      // Fixed height 14px, width auto to maintain aspect ratio
+      const pedalH = 14 * scale;
       const pedalW = (icons.leftPedal.width / icons.leftPedal.height) * pedalH;
       ctx.drawImage(
         icons.leftPedal,
@@ -280,8 +283,8 @@ export function VideoExporter({
 
     // === Left Blinker ===
     // .telemetry-blinker: opacity: 0.2, .telemetry-blinker.active: opacity: 1, animation: blink 1s steps(1) infinite
-    // Blink animation: 1s cycle, 50% on, 50% off
-    const blinkPhase = Math.floor(frameTime * 1) % 2; // Toggle every 1 second
+    // Blink animation: 0.5s cycle (2Hz) for faster blinking
+    const blinkPhase = Math.floor(frameTime * 2) % 2; // Toggle every 0.5 seconds
     const leftBlinkerOn = seiData.blinker_on_left && blinkPhase === 0;
     if (icons.blinker) {
       ctx.save();
@@ -429,13 +432,13 @@ export function VideoExporter({
     }
 
     // Accelerator pedal icon - :global(.pedal-icon): filter: brightness(1.2)
-    // Match TelemetryCard.tsx: Image width={6} height={6}
+    // Increased to 14px for better visibility
     if (icons.rightPedal) {
       ctx.save();
       // Apply brightness filter to match CSS
       applyFilter(ctx, 'brightness(1.2)');
-      // Fixed height to match circle, width auto to maintain aspect ratio
-      const pedalH = 12 * scale; // Fixed height
+      // Fixed height 14px, width auto to maintain aspect ratio
+      const pedalH = 14 * scale;
       const pedalW = (icons.rightPedal.width / icons.rightPedal.height) * pedalH;
       ctx.drawImage(
         icons.rightPedal,
@@ -482,7 +485,9 @@ export function VideoExporter({
     time: string,
     frameTime: number // for potential animation
   ) => {
-    const scale = Math.min(width / 1280, height / 720);
+    const baseScale = Math.min(width / 1280, height / 720);
+    const scaleMultiplier = 1.25; // Scale up to match telemetry panel
+    const scale = baseScale * scaleMultiplier;
     
     // Match VideoPlayer.tsx: top-1 = 4px, px-2 = 8px, py-1 = 4px
     const topMargin = 4 * scale;
