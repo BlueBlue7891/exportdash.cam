@@ -901,9 +901,6 @@ export function VideoExporter({
 
         if (layout === 'triple') {
           // Load and seek all 3 angles
-          const cellW = Math.floor(width / 3);
-          const cellH = height;
-
           for (let i = 0; i < tripleAngles.length; i++) {
             const angle = tripleAngles[i];
             const ev = extraVideos[angle];
@@ -921,12 +918,15 @@ export function VideoExporter({
           ctx.fillStyle = '#000';
           ctx.fillRect(0, 0, width, height);
           
-          const gap = 4; // Gap between cells in pixels
-          // Use EXACT same scale as six-view layout for consistent UI element sizing
-          // Both layouts use width/1920 vs height/1080, but six-view has height/2 per cell
-          // We use the same scale calculation to ensure UI elements look the same size
+          // Use consistent gap and padding for uniform spacing (match six-view)
+          const gap = 4; // Gap between cells
+          const padding = 4; // Outer padding (black border around the grid)
+          // Available space for videos after padding
+          const availW = width - padding * 2;
+          const availH = height - padding * 2;
+          const cellW = Math.floor(availW / 3);
+          const cellH = availH; // Single row, use full available height
           // Use width-based scale for consistent UI sizing across layouts
-          // Don't use height in calculation since triple and all layouts have different heights
           const baseUIScale = width / 1920; // Base scale without 1.25x multiplier
           const uiScale = baseUIScale * 1.25; // Scale with 1.25x for most elements
           
@@ -937,9 +937,9 @@ export function VideoExporter({
             const srcW = ev.el.videoWidth || cellW;
             const srcH = ev.el.videoHeight || cellH;
             
-            // Calculate position with gaps
-            const px = i * cellW + gap / 2;
-            const py = gap / 2;
+            // Calculate position with gaps and outer padding
+            const px = padding + i * cellW + gap / 2;
+            const py = padding + gap / 2;
             const pw = cellW - gap;
             const ph = cellH - gap;
             
@@ -978,9 +978,9 @@ export function VideoExporter({
               ctx.restore();
               
               // Draw pulsing indicator dot in top-right corner
-              // Match VideoPlayer.tsx: w-2 h-2 bg-green-500 rounded-full animate-pulse
-              const dotRadius = 8 * uiScale; // Consistent size with six-view layout
-              const dotMargin = 12 * uiScale;
+              // Use baseUIScale for smaller size in triple view
+              const dotRadius = 6 * baseUIScale;
+              const dotMargin = 10 * baseUIScale;
               const dotX = px + pw - dotRadius - dotMargin;
               const dotY = py + dotRadius + dotMargin;
               
@@ -1155,9 +1155,14 @@ export function VideoExporter({
           // Six views layout: 3 columns x 2 rows
           const { topRow, bottomRow } = layoutConfig.all;
           const rows = [topRow, bottomRow];
-          const cellW = Math.floor(width / 3);
-          const cellH = Math.floor(height / 2);
-          const gap = 4; // Gap between cells in pixels
+          // Use consistent gap and padding for uniform spacing
+          const gap = 4; // Gap between cells
+          const padding = 4; // Outer padding (black border around the grid)
+          // Available space for videos after padding
+          const availW = width - padding * 2;
+          const availH = height - padding * 2;
+          const cellW = Math.floor(availW / 3);
+          const cellH = Math.floor(availH / 2);
           // Use width-based scale for consistent UI sizing across layouts
           const baseUIScale = width / 1920; // Base scale without 1.25x multiplier
           const uiScale = baseUIScale * 1.25; // Scale with 1.25x for most elements
@@ -1190,8 +1195,8 @@ export function VideoExporter({
               
               if (!ev || !moment.videos.some(v => v.angle === angle)) {
                 // Draw placeholder for unavailable angle
-                const px = colIdx * cellW + gap / 2;
-                const py = rowIdx * cellH + gap / 2;
+                const px = padding + colIdx * cellW + gap / 2;
+                const py = padding + rowIdx * cellH + gap / 2;
                 const pw = cellW - gap;
                 const ph = cellH - gap;
                 ctx.fillStyle = '#1a1a1a';
@@ -1210,9 +1215,9 @@ export function VideoExporter({
               const srcW = ev.el.videoWidth || cellW;
               const srcH = ev.el.videoHeight || cellH;
               
-              // Calculate position with gaps
-              const px = colIdx * cellW + gap / 2;
-              const py = rowIdx * cellH + gap / 2;
+              // Calculate position with gaps and outer padding
+              const px = padding + colIdx * cellW + gap / 2;
+              const py = padding + rowIdx * cellH + gap / 2;
               const pw = cellW - gap;
               const ph = cellH - gap;
               
@@ -1251,10 +1256,9 @@ export function VideoExporter({
                 ctx.restore();
                 
                 // Draw pulsing indicator dot in top-right corner
-                // Match VideoPlayer.tsx: w-2 h-2 bg-green-500 rounded-full animate-pulse
-                // Enlarged and positioned with consistent margins
-                const dotRadius = 6 * uiScale; // Enlarged from 4px to 6px radius
-                const dotMargin = 12 * uiScale; // Increased margin from border
+                // Use uiScale (with 1.25x) for larger size in six-view layout
+                const dotRadius = 8 * uiScale;
+                const dotMargin = 12 * uiScale;
                 const dotX = px + pw - dotRadius - dotMargin; // right margin
                 const dotY = py + dotRadius + dotMargin; // top margin
                 
