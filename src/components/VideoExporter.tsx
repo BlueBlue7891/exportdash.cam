@@ -924,11 +924,17 @@ export function VideoExporter({
           
           // Uniform spacing: gap between cells equals outer padding
           const spacing = 4; // Unified spacing value for both gap and padding
-          // Available space for videos
+          // Available width for videos
           const availW = width - spacing * 4; // spacing on both sides + between cells
-          const availH = height - spacing * 2; // spacing on top and bottom
           const cellW = Math.floor(availW / 3);
-          const cellH = availH; // Single row
+          // Calculate cell height based on first video's aspect ratio to fill vertically
+          const firstVideo = extraVideos[tripleAngles[0]];
+          const videoAspect = firstVideo?.el?.videoWidth && firstVideo?.el?.videoHeight 
+            ? firstVideo.el.videoWidth / firstVideo.el.videoHeight 
+            : 16 / 9;
+          const cellH = Math.floor(cellW / videoAspect);
+          // Recalculate height to include spacing
+          const contentHeight = cellH + spacing * 2;
           // Use width-based scale for consistent UI sizing across layouts
           const baseUIScale = width / 1920;
           const uiScale = baseUIScale * 1.25;
@@ -937,21 +943,18 @@ export function VideoExporter({
             const angle = tripleAngles[i];
             const ev = extraVideos[angle];
             const isMain = angle === frameAngle;
-            const srcW = ev.el.videoWidth || cellW;
-            const srcH = ev.el.videoHeight || cellH;
             
             // Calculate position: spacing on left + i * (cell + spacing)
             const px = spacing + i * (cellW + spacing);
-            const py = spacing;
+            const py = spacing + Math.floor((height - contentHeight) / 2); // Center vertically
             const pw = cellW;
             const ph = cellH;
             
-            // Fit each video into its cell preserving aspect ratio
-            const videoScale = Math.min(pw / srcW, ph / srcH);
-            const dw = Math.floor(srcW * videoScale);
-            const dh = Math.floor(srcH * videoScale);
-            const dx = px + Math.floor((pw - dw) / 2);
-            const dy = py + Math.floor((ph - dh) / 2);
+            // Scale video to fill the cell completely (aspect ratio already matches)
+            const dx = px;
+            const dy = py;
+            const dw = pw;
+            const dh = ph;
             
             // Create clipping region with rounded corners for the cell
             const cornerRadius = 8 * uiScale;
@@ -1160,11 +1163,15 @@ export function VideoExporter({
           const rows = [topRow, bottomRow];
           // Uniform spacing: gap between cells equals outer padding
           const spacing = 4; // Unified spacing value for gap and padding
-          // Available space for videos: subtract outer spacing + internal gaps
+          // Available width for videos
           const availW = width - spacing * 4; // spacing on both sides + between 3 cells
-          const availH = height - spacing * 3; // spacing on top/bottom + between 2 rows
           const cellW = Math.floor(availW / 3);
-          const cellH = Math.floor(availH / 2);
+          // Calculate cell height based on video aspect ratio to fill vertically
+          const firstVideo = extraVideos[sixViewAngles[0]];
+          const videoAspect = firstVideo?.el?.videoWidth && firstVideo?.el?.videoHeight 
+            ? firstVideo.el.videoWidth / firstVideo.el.videoHeight 
+            : 16 / 9;
+          const cellH = Math.floor(cellW / videoAspect);
           // Use width-based scale for consistent UI sizing across layouts
           const baseUIScale = width / 1920;
           const uiScale = baseUIScale * 1.25;
@@ -1214,21 +1221,17 @@ export function VideoExporter({
                 continue;
               }
 
-              const srcW = ev.el.videoWidth || cellW;
-              const srcH = ev.el.videoHeight || cellH;
-              
               // Calculate position: uniform spacing
               const px = spacing + colIdx * (cellW + spacing);
               const py = spacing + rowIdx * (cellH + spacing);
               const pw = cellW;
               const ph = cellH;
               
-              // Fit video into cell preserving aspect ratio
-              const videoScale = Math.min(pw / srcW, ph / srcH);
-              const dw = Math.floor(srcW * videoScale);
-              const dh = Math.floor(srcH * videoScale);
-              const dx = px + Math.floor((pw - dw) / 2);
-              const dy = py + Math.floor((ph - dh) / 2);
+              // Scale video to fill the cell completely (aspect ratio already matches)
+              const dx = px;
+              const dy = py;
+              const dw = pw;
+              const dh = ph;
               
               // Create clipping region with rounded corners for the cell
               const cornerRadius = 8 * uiScale;
