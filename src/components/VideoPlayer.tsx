@@ -1265,7 +1265,7 @@ export function VideoPlayer({
     return (
       <div className={`relative ${className}`}>
         <video
-          key={`video-${angle}`}
+          key={isMain ? 'main-video' : `video-${angle}`}
           ref={(el) => {
             videoRefs.current[angle] = el;
             if (isMain) {
