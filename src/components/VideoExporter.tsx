@@ -186,14 +186,15 @@ export function VideoExporter({
     width: number,
     height: number,
     icons: TelemetryIcons,
-    frameTime: number // for blinker animation
+    frameTime: number, // for blinker animation
+    isSingleOrPip: boolean = false // true for single/pip layouts (1.5x scale)
   ) => {
     if (!seiData) return;
 
     // Use width-based scale for consistent sizing across different layouts
-    // Both triple and all layouts have similar widths (3x video width)
     const baseScale = width / 1920;
-    const scaleMultiplier = 1.25; // Scale up from 200px to 250px
+    // Single/PiP layouts use 1.5x larger scale
+    const scaleMultiplier = isSingleOrPip ? 1.5 : 1.25;
     const scale = baseScale * scaleMultiplier;
     
     // From TelemetryCard.tsx:
@@ -484,17 +485,18 @@ export function VideoExporter({
     height: number,
     date: string,
     time: string,
-    frameTime: number // for potential animation
+    frameTime: number, // for potential animation
+    isSingleOrPip: boolean = false // true for single/pip layouts (1.5x scale)
   ) => {
     // Use width-based scale for consistent sizing across different layouts
-    // Both triple and all layouts have similar widths (3x video width)
     const baseScale = width / 1920;
-    const scaleMultiplier = 1.25; // Scale up to match telemetry panel
+    // Single/PiP layouts use 1.5x larger scale
+    const scaleMultiplier = isSingleOrPip ? 1.5 : 1.25;
     const scale = baseScale * scaleMultiplier;
     
     // Match VideoPlayer.tsx: top-1 = 4px, px-2 = 8px, py-1 = 4px
-    // Add extra offset to avoid the white border area
-    const topMargin = 4 * scale + 8 * baseScale;
+    // Add extra offset for single/pip layouts
+    const topMargin = isSingleOrPip ? 16 * scale : 4 * scale + 8 * baseScale;
     const paddingX = 8 * scale; // px-2
     const paddingY = 4 * scale; // py-1
 
@@ -1091,16 +1093,68 @@ export function VideoExporter({
           const pipW = Math.floor(width * 0.18);
           const pipMargin = Math.floor(width * 0.02);
 
-          const drawPipAt = (angle: string, px: number, py: number) => {
+          // Track animation state for PiP corner flash
+          const pipFlashProgress = cameraSegments.length > 0 ? 
+            Math.min(1, Math.max(0, 1 - (absoluteTime % 1) * 2)) : 0; // 0.5s flash
+          
+          const drawPipAt = (angle: string, px: number, py: number, cornerIdx: number) => {
             const ev = extraVideos[angle];
             if (!ev || !moment.videos.some(v => v.angle === angle)) return;
             const srcW = ev.el.videoWidth || 1;
             const srcH = ev.el.videoHeight || 1;
             const pipH = Math.floor(pipW * (srcH / srcW));
+            const cornerRadius = 8 * (width / 1920);
+            
+            // Draw green flash shadow if this angle was just swapped in
+            const isRecentlySwapped = pipFlashProgress > 0 && frameAngle === angle;
+            if (isRecentlySwapped) {
+              ctx.save();
+              ctx.shadowColor = '#22c55e';
+              ctx.shadowBlur = (20 * pipFlashProgress) * (width / 1920);
+              ctx.beginPath();
+              ctx.roundRect(px, py, pipW, pipH, cornerRadius);
+              ctx.stroke();
+              ctx.restore();
+            }
+            
+            // Draw video with rounded corners
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(px, py, pipW, pipH, cornerRadius);
+            ctx.clip();
             ctx.drawImage(ev.el, px, py, pipW, pipH);
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(px, py, pipW, pipH);
+            ctx.restore();
+            
+            // Draw border
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = Math.max(1, 2 * (width / 1920));
+            ctx.beginPath();
+            ctx.roundRect(px, py, pipW, pipH, cornerRadius);
+            ctx.stroke();
+            
+            // Draw angle label at bottom-left of PiP
+            const label = ANGLE_LABELS[angle] || angle;
+            const labelScale = width / 1920;
+            const labelFontSize = Math.max(10, Math.floor(12 * labelScale));
+            ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+            const labelPaddingX = 8 * labelScale;
+            const labelPaddingY = 4 * labelScale;
+            const labelWidth = ctx.measureText(label).width + labelPaddingX * 2;
+            const labelHeight = labelFontSize + labelPaddingY * 2;
+            const labelX = px + 6 * labelScale;
+            const labelY = py + pipH - labelHeight - 6 * labelScale;
+            
+            // Label background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.beginPath();
+            ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 4 * labelScale);
+            ctx.fill();
+            
+            // Label text
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
           };
 
           // Compute pip height for positioning (use first available pip video)
@@ -1115,23 +1169,23 @@ export function VideoExporter({
 
           // Bottom-left [0]
           if (allCorners[0] !== 'none' && allCorners[0] !== 'map' && allCorners[0] !== selectedAngle) {
-            drawPipAt(allCorners[0], pipMargin, height - defaultPipH - pipMargin);
+            drawPipAt(allCorners[0], pipMargin, height - defaultPipH - pipMargin, 0);
           }
           // Bottom-center [1]
           if (allCorners[1] !== 'none' && allCorners[1] !== 'map' && allCorners[1] !== selectedAngle) {
-            drawPipAt(allCorners[1], Math.floor((width - pipW) / 2), height - defaultPipH - pipMargin);
+            drawPipAt(allCorners[1], Math.floor((width - pipW) / 2), height - defaultPipH - pipMargin, 1);
           }
           // Bottom-right [2]
           if (allCorners[2] !== 'none' && allCorners[2] !== 'map' && allCorners[2] !== selectedAngle) {
-            drawPipAt(allCorners[2], width - pipW - pipMargin, height - defaultPipH - pipMargin);
+            drawPipAt(allCorners[2], width - pipW - pipMargin, height - defaultPipH - pipMargin, 2);
           }
           // Top-left [3]
           if (allCorners[3] !== 'none' && allCorners[3] !== 'map' && allCorners[3] !== selectedAngle) {
-            drawPipAt(allCorners[3], pipMargin, pipMargin);
+            drawPipAt(allCorners[3], pipMargin, pipMargin, 3);
           }
           // Top-right [4]
           if (allCorners[4] !== 'none' && allCorners[4] !== 'map' && allCorners[4] !== selectedAngle) {
-            drawPipAt(allCorners[4], width - pipW - pipMargin, pipMargin);
+            drawPipAt(allCorners[4], width - pipW - pipMargin, pipMargin, 4);
           }
 
           // Draw map at corners configured as 'map'
@@ -1155,6 +1209,54 @@ export function VideoExporter({
               await drawMiniMap(ctx, pipMapSeiData, width, height, { x: mp.x, y: mp.y, size: pipW });
             }
           }
+          
+          // Draw main angle label below telemetry for PiP layout
+          // Calculate fade animation based on segment boundary proximity
+          let mainLabelOpacity = 1;
+          if (cameraSegments.length > 0) {
+            // Find current segment and calculate fade at boundaries
+            const currentSeg = cameraSegments.find(seg => 
+              absoluteTime >= seg.startTime && absoluteTime < seg.endTime
+            );
+            if (currentSeg) {
+              const segDuration = currentSeg.endTime - currentSeg.startTime;
+              const timeInSeg = absoluteTime - currentSeg.startTime;
+              const fadeDuration = 0.3; // 0.3s fade at start
+              if (timeInSeg < fadeDuration) {
+                mainLabelOpacity = Math.min(1, timeInSeg / fadeDuration);
+              }
+            }
+          }
+          
+          const mainLabel = ANGLE_LABELS[frameAngle] || frameAngle;
+          const mainLabelScale = width / 1920 * 1.25;
+          const mainLabelFontSize = Math.max(12, Math.floor(14 * mainLabelScale));
+          ctx.font = `600 ${mainLabelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+          const mainLabelPaddingX = 16 * mainLabelScale;
+          const mainLabelPaddingY = 6 * mainLabelScale;
+          const mainLabelWidth = ctx.measureText(mainLabel).width + mainLabelPaddingX * 2;
+          const mainLabelHeight = mainLabelFontSize + mainLabelPaddingY * 2;
+          
+          // Position below telemetry panel (estimated position)
+          const telemetryBottomY = 16 * mainLabelScale + 24 * mainLabelScale + 10 * mainLabelScale + 70 * mainLabelScale;
+          const mainLabelX = (width - mainLabelWidth) / 2;
+          const mainLabelY = telemetryBottomY + 8 * mainLabelScale;
+          
+          // Draw label with fade opacity
+          ctx.globalAlpha = mainLabelOpacity;
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.5)'; // green-500/50
+          ctx.beginPath();
+          ctx.roundRect(mainLabelX, mainLabelY, mainLabelWidth, mainLabelHeight, 6 * mainLabelScale);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(34, 197, 94, 0.3)';
+          ctx.lineWidth = Math.max(1, mainLabelScale);
+          ctx.stroke();
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(mainLabel, width / 2, mainLabelY + mainLabelHeight / 2);
+          ctx.globalAlpha = 1; // Reset opacity
 
         } else if (layout === 'all') {
           // Six views layout: 3 columns x 2 rows
@@ -1352,6 +1454,34 @@ export function VideoExporter({
           await new Promise((r) => setTimeout(r, 10));
 
           ctx.drawImage(tempVideo, 0, 0, width, height);
+          
+          // Draw bottom center angle label capsule for single layout
+          // Match VideoPlayer.tsx: bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md rounded-full
+          const capsuleScale = width / 1920;
+          const capsulePaddingX = 24 * capsuleScale;
+          const capsulePaddingY = 6 * capsuleScale;
+          const capsuleFontSize = Math.max(14, Math.floor(16 * capsuleScale));
+          ctx.font = `500 ${capsuleFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+          const angleLabel = ANGLE_LABELS[selectedAngle] || selectedAngle;
+          const labelWidth = ctx.measureText(angleLabel).width + capsulePaddingX * 2;
+          const labelHeight = capsuleFontSize + capsulePaddingY * 2;
+          const capsuleX = (width - labelWidth) / 2;
+          const capsuleY = height - labelHeight - 16 * capsuleScale; // bottom-4 equivalent
+          
+          // Draw capsule background with border
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.beginPath();
+          ctx.roundRect(capsuleX, capsuleY, labelWidth, labelHeight, labelHeight / 2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.lineWidth = Math.max(1, capsuleScale);
+          ctx.stroke();
+          
+          // Draw angle label text
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(angleLabel, width / 2, capsuleY + labelHeight / 2);
         }
 
         // Get SEI data for this absolute time, with event.json GPS fallback
@@ -1375,10 +1505,12 @@ export function VideoExporter({
           const seconds = String(realTime.getSeconds()).padStart(2, '0');
           const dynamicDate = `${year}-${month}-${day}`;
           const dynamicTime = `${hours}:${minutes}:${seconds}`;
-          drawDateTime(ctx, width, height, dynamicDate, dynamicTime, absoluteTime);
+          const isSingleOrPip = layout === 'single' || layout === 'pip';
+          drawDateTime(ctx, width, height, dynamicDate, dynamicTime, absoluteTime, isSingleOrPip);
         }
         if (showTelemetry) {
-          drawTelemetry(ctx, seiData, width, height, telemetryIcons, absoluteTime);
+          const isSingleOrPip = layout === 'single' || layout === 'pip';
+          drawTelemetry(ctx, seiData, width, height, telemetryIcons, absoluteTime, isSingleOrPip);
         }
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {
           drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
