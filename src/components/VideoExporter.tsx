@@ -740,11 +740,14 @@ export function VideoExporter({
             URL.revokeObjectURL(pvUrl);
           }
         }
-        // 3 videos side by side, each at same height
+        // 3 videos side by side with uniform spacing
+        // spacing = 4px outer padding + 4px between cells = 8px horizontally, 8px vertically
+        const spacing = 4;
         const cellW = pillarW;
         const cellH = pillarH;
-        width = cellW * 3;
-        height = cellH;
+        // Total size includes video content + spacing
+        width = cellW * 3 + spacing * 4; // left + 2 gaps + right
+        height = cellH + spacing * 2; // top + bottom
         // Scale down if too large
         if (width > maxDimension) {
           const s = maxDimension / width;
@@ -754,12 +757,13 @@ export function VideoExporter({
         width = width - (width % 2);
         height = height - (height % 2);
       } else if (layout === 'all') {
-        // Six views: 3 columns x 2 rows
+        // Six views: 3 columns x 2 rows with uniform spacing
+        const spacing = 4;
         const cellW = srcWidth;
         const cellH = srcHeight;
-        // 3 videos side by side, 2 rows stacked
-        width = cellW * 3;
-        height = cellH * 2;
+        // Total size includes video content + spacing
+        width = cellW * 3 + spacing * 4; // left + 2 gaps + right
+        height = cellH * 2 + spacing * 3; // top + 1 middle + bottom
         // Scale down if too large
         const maxDim = Math.max(width, height);
         if (maxDim > maxDimension) {
