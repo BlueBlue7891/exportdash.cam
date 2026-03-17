@@ -190,8 +190,9 @@ export function VideoExporter({
   ) => {
     if (!seiData) return;
 
-    // Match TelemetryCard.tsx exact dimensions, scaled up by 1.25x (250px / 200px)
-    const baseScale = Math.min(width / 1280, height / 720);
+    // Use width-based scale for consistent sizing across different layouts
+    // Both triple and all layouts have similar widths (3x video width)
+    const baseScale = width / 1920;
     const scaleMultiplier = 1.25; // Scale up from 200px to 250px
     const scale = baseScale * scaleMultiplier;
     
@@ -485,7 +486,9 @@ export function VideoExporter({
     time: string,
     frameTime: number // for potential animation
   ) => {
-    const baseScale = Math.min(width / 1280, height / 720);
+    // Use width-based scale for consistent sizing across different layouts
+    // Both triple and all layouts have similar widths (3x video width)
+    const baseScale = width / 1920;
     const scaleMultiplier = 1.25; // Scale up to match telemetry panel
     const scale = baseScale * scaleMultiplier;
     
@@ -919,11 +922,10 @@ export function VideoExporter({
           ctx.fillRect(0, 0, width, height);
           
           const gap = 4; // Gap between cells in pixels
-          // Use consistent scale calculation with six-view layout
-          // Six-view uses height/2 per row, triple uses full height
-          // So we need to adjust scale to match visual size
-          const baseScale = Math.min(width / 1920, height / 1080);
-          const uiScale = baseScale * 1.5; // Increase scale for better visibility in triple view
+          // Use EXACT same scale as six-view layout for consistent UI element sizing
+          // Both layouts use width/1920 vs height/1080, but six-view has height/2 per cell
+          // We use the same scale calculation to ensure UI elements look the same size
+          const uiScale = Math.min(width / 1920, height / 1080) * 1.25;
           
           for (let i = 0; i < tripleAngles.length; i++) {
             const angle = tripleAngles[i];
@@ -1000,22 +1002,21 @@ export function VideoExporter({
             // Match six-view layout styles exactly
             const label = ANGLE_LABELS[angle] || angle;
             // Use same scale as six-view for consistent label size
-            const sixViewScale = Math.min(width / 1920, height / 1080);
-            const labelFontSize = Math.max(20, Math.floor(20 * sixViewScale * 1.25));
+            const labelFontSize = Math.max(20, Math.floor(20 * uiScale));
             ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
             
             // Even padding all around: 12px (scaled)
-            const labelPadding = 12 * sixViewScale * 1.25;
+            const labelPadding = 12 * uiScale;
             const labelWidth = ctx.measureText(label).width + labelPadding * 2;
             const labelHeight = labelFontSize + labelPadding * 2;
             
             // Position: margin from border (scaled)
-            const labelMargin = 12 * sixViewScale * 1.25;
+            const labelMargin = 12 * uiScale;
             const labelX = px + labelMargin;
             const labelY = py + ph - labelHeight - labelMargin;
             
             // Label style for main angle: bg-green-600/70 border border-green-400/50
-            const labelCornerRadius = 8 * sixViewScale * 1.25;
+            const labelCornerRadius = 8 * uiScale;
             if (isMain) {
               // Background: bg-green-600/70
               ctx.fillStyle = 'rgba(22, 163, 74, 0.7)';
@@ -1025,7 +1026,7 @@ export function VideoExporter({
               
               // Border: border-green-400/50
               ctx.strokeStyle = 'rgba(74, 222, 128, 0.5)';
-              ctx.lineWidth = 2 * sixViewScale * 1.25;
+              ctx.lineWidth = 2 * uiScale;
               ctx.beginPath();
               ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
               ctx.stroke();
@@ -1045,7 +1046,7 @@ export function VideoExporter({
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             // Slight downward offset for visual balance
-            const visualOffset = 2 * sixViewScale * 1.25;
+            const visualOffset = 2 * uiScale;
             ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + visualOffset);
           }
 
@@ -1155,7 +1156,8 @@ export function VideoExporter({
           const cellW = Math.floor(width / 3);
           const cellH = Math.floor(height / 2);
           const gap = 4; // Gap between cells in pixels
-          const scale = Math.min(width / 1920, height / 1080); // Scale factor for UI elements
+          // Use EXACT same scale calculation as triple view for consistent UI sizing
+          const uiScale = Math.min(width / 1920, height / 1080) * 1.25;
 
           // Load and seek all 6 angles
           for (const angle of sixViewAngles) {
@@ -1194,7 +1196,7 @@ export function VideoExporter({
                 
                 // Draw angle label
                 ctx.fillStyle = '#666';
-                ctx.font = `600 ${14 * scale}px -apple-system, BlinkMacSystemFont, sans-serif`;
+                ctx.font = `600 ${14 * uiScale}px -apple-system, BlinkMacSystemFont, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 const label = ANGLE_LABELS[angle] || angle;
@@ -1219,7 +1221,7 @@ export function VideoExporter({
               const dy = py + Math.floor((ph - dh) / 2);
               
               // Create clipping region with rounded corners for the cell
-              const cornerRadius = 8 * scale;
+              const cornerRadius = 8 * uiScale;
               
               // Draw video with rounded clipping
               ctx.save();
@@ -1232,14 +1234,14 @@ export function VideoExporter({
               // Draw green highlight border for main angle (selected by camera track)
               // Match VideoPlayer.tsx: ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]
               if (isMain) {
-                const borderWidth = Math.max(2, Math.floor(3 * scale));
+                const borderWidth = Math.max(2, Math.floor(3 * uiScale));
                 
                 // Draw rounded border with glow
                 ctx.save();
                 ctx.strokeStyle = '#22c55e'; // green-500
                 ctx.lineWidth = borderWidth;
                 ctx.shadowColor = 'rgba(34, 197, 94, 0.3)'; // shadow from Tailwind
-                ctx.shadowBlur = 15 * scale;
+                ctx.shadowBlur = 15 * uiScale;
                 ctx.beginPath();
                 ctx.roundRect(px + borderWidth / 2, py + borderWidth / 2, pw - borderWidth, ph - borderWidth, cornerRadius);
                 ctx.stroke();
@@ -1248,8 +1250,8 @@ export function VideoExporter({
                 // Draw pulsing indicator dot in top-right corner
                 // Match VideoPlayer.tsx: w-2 h-2 bg-green-500 rounded-full animate-pulse
                 // Enlarged and positioned with consistent margins
-                const dotRadius = 6 * scale; // Enlarged from 4px to 6px radius
-                const dotMargin = 12 * scale; // Increased margin from border
+                const dotRadius = 6 * uiScale; // Enlarged from 4px to 6px radius
+                const dotMargin = 12 * uiScale; // Increased margin from border
                 const dotX = px + pw - dotRadius - dotMargin; // right margin
                 const dotY = py + dotRadius + dotMargin; // top margin
                 
@@ -1263,7 +1265,7 @@ export function VideoExporter({
                 // Outer glow that pulses - enlarged to match bigger dot
                 ctx.save();
                 ctx.shadowColor = '#22c55e';
-                ctx.shadowBlur = (8 + 12 * pulsePhase) * scale; // 2x glow effect
+                ctx.shadowBlur = (8 + 12 * pulsePhase) * uiScale; // 2x glow effect
                 ctx.globalAlpha = dotOpacity;
                 ctx.fillStyle = '#22c55e'; // bg-green-500
                 ctx.beginPath();
@@ -1277,17 +1279,17 @@ export function VideoExporter({
               const label = ANGLE_LABELS[angle] || angle;
               
               // Font: text-[10px] -> 20px (2x), font-medium text-white/90
-              const labelFontSize = Math.max(20, Math.floor(20 * scale));
+              const labelFontSize = Math.max(20, Math.floor(20 * uiScale));
               ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
               
               // Even padding all around: 12px (2x from 6px)
-              const labelPadding = 12 * scale;
+              const labelPadding = 12 * uiScale;
               const labelWidth = ctx.measureText(label).width + labelPadding * 2;
               // Use exact font size for height calculation
               const labelHeight = labelFontSize + labelPadding * 2;
               
               // Position: increased margin from border to 12px
-              const labelMargin = 12 * scale;
+              const labelMargin = 12 * uiScale;
               const labelX = px + labelMargin;
               const labelY = py + ph - labelHeight - labelMargin;
               
@@ -1296,14 +1298,14 @@ export function VideoExporter({
                 // Background: bg-green-600/70 = rgba(22, 163, 74, 0.7)
                 ctx.fillStyle = 'rgba(22, 163, 74, 0.7)';
                 ctx.beginPath();
-                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * scale); // rounded = 8px (2x)
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * uiScale); // rounded = 8px (2x)
                 ctx.fill();
                 
                 // Border: border-green-400/50 = rgba(74, 222, 128, 0.5)
                 ctx.strokeStyle = 'rgba(74, 222, 128, 0.5)';
-                ctx.lineWidth = 2 * scale; // 2x border width
+                ctx.lineWidth = 2 * uiScale; // 2x border width
                 ctx.beginPath();
-                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * scale);
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * uiScale);
                 ctx.stroke();
                 
                 // Text: text-white/90
@@ -1312,7 +1314,7 @@ export function VideoExporter({
                 // Non-main: bg-black/50
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                 ctx.beginPath();
-                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * scale);
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * uiScale);
                 ctx.fill();
                 
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -1322,7 +1324,7 @@ export function VideoExporter({
               // Use middle baseline for vertical centering
               ctx.textBaseline = 'middle';
               // Slight downward offset for visual balance (Canvas middle baseline is slightly high)
-              const visualOffset = 2 * scale;
+              const visualOffset = 2 * uiScale;
               ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + visualOffset);
             }
           }
