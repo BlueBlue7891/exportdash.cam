@@ -1099,41 +1099,107 @@ export function VideoExporter({
               const dx = px + Math.floor((pw - dw) / 2);
               const dy = py + Math.floor((ph - dh) / 2);
               
+              // Create clipping region with rounded corners for the cell
+              const cornerRadius = 8 * scale;
+              
+              // Draw video with rounded clipping
+              ctx.save();
+              ctx.beginPath();
+              ctx.roundRect(px, py, pw, ph, cornerRadius);
+              ctx.clip();
               ctx.drawImage(ev.el, dx, dy, dw, dh);
+              ctx.restore();
 
               // Draw green highlight border for main angle (selected by camera track)
+              // Match VideoPlayer.tsx: ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]
               if (isMain) {
-                const borderWidth = Math.max(2, Math.floor(4 * scale));
+                const borderWidth = Math.max(2, Math.floor(3 * scale));
+                
+                // Draw rounded border with glow
+                ctx.save();
                 ctx.strokeStyle = '#22c55e'; // green-500
                 ctx.lineWidth = borderWidth;
-                ctx.strokeRect(px + borderWidth / 2, py + borderWidth / 2, pw - borderWidth, ph - borderWidth);
-                
-                // Add glow effect
-                ctx.shadowColor = 'rgba(34, 197, 94, 0.5)';
+                ctx.shadowColor = 'rgba(34, 197, 94, 0.3)'; // shadow from Tailwind
                 ctx.shadowBlur = 15 * scale;
-                ctx.strokeRect(px + borderWidth / 2, py + borderWidth / 2, pw - borderWidth, ph - borderWidth);
-                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.roundRect(px + borderWidth / 2, py + borderWidth / 2, pw - borderWidth, ph - borderWidth, cornerRadius);
+                ctx.stroke();
+                ctx.restore();
+                
+                // Draw pulsing indicator dot in top-right corner
+                // Match VideoPlayer.tsx: w-2 h-2 bg-green-500 rounded-full animate-pulse
+                // Enlarged and positioned with consistent margins
+                const dotRadius = 6 * scale; // Enlarged from 4px to 6px radius
+                const dotMargin = 12 * scale; // Increased margin from border
+                const dotX = px + pw - dotRadius - dotMargin; // right margin
+                const dotY = py + dotRadius + dotMargin; // top margin
+                
+                // Pulsing animation - 2x frequency (0.5s cycle instead of 1s)
+                const pulsePhase = (Math.sin((absoluteTime * Math.PI) / 0.5) + 1) / 2; // 0 to 1, 0.5s cycle
+                
+                // Outer glow that pulses - enlarged to match bigger dot
+                ctx.save();
+                ctx.shadowColor = '#22c55e';
+                ctx.shadowBlur = (8 + 12 * pulsePhase) * scale; // 2x glow effect
+                ctx.fillStyle = '#22c55e'; // bg-green-500
+                ctx.beginPath();
+                ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
               }
 
               // Draw angle label at bottom left of each cell
+              // Match VideoPlayer.tsx styles, enlarged 2x
               const label = ANGLE_LABELS[angle] || angle;
-              const labelPadding = 6 * scale;
-              const labelFontSize = Math.max(10, Math.floor(11 * scale));
-              ctx.font = `600 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+              
+              // Font: text-[10px] -> 20px (2x), font-medium text-white/90
+              const labelFontSize = Math.max(20, Math.floor(20 * scale));
+              ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+              
+              // Even padding all around: 12px (2x from 6px)
+              const labelPadding = 12 * scale;
               const labelWidth = ctx.measureText(label).width + labelPadding * 2;
-              const labelHeight = labelFontSize + labelPadding;
+              // Use exact font size for height calculation
+              const labelHeight = labelFontSize + labelPadding * 2;
               
-              // Label background
-              ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-              ctx.beginPath();
-              ctx.roundRect(px + 4, py + ph - labelHeight - 4, labelWidth, labelHeight, 4);
-              ctx.fill();
+              // Position: increased margin from border to 12px
+              const labelMargin = 12 * scale;
+              const labelX = px + labelMargin;
+              const labelY = py + ph - labelHeight - labelMargin;
               
-              // Label text
-              ctx.fillStyle = isMain ? '#4ade80' : 'rgba(255, 255, 255, 0.9)'; // green-400 for main, white for others
-              ctx.textAlign = 'left';
+              // Label style for main angle: bg-green-600/70 border border-green-400/50 backdrop-blur-sm rounded
+              if (isMain) {
+                // Background: bg-green-600/70 = rgba(22, 163, 74, 0.7)
+                ctx.fillStyle = 'rgba(22, 163, 74, 0.7)';
+                ctx.beginPath();
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * scale); // rounded = 8px (2x)
+                ctx.fill();
+                
+                // Border: border-green-400/50 = rgba(74, 222, 128, 0.5)
+                ctx.strokeStyle = 'rgba(74, 222, 128, 0.5)';
+                ctx.lineWidth = 2 * scale; // 2x border width
+                ctx.beginPath();
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * scale);
+                ctx.stroke();
+                
+                // Text: text-white/90
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+              } else {
+                // Non-main: bg-black/50
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.beginPath();
+                ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8 * scale);
+                ctx.fill();
+                
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+              }
+              
+              ctx.textAlign = 'center';
+              // Use middle baseline for vertical centering
               ctx.textBaseline = 'middle';
-              ctx.fillText(label, px + 4 + labelPadding, py + ph - labelHeight / 2 - 4);
+              // Slight upward offset for visual balance (Canvas middle baseline is slightly low)
+              const visualOffset = 2 * scale;
+              ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + visualOffset);
             }
           }
 
