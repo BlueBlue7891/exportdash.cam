@@ -925,7 +925,9 @@ export function VideoExporter({
           // Use EXACT same scale as six-view layout for consistent UI element sizing
           // Both layouts use width/1920 vs height/1080, but six-view has height/2 per cell
           // We use the same scale calculation to ensure UI elements look the same size
-          const uiScale = Math.min(width / 1920, height / 1080) * 1.25;
+          // Use width-based scale only for consistent UI sizing across layouts
+          // Don't use height in calculation since triple and all layouts have different heights
+          const uiScale = (width / 1920) * 1.25;
           
           for (let i = 0; i < tripleAngles.length; i++) {
             const angle = tripleAngles[i];
@@ -976,7 +978,7 @@ export function VideoExporter({
               
               // Draw pulsing indicator dot in top-right corner
               // Match VideoPlayer.tsx: w-2 h-2 bg-green-500 rounded-full animate-pulse
-              const dotRadius = 8 * uiScale; // Slightly larger for visibility
+              const dotRadius = 8 * uiScale; // Consistent size with six-view layout
               const dotMargin = 12 * uiScale;
               const dotX = px + pw - dotRadius - dotMargin;
               const dotY = py + dotRadius + dotMargin;
@@ -1157,7 +1159,9 @@ export function VideoExporter({
           const cellH = Math.floor(height / 2);
           const gap = 4; // Gap between cells in pixels
           // Use EXACT same scale calculation as triple view for consistent UI sizing
-          const uiScale = Math.min(width / 1920, height / 1080) * 1.25;
+          // Use width-based scale only for consistent UI sizing across layouts
+          // Don't use height in calculation since triple and all layouts have different heights
+          const uiScale = (width / 1920) * 1.25;
 
           // Load and seek all 6 angles
           for (const angle of sixViewAngles) {
