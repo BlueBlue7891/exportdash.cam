@@ -914,20 +914,139 @@ export function VideoExporter({
           }
           await new Promise((r) => setTimeout(r, 10));
 
-          // Draw 3 videos side by side
+          // Draw 3 videos side by side with gaps
           ctx.fillStyle = '#000';
           ctx.fillRect(0, 0, width, height);
+          
+          const gap = 4; // Gap between cells in pixels
+          // Use consistent scale calculation with six-view layout
+          // Six-view uses height/2 per row, triple uses full height
+          // So we need to adjust scale to match visual size
+          const baseScale = Math.min(width / 1920, height / 1080);
+          const uiScale = baseScale * 1.5; // Increase scale for better visibility in triple view
+          
           for (let i = 0; i < tripleAngles.length; i++) {
-            const ev = extraVideos[tripleAngles[i]];
+            const angle = tripleAngles[i];
+            const ev = extraVideos[angle];
+            const isMain = angle === frameAngle;
             const srcW = ev.el.videoWidth || cellW;
             const srcH = ev.el.videoHeight || cellH;
+            
+            // Calculate position with gaps
+            const px = i * cellW + gap / 2;
+            const py = gap / 2;
+            const pw = cellW - gap;
+            const ph = cellH - gap;
+            
             // Fit each video into its cell preserving aspect ratio
-            const scale = Math.min(cellW / srcW, cellH / srcH);
-            const dw = Math.floor(srcW * scale);
-            const dh = Math.floor(srcH * scale);
-            const dx = i * cellW + Math.floor((cellW - dw) / 2);
-            const dy = Math.floor((cellH - dh) / 2);
+            const videoScale = Math.min(pw / srcW, ph / srcH);
+            const dw = Math.floor(srcW * videoScale);
+            const dh = Math.floor(srcH * videoScale);
+            const dx = px + Math.floor((pw - dw) / 2);
+            const dy = py + Math.floor((ph - dh) / 2);
+            
+            // Create clipping region with rounded corners for the cell
+            const cornerRadius = 8 * uiScale;
+            
+            // Draw video with rounded clipping
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(px, py, pw, ph, cornerRadius);
+            ctx.clip();
             ctx.drawImage(ev.el, dx, dy, dw, dh);
+            ctx.restore();
+            
+            // Draw green highlight border for main angle (selected by camera track)
+            // Match VideoPlayer.tsx: ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]
+            if (isMain) {
+              const borderWidth = Math.max(2, Math.floor(3 * uiScale));
+              
+              // Draw rounded border with glow
+              ctx.save();
+              ctx.strokeStyle = '#22c55e'; // green-500
+              ctx.lineWidth = borderWidth;
+              ctx.shadowColor = 'rgba(34, 197, 94, 0.3)'; // shadow from Tailwind
+              ctx.shadowBlur = 15 * uiScale;
+              ctx.beginPath();
+              ctx.roundRect(px + borderWidth / 2, py + borderWidth / 2, pw - borderWidth, ph - borderWidth, cornerRadius);
+              ctx.stroke();
+              ctx.restore();
+              
+              // Draw pulsing indicator dot in top-right corner
+              // Match VideoPlayer.tsx: w-2 h-2 bg-green-500 rounded-full animate-pulse
+              const dotRadius = 8 * uiScale; // Slightly larger for visibility
+              const dotMargin = 12 * uiScale;
+              const dotX = px + pw - dotRadius - dotMargin;
+              const dotY = py + dotRadius + dotMargin;
+              
+              // Pulsing animation - slower frequency (1s cycle, was 0.5s)
+              const pulsePhase = (Math.sin((absoluteTime * Math.PI) / 1) + 1) / 2;
+              const minOpacity = 0.3;
+              const dotOpacity = minOpacity + (1 - minOpacity) * pulsePhase;
+              
+              // Outer glow that pulses
+              ctx.save();
+              ctx.shadowColor = '#22c55e';
+              ctx.shadowBlur = (8 + 12 * pulsePhase) * uiScale;
+              ctx.globalAlpha = dotOpacity;
+              ctx.fillStyle = '#22c55e';
+              ctx.beginPath();
+              ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+            
+            // Draw angle label at bottom left of each cell
+            // Match six-view layout styles exactly
+            const label = ANGLE_LABELS[angle] || angle;
+            // Use same scale as six-view for consistent label size
+            const sixViewScale = Math.min(width / 1920, height / 1080);
+            const labelFontSize = Math.max(20, Math.floor(20 * sixViewScale * 1.25));
+            ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+            
+            // Even padding all around: 12px (scaled)
+            const labelPadding = 12 * sixViewScale * 1.25;
+            const labelWidth = ctx.measureText(label).width + labelPadding * 2;
+            const labelHeight = labelFontSize + labelPadding * 2;
+            
+            // Position: margin from border (scaled)
+            const labelMargin = 12 * sixViewScale * 1.25;
+            const labelX = px + labelMargin;
+            const labelY = py + ph - labelHeight - labelMargin;
+            
+            // Label style for main angle: bg-green-600/70 border border-green-400/50
+            const labelCornerRadius = 8 * sixViewScale * 1.25;
+            if (isMain) {
+              // Background: bg-green-600/70
+              ctx.fillStyle = 'rgba(22, 163, 74, 0.7)';
+              ctx.beginPath();
+              ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
+              ctx.fill();
+              
+              // Border: border-green-400/50
+              ctx.strokeStyle = 'rgba(74, 222, 128, 0.5)';
+              ctx.lineWidth = 2 * sixViewScale * 1.25;
+              ctx.beginPath();
+              ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
+              ctx.stroke();
+              
+              // Text: text-white/90
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            } else {
+              // Non-main: bg-black/50
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+              ctx.beginPath();
+              ctx.roundRect(labelX, labelY, labelWidth, labelHeight, labelCornerRadius);
+              ctx.fill();
+              
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            }
+            
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Slight downward offset for visual balance
+            const visualOffset = 2 * sixViewScale * 1.25;
+            ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2 + visualOffset);
           }
 
         } else if (layout === 'pip') {
@@ -1134,13 +1253,18 @@ export function VideoExporter({
                 const dotX = px + pw - dotRadius - dotMargin; // right margin
                 const dotY = py + dotRadius + dotMargin; // top margin
                 
-                // Pulsing animation - 2x frequency (0.5s cycle instead of 1s)
-                const pulsePhase = (Math.sin((absoluteTime * Math.PI) / 0.5) + 1) / 2; // 0 to 1, 0.5s cycle
+                // Pulsing animation - slower frequency (1s cycle)
+                const pulsePhase = (Math.sin((absoluteTime * Math.PI) / 1) + 1) / 2; // 0 to 1, 1s cycle
+                
+                // Opacity varies from 0.3 to 1 for stronger contrast
+                const minOpacity = 0.3;
+                const dotOpacity = minOpacity + (1 - minOpacity) * pulsePhase;
                 
                 // Outer glow that pulses - enlarged to match bigger dot
                 ctx.save();
                 ctx.shadowColor = '#22c55e';
                 ctx.shadowBlur = (8 + 12 * pulsePhase) * scale; // 2x glow effect
+                ctx.globalAlpha = dotOpacity;
                 ctx.fillStyle = '#22c55e'; // bg-green-500
                 ctx.beginPath();
                 ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
