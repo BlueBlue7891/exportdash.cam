@@ -764,8 +764,10 @@ export function VideoExporter({
 
       // Determine export layout angles from config
       const tripleAngles = [...layoutConfig.triple.cameras];
+      // PiP: include all configured corner angles (even if same as main view)
+      // This matches VideoPlayer behavior where corners can show same angle as main
       const pipAngles = layoutConfig.pip.corners.filter(
-        a => a !== selectedAngle && a !== 'none' && a !== 'map'
+        a => a !== 'none' && a !== 'map'
       );
 
       let width: number;
@@ -1175,20 +1177,44 @@ export function VideoExporter({
             const pipH = Math.floor(pipW * (srcH / srcW));
             const cornerRadius = 8 * (width / 1920);
             
-            // Draw green flash shadow if this angle was just swapped in (became the main angle)
-            const isRecentlySwapped = pipFlashProgress > 0 && frameAngle === angle;
-            if (isRecentlySwapped) {
-              ctx.save();
-              ctx.shadowColor = '#22c55e';
-              ctx.shadowBlur = (25 * pipFlashProgress) * (width / 1920);
-              ctx.shadowOffsetX = 0;
-              ctx.shadowOffsetY = 0;
-              ctx.strokeStyle = '#22c55e';
-              ctx.lineWidth = Math.max(2, 3 * (width / 1920));
-              ctx.beginPath();
-              ctx.roundRect(px, py, pipW, pipH, cornerRadius);
-              ctx.stroke();
-              ctx.restore();
+            // Check if this corner matches the current main angle
+            const isMatchingMainView = frameAngle === angle;
+            
+            // Calculate breathing glow animation (2s cycle like CSS animate-pipGlow)
+            const breathePhase = (Math.sin((absoluteTime * Math.PI)) + 1) / 2;
+            const minGlowOpacity = 0.4;
+            const glowOpacity = minGlowOpacity + (1 - minGlowOpacity) * breathePhase;
+            // Larger blur range for more visible glow effect
+            const minGlowBlur = 8 * (width / 1920);
+            const maxGlowBlur = 25 * (width / 1920);
+            const glowBlur = minGlowBlur + (maxGlowBlur - minGlowBlur) * breathePhase;
+            
+            // Draw breathing green glow background when matching main view (behind video)
+            if (isMatchingMainView) {
+              // Draw outer glow effect - multiple layers for stronger visual impact
+              const glowLayers = 3;
+              for (let i = 0; i < glowLayers; i++) {
+                const layerOpacity = glowOpacity * (1 - i * 0.25);
+                const layerBlur = glowBlur * (1 + i * 0.5);
+                const layerExpand = i * 4 * (width / 1920);
+                
+                ctx.save();
+                ctx.fillStyle = `rgba(34, 197, 94, ${layerOpacity * 0.15})`;
+                ctx.shadowColor = `rgba(34, 197, 94, ${layerOpacity})`;
+                ctx.shadowBlur = layerBlur;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                ctx.beginPath();
+                ctx.roundRect(
+                  px - layerExpand, 
+                  py - layerExpand, 
+                  pipW + layerExpand * 2, 
+                  pipH + layerExpand * 2, 
+                  cornerRadius + layerExpand
+                );
+                ctx.fill();
+                ctx.restore();
+              }
             }
             
             // Draw video with rounded corners
@@ -1199,14 +1225,35 @@ export function VideoExporter({
             ctx.drawImage(ev.el, px, py, pipW, pipH);
             ctx.restore();
             
-            // Draw border
-            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-            ctx.lineWidth = Math.max(1, 2 * (width / 1920));
-            ctx.beginPath();
-            ctx.roundRect(px, py, pipW, pipH, cornerRadius);
-            ctx.stroke();
+            // Draw border - breathing green glow when matching main view, otherwise white
+            if (isMatchingMainView) {
+              // Breathing green glow border (matching edit page animate-pipGlow)
+              ctx.save();
+              ctx.strokeStyle = `rgba(34, 197, 94, ${0.6 + 0.4 * breathePhase})`;
+              ctx.lineWidth = Math.max(2, 3 * (width / 1920));
+              ctx.beginPath();
+              ctx.roundRect(px, py, pipW, pipH, cornerRadius);
+              ctx.stroke();
+              ctx.restore();
+              
+              // Additional outer glow stroke for more visibility
+              ctx.save();
+              ctx.strokeStyle = `rgba(34, 197, 94, ${glowOpacity * 0.5})`;
+              ctx.lineWidth = Math.max(1, 2 * (width / 1920));
+              ctx.beginPath();
+              ctx.roundRect(px - 2, py - 2, pipW + 4, pipH + 4, cornerRadius + 2);
+              ctx.stroke();
+              ctx.restore();
+            } else {
+              // Normal white border
+              ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+              ctx.lineWidth = Math.max(1, 2 * (width / 1920));
+              ctx.beginPath();
+              ctx.roundRect(px, py, pipW, pipH, cornerRadius);
+              ctx.stroke();
+            }
             
-            // Draw angle label at bottom-left of PiP - same style as main label
+            // Draw angle label at bottom-left of PiP
             const label = ANGLE_LABELS[angle] || angle;
             ctx.font = `500 ${mainLabelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
             const labelWidth = ctx.measureText(label).width + mainLabelPaddingX * 2;
@@ -1214,20 +1261,11 @@ export function VideoExporter({
             const labelX = px + 8 * mainLabelScale;
             const labelY = py + pipH - labelHeight - 8 * mainLabelScale;
             
-            // Label background - always dark (no green for main)
+            // Label background - always dark (no green border for main)
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.beginPath();
             ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 6 * mainLabelScale);
             ctx.fill();
-            
-            // Green border when this angle is the main angle
-            if (frameAngle === angle) {
-              ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)';
-              ctx.lineWidth = Math.max(1.5, 2 * mainLabelScale);
-              ctx.beginPath();
-              ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 6 * mainLabelScale);
-              ctx.stroke();
-            }
             
             // Label text
             ctx.fillStyle = '#ffffff';
@@ -1248,23 +1286,23 @@ export function VideoExporter({
           }
 
           // Bottom-left [0]
-          if (allCorners[0] !== 'none' && allCorners[0] !== 'map' && allCorners[0] !== selectedAngle) {
+          if (allCorners[0] !== 'none' && allCorners[0] !== 'map') {
             drawPipAt(allCorners[0], pipMargin, height - defaultPipH - pipMargin, 0);
           }
           // Bottom-center [1]
-          if (allCorners[1] !== 'none' && allCorners[1] !== 'map' && allCorners[1] !== selectedAngle) {
+          if (allCorners[1] !== 'none' && allCorners[1] !== 'map') {
             drawPipAt(allCorners[1], Math.floor((width - pipW) / 2), height - defaultPipH - pipMargin, 1);
           }
           // Bottom-right [2]
-          if (allCorners[2] !== 'none' && allCorners[2] !== 'map' && allCorners[2] !== selectedAngle) {
+          if (allCorners[2] !== 'none' && allCorners[2] !== 'map') {
             drawPipAt(allCorners[2], width - pipW - pipMargin, height - defaultPipH - pipMargin, 2);
           }
           // Top-left [3]
-          if (allCorners[3] !== 'none' && allCorners[3] !== 'map' && allCorners[3] !== selectedAngle) {
+          if (allCorners[3] !== 'none' && allCorners[3] !== 'map') {
             drawPipAt(allCorners[3], pipMargin, pipMargin, 3);
           }
           // Top-right [4]
-          if (allCorners[4] !== 'none' && allCorners[4] !== 'map' && allCorners[4] !== selectedAngle) {
+          if (allCorners[4] !== 'none' && allCorners[4] !== 'map') {
             drawPipAt(allCorners[4], width - pipW - pipMargin, pipMargin, 4);
           }
 
@@ -1291,24 +1329,36 @@ export function VideoExporter({
           }
           
           // Draw main angle label below telemetry for PiP layout
-          // Format: "Main: xxx" with flash animation on angle switch
+          // Format: "Main: xxx" with fade-in + breathing animation on angle switch
           
-          // Detect angle change for flash animation
+          // Detect angle change for animation
           if (prevPipMainAngle !== frameAngle) {
             pipAngleChangeTime = absoluteTime;
             prevPipMainAngle = frameAngle;
           }
           
-          // Calculate flash intensity (0.4s duration, quick fade out)
-          let flashIntensity = 0;
-          if (pipAngleChangeTime >= 0) {
-            const timeSinceChange = absoluteTime - pipAngleChangeTime;
-            const flashDuration = 0.4;
-            if (timeSinceChange < flashDuration) {
-              // Ease out flash
-              flashIntensity = 1 - (timeSinceChange / flashDuration);
-              flashIntensity = flashIntensity * flashIntensity; // quadratic ease out
-            }
+          // Calculate animation phases
+          // 0-0.5s: Fade in (opacity 0 -> 1)
+          // 0.5-2s: Breathing effect (border glow pulse)
+          // 2s+: Static display (no animation)
+          const timeSinceChange = pipAngleChangeTime >= 0 ? absoluteTime - pipAngleChangeTime : 0;
+          const fadeInDuration = 0.5;
+          const breathingDuration = 1.5; // Total breathing period (0.5s to 2s)
+          const totalAnimationDuration = 2.0;
+          
+          // Fade in opacity (0 -> 1 during first 0.5s)
+          let fadeInOpacity = 1;
+          if (timeSinceChange < fadeInDuration) {
+            fadeInOpacity = timeSinceChange / fadeInDuration;
+            fadeInOpacity = fadeInOpacity * fadeInOpacity; // ease-in
+          }
+          
+          // Breathing effect (0.5s to 2s)
+          let breatheIntensity = 0;
+          if (timeSinceChange >= fadeInDuration && timeSinceChange < totalAnimationDuration) {
+            const breatheProgress = (timeSinceChange - fadeInDuration) / breathingDuration;
+            // Full sine wave cycle for breathing
+            breatheIntensity = (Math.sin(breatheProgress * Math.PI * 2) + 1) / 2;
           }
           
           const mainLabel = `Main: ${ANGLE_LABELS[frameAngle] || frameAngle}`;
@@ -1317,21 +1367,24 @@ export function VideoExporter({
           const mainLabelHeight = mainLabelFontSize + mainLabelPaddingY * 2;
           
           // Position below telemetry panel with larger gap
-          // Telemetry panel: date(16+24+10) + telemetry(80) = ~130px at 1.25x scale
           const dateBoxHeight = 24 * mainLabelScale;
           const dateToTelemetryGap = 10 * mainLabelScale;
-          const telemetryPanelHeight = 80 * mainLabelScale; // approximate telemetry height
+          const telemetryPanelHeight = 80 * mainLabelScale;
           const telemetryBottomY = 16 * mainLabelScale + dateBoxHeight + dateToTelemetryGap + telemetryPanelHeight;
           const mainLabelX = (width - mainLabelWidth) / 2;
-          const mainLabelY = telemetryBottomY + 48 * mainLabelScale; // much larger gap after telemetry
+          const mainLabelY = telemetryBottomY + 48 * mainLabelScale;
           
-          // Draw flash glow behind the label
-          if (flashIntensity > 0) {
+          // Save context for fade-in effect
+          ctx.save();
+          ctx.globalAlpha = fadeInOpacity;
+          
+          // Draw breathing glow behind the label (only during breathing phase)
+          if (breatheIntensity > 0) {
+            const glowSize = 15 + 10 * breatheIntensity; // 15px to 25px
             ctx.save();
-            const glowSize = 20 * flashIntensity * mainLabelScale;
             ctx.shadowColor = '#22c55e';
-            ctx.shadowBlur = glowSize;
-            ctx.fillStyle = `rgba(34, 197, 94, ${0.3 * flashIntensity})`;
+            ctx.shadowBlur = glowSize * mainLabelScale;
+            ctx.fillStyle = `rgba(34, 197, 94, ${0.2 * breatheIntensity})`;
             ctx.beginPath();
             ctx.roundRect(mainLabelX - 4, mainLabelY - 4, mainLabelWidth + 8, mainLabelHeight + 8, 8 * mainLabelScale);
             ctx.fill();
@@ -1339,18 +1392,31 @@ export function VideoExporter({
           }
           
           // Draw label background (green tint for main)
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.5)'; // green-500/50
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.5)';
           ctx.beginPath();
           ctx.roundRect(mainLabelX, mainLabelY, mainLabelWidth, mainLabelHeight, 6 * mainLabelScale);
           ctx.fill();
-          ctx.strokeStyle = 'rgba(34, 197, 94, 0.3)';
-          ctx.lineWidth = Math.max(1, mainLabelScale);
+          
+          // Breathing border during animation phase, static border after
+          if (breatheIntensity > 0) {
+            // Breathing green border
+            const borderOpacity = 0.3 + 0.4 * breatheIntensity; // 0.3 to 0.7
+            ctx.strokeStyle = `rgba(34, 197, 94, ${borderOpacity})`;
+            ctx.lineWidth = Math.max(1.5, 2 * mainLabelScale);
+          } else {
+            // Static subtle border
+            ctx.strokeStyle = 'rgba(34, 197, 94, 0.3)';
+            ctx.lineWidth = Math.max(1, mainLabelScale);
+          }
           ctx.stroke();
           
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(mainLabel, width / 2, mainLabelY + mainLabelHeight / 2);
+          
+          // Restore context to reset globalAlpha
+          ctx.restore();
 
         } else if (layout === 'all') {
           // Six views layout: 3 columns x 2 rows

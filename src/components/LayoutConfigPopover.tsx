@@ -60,7 +60,7 @@ function CameraSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-gray-700 text-gray-200 text-xs rounded px-1.5 py-1 border border-gray-600 hover:border-gray-500 focus:border-blue-500 focus:outline-none cursor-pointer w-[80px] text-center appearance-none"
+        className="bg-gray-700 text-gray-200 text-xs rounded px-1.5 py-1 border border-gray-600 hover:border-gray-500 focus:border-blue-500 focus:outline-none cursor-pointer w-[80px] text-center appearance-none truncate overflow-hidden"
       >
         {opts.map((angle) => (
           <option key={angle} value={angle}>
