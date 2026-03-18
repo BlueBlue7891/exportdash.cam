@@ -499,8 +499,26 @@ export function VideoPlayer({
     switch (layout) {
       case 'single':
         return [selectedAngle];
-      case 'pip':
-        return [selectedAngle, ...layoutConfig.pip.corners.filter(c => c !== 'none' && c !== 'map' && available.includes(c))];
+      case 'pip': {
+        // For PiP, we need to consider both configured angles and displayed angles
+        // because of the dynamic Front/Rear swap logic
+        const corners = layoutConfig.pip.corners;
+        const configuredAngles = corners.filter(c => c !== 'none' && c !== 'map' && available.includes(c));
+        
+        // Calculate displayed angles (with Front/Rear swap)
+        const FRONT_REAR_PAIR: Record<string, string> = { front: 'back', back: 'front' };
+        const currentSegment = findSegmentForTime(cameraSegments, absoluteTime);
+        const currentTrackAngle = currentSegment?.angle;
+        
+        const displayedAngles = corners.map(cornerAngle => {
+          if (cornerAngle !== 'front' && cornerAngle !== 'back') return cornerAngle;
+          if (cornerAngle === currentTrackAngle) return FRONT_REAR_PAIR[cornerAngle];
+          return cornerAngle;
+        }).filter(c => c !== 'none' && c !== 'map' && available.includes(c));
+        
+        // Return union of configured and displayed angles
+        return [selectedAngle, ...new Set([...configuredAngles, ...displayedAngles])];
+      }
       case 'triple':
         return layoutConfig.triple.cameras.filter(c => available.includes(c));
       case 'all':
@@ -508,7 +526,7 @@ export function VideoPlayer({
       default:
         return [selectedAngle];
     }
-  }, [layout, selectedAngle, layoutConfig, currentMoment]);
+  }, [layout, selectedAngle, layoutConfig, currentMoment, absoluteTime, cameraSegments]);
   
   // Safe play function that handles abort errors
   const safePlay = useCallback(async (video: HTMLVideoElement | null, angle: string) => {
@@ -1248,8 +1266,8 @@ export function VideoPlayer({
       ];
 
       // Handle PiP corner click - change main view and update current track segment
-      const handlePipCornerClick = (clickedAngle: string, idx: number) => {
-        if (clickedAngle === 'map' || clickedAngle === 'none') return;
+      const handlePipCornerClick = (displayedAngle: string, actualAngle: string, idx: number) => {
+        if (displayedAngle === 'map' || displayedAngle === 'none') return;
         
         // Pause all videos before switching angle to prevent AbortError
         if (isPlaying) {
@@ -1263,7 +1281,11 @@ export function VideoPlayer({
         
         pendingRestoreRef.current = { time: localTime, playing: isPlaying };
         
-        // Update the current segment's angle to the clicked angle
+        // Use the actual angle (from layout config) for track update, not the displayed angle
+        // This ensures the track reflects what the user configured
+        const targetAngle = actualAngle;
+        
+        // Update the current segment's angle to the target angle
         // This replaces the current track with the clicked angle
         if (cameraSegments.length > 0) {
           const currentSegment = findSegmentForTime(cameraSegments, absoluteTime);
@@ -1273,19 +1295,40 @@ export function VideoPlayer({
             const newSegments = [...cameraSegments];
             newSegments[currentSegmentIndex] = {
               ...newSegments[currentSegmentIndex],
-              angle: clickedAngle
+              angle: targetAngle
             };
             setCameraSegments(newSegments);
           }
         }
         
-        // Set selected angle to the clicked angle (main view changes to corner view)
-        setSelectedAngle(clickedAngle);
+        // Set selected angle to the target angle (main view changes to corner view)
+        setSelectedAngle(targetAngle);
       };
 
-      // Use corners directly without any replacement logic
-      // Main view can appear in corners (no uniqueness constraint)
-      const displayCorners = corners;
+      // Dynamic display logic for Front/Rear:
+      // When a corner is set to Front/Rear and the current Track is the same angle,
+      // display the opposite angle instead (so both Front and Rear are always visible)
+      const FRONT_REAR_PAIR: Record<string, string> = {
+        front: 'back',
+        back: 'front',
+      };
+      
+      // Get the current track's angle
+      const currentSegment = findSegmentForTime(cameraSegments, absoluteTime);
+      const currentTrackAngle = currentSegment?.angle;
+      
+      // Transform corners for display: if corner matches current track (Front/Rear), show the opposite
+      const displayCorners = corners.map(cornerAngle => {
+        // Only apply to front/back angles
+        if (cornerAngle !== 'front' && cornerAngle !== 'back') {
+          return cornerAngle;
+        }
+        // If corner angle matches current track angle, show the opposite
+        if (cornerAngle === currentTrackAngle) {
+          return FRONT_REAR_PAIR[cornerAngle];
+        }
+        return cornerAngle;
+      });
 
       return (
         <div className="relative w-full bg-black flex items-center justify-center aspect-video max-h-full overflow-hidden">
@@ -1298,24 +1341,25 @@ export function VideoPlayer({
               {renderVideo(selectedAngle, true, 'w-full h-full')}
             </div>
             {/* All 5 PiP corners - each absolutely positioned */}
-            {/* Render all corners - main view can also appear in corners (no uniqueness constraint) */}
-            {displayCorners.map((value, idx) => {
-              if (value === 'none' || value === 'map') return null;
+            {/* Render all corners - with dynamic Front/Rear swap when matching track */}
+            {displayCorners.map((displayAngle, idx) => {
+              const actualAngle = corners[idx]; // The configured angle in layout
+              if (displayAngle === 'none' || displayAngle === 'map') return null;
               const pos = cornerPositions[idx];
               // Show placeholder if angle not available instead of hiding completely
-              const isAvailable = availableAngles.includes(value);
+              const isAvailable = availableAngles.includes(displayAngle);
               
               // Check if this corner should show flash animation
-              const cornerKey = `${idx}-${value}`;
+              const cornerKey = `${idx}-${actualAngle}`;
               const shouldFlash = pipSwitchAnim.active && pipSwitchAnim.flashCorners.includes(cornerKey);
               
-              // Check if this corner matches the main view angle
+              // Check if this corner's DISPLAYED angle matches the main view angle
               // If so, show green breathing glow effect
-              const isMatchingMainView = value === selectedAngle;
+              const isMatchingMainView = displayAngle === selectedAngle;
               
               return (
                 <div
-                  key={`pip-corner-${idx}-${value}`}
+                  key={`pip-corner-${idx}-${actualAngle}`}
                   ref={el => { cornerVideoRefs.current[idx] = el; }}
                   className={`${pos} w-[18%] rounded-lg overflow-hidden shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 border ${
                     shouldFlash ? 'animate-pipFlash' : ''
@@ -1324,11 +1368,11 @@ export function VideoPlayer({
                     transition: 'opacity 150ms ease-out',
                     zIndex: 10 
                   }}
-                  onClick={() => isAvailable && handlePipCornerClick(value, idx)}
+                  onClick={() => isAvailable && handlePipCornerClick(displayAngle, actualAngle, idx)}
                 >
-                  {isAvailable ? renderVideo(value, false, 'w-full', true) : (
+                  {isAvailable ? renderVideo(displayAngle, false, 'w-full', true) : (
                     <div className="bg-gray-900 w-full h-full flex items-center justify-center text-gray-600 text-xs">
-                      {ANGLE_LABELS[value] || value}
+                      {ANGLE_LABELS[displayAngle] || displayAngle}
                     </div>
                   )}
                 </div>
