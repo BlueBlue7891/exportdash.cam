@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { IconDownload, IconPlayerStop, IconLoader2, IconCheck, IconArrowUp, IconArrowDown, IconArrowLeft, IconArrowRight, IconArrowDownLeft, IconArrowDownRight } from '@tabler/icons-react';
 import { SeiData, SeiWithFrameIndex } from '@/lib/dashcam-mp4';
+import { isInChina, wgs84ToGcj02, distance } from '@/lib/coord-transform';
 import { Output, Mp4OutputFormat, BufferTarget, VideoSampleSource, VideoSample } from 'mediabunny';
 import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG } from '@/types/video';
 import { Tooltip } from './Tooltip';
@@ -191,7 +192,7 @@ export function VideoExporter({
   layout = 'single',
   layoutConfig = DEFAULT_LAYOUT_CONFIG,
 }: VideoExporterProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [isExporting, setIsExporting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -612,7 +613,14 @@ export function VideoExporter({
     seiData: SeiData | null,
     width: number,
     height: number,
-    position: 'top-right' | 'bottom-right' | { x: number; y: number; size: number } = 'bottom-right'
+    position: 'top-right' | 'bottom-right' | { x: number; y: number; size: number } = 'bottom-right',
+    mapInfo?: {
+      isEventJsonGps?: boolean;
+      eventReason?: string;
+      city?: string;
+      street?: string;
+      language?: 'zh' | 'en';
+    }
   ) => {
     if (!seiData?.latitude_deg || !seiData?.longitude_deg) return;
     if (seiData.latitude_deg === 0 && seiData.longitude_deg === 0) return;
@@ -623,13 +631,28 @@ export function VideoExporter({
     const x = typeof position === 'object' ? position.x : width - mapSize - padding;
     const y = typeof position === 'object' ? position.y : position === 'top-right' ? padding : height - mapSize - padding;
 
-    const lat = seiData.latitude_deg;
-    const lng = seiData.longitude_deg;
+    const rawLat = seiData.latitude_deg;
+    const rawLng = seiData.longitude_deg;
+    const heading = seiData.heading_deg || 0;
     const zoom = 17;
+    
+    // Check if in China and calculate offset
+    const inChina = isInChina(rawLng, rawLat);
+    let displayLat = rawLat;
+    let displayLng = rawLng;
+    let offsetDistance = 0;
+    
+    if (inChina) {
+      const [gcjLng, gcjLat] = wgs84ToGcj02(rawLng, rawLat);
+      offsetDistance = distance(rawLng, rawLat, gcjLng, gcjLat);
+      // Use GCJ-02 coordinates for display (matching Amap)
+      displayLat = gcjLat;
+      displayLng = gcjLng;
+    }
 
-    // Get tile coordinates
-    const tile = latLngToTile(lat, lng, zoom);
-    const offset = latLngToPixelOffset(lat, lng, zoom);
+    // Get tile coordinates (using display coordinates for map tiles)
+    const tile = latLngToTile(displayLat, displayLng, zoom);
+    const offset = latLngToPixelOffset(displayLat, displayLng, zoom);
 
     // Draw map background
     ctx.fillStyle = '#1e293b';
@@ -680,7 +703,6 @@ export function VideoExporter({
     ctx.restore();
 
     // Draw car marker in center
-    const heading = seiData.heading_deg || 0;
     ctx.save();
     ctx.translate(centerX, centerY);
     ctx.rotate((heading * Math.PI) / 180);
@@ -699,19 +721,102 @@ export function VideoExporter({
 
     ctx.restore();
 
-    // Coordinates overlay at bottom
+    // Draw coordinates overlay at bottom (matching MapView style)
+    const isEventJsonGps = mapInfo?.isEventJsonGps ?? false;
+    const eventReason = mapInfo?.eventReason ?? '';
+    const city = mapInfo?.city ?? '';
+    const street = mapInfo?.street ?? '';
+    const language = mapInfo?.language ?? 'en';
+    
+    // Calculate overlay height based on content
+    const lineHeight = 14 * scale;
+    const paddingY = 4 * scale;
+    let overlayHeight = lineHeight + paddingY * 2;
+    let lines: Array<{ text: string; color: string; fontSize?: number }> = [];
+    
+    if (isEventJsonGps) {
+      // GPS from event.json fallback (estimated position)
+      const estimatedLabel = language === 'zh' ? '估算位置' : 'Estimated';
+      lines.push({ text: `${estimatedLabel}: ${rawLat.toFixed(5)}, ${rawLng.toFixed(5)}`, color: '#FBBF24' }); // yellow-400
+      
+      if (inChina) {
+        const amapLabel = language === 'zh' ? '高德' : 'Amap';
+        const offsetText = language === 'zh' ? '偏移' : 'Offset';
+        lines.push({ 
+          text: `${amapLabel}: ${displayLat.toFixed(5)}, ${displayLng.toFixed(5)} (${offsetText}: ${Math.round(offsetDistance)}m)`, 
+          color: 'rgba(255, 255, 255, 0.6)',
+          fontSize: 8 * scale
+        });
+      }
+      
+      const fromEventLabel = language === 'zh' ? '来自 event.json' : 'From event.json';
+      lines.push({ 
+        text: `${fromEventLabel}${eventReason ? ` (${eventReason})` : ''}`, 
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 8 * scale
+      });
+      
+      if (city || street) {
+        lines.push({ 
+          text: `${city}${city && street ? ' · ' : ''}${street}`, 
+          color: 'rgba(255, 255, 255, 0.6)',
+          fontSize: 8 * scale
+        });
+      }
+    } else if (inChina) {
+      // Native GPS in China
+      const amapLabel = language === 'zh' ? '高德' : 'Amap';
+      const headingText = heading > 0 ? ` ${Math.round(heading)}°` : '';
+      lines.push({ 
+        text: `${amapLabel}: ${displayLat.toFixed(5)}, ${displayLng.toFixed(5)}${headingText}`, 
+        color: '#4ADE80' // green-400
+      });
+      lines.push({ 
+        text: `GPS: ${rawLat.toFixed(5)}, ${rawLng.toFixed(5)} (Offset: ${Math.round(offsetDistance)}m)`, 
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 8 * scale
+      });
+    } else {
+      // Native GPS outside China
+      const headingText = heading > 0 ? ` ${Math.round(heading)}°` : '';
+      lines.push({ 
+        text: `GPS: ${rawLat.toFixed(5)}, ${rawLng.toFixed(5)}${headingText}`, 
+        color: '#D1D5DB' // gray-300
+      });
+    }
+    
+    // Adjust overlay height based on number of lines
+    overlayHeight = Math.max(lineHeight + paddingY * 2, lines.length * lineHeight + paddingY * 2);
+    
+    // Draw overlay background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    const coordBoxY = y + mapSize - 20 * scale;
+    const coordBoxY = y + mapSize - overlayHeight;
     ctx.beginPath();
-    ctx.roundRect(x, coordBoxY, mapSize, 20 * scale, [0, 0, 8 * scale, 8 * scale]);
+    ctx.roundRect(x, coordBoxY, mapSize, overlayHeight, [0, 0, 8 * scale, 8 * scale]);
     ctx.fill();
-
-    const coordStr = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = `${10 * scale}px monospace`;
-    ctx.textAlign = 'center';
+    
+    // Draw text lines
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(coordStr, x + mapSize / 2, coordBoxY + 10 * scale);
+    let currentY = coordBoxY + paddingY + lineHeight / 2;
+    
+    for (const line of lines) {
+      ctx.fillStyle = line.color;
+      ctx.font = `${line.fontSize || 9 * scale}px monospace`;
+      
+      // Truncate text if too long
+      let displayText = line.text;
+      const maxWidth = mapSize - 8 * scale;
+      let textWidth = ctx.measureText(displayText).width;
+      
+      while (textWidth > maxWidth && displayText.length > 10) {
+        displayText = displayText.slice(0, -4) + '...';
+        textWidth = ctx.measureText(displayText).width;
+      }
+      
+      ctx.fillText(displayText, x + 4 * scale, currentY);
+      currentY += lineHeight;
+    }
   };
 
   const startExport = useCallback(async () => {
@@ -1364,7 +1469,8 @@ export function VideoExporter({
             { x: width - pipW - pipMargin, y: pipMargin },                           // top-right
           ];
           const rawPipSei = getSeiForTime(absoluteTime);
-          const pipMapSeiData = rawPipSei?.latitude_deg && rawPipSei?.longitude_deg
+          const hasNativePipGps = rawPipSei?.latitude_deg && rawPipSei?.longitude_deg;
+          const pipMapSeiData = hasNativePipGps
             ? rawPipSei
             : sequence.event?.est_lat && sequence.event?.est_lon
               ? { ...(rawPipSei || {}), latitude_deg: sequence.event.est_lat, longitude_deg: sequence.event.est_lon } as typeof rawPipSei
@@ -1372,7 +1478,13 @@ export function VideoExporter({
           for (let ci = 0; ci < allCorners.length; ci++) {
             if (allCorners[ci] === 'map') {
               const mp = mapCornerPositions[ci];
-              await drawMiniMap(ctx, pipMapSeiData, width, height, { x: mp.x, y: mp.y, size: pipW });
+              await drawMiniMap(ctx, pipMapSeiData, width, height, { x: mp.x, y: mp.y, size: pipW }, {
+                isEventJsonGps: !hasNativePipGps && !!sequence.event?.est_lat,
+                eventReason: sequence.event?.reasonLabel || sequence.event?.reason,
+                city: sequence.event?.city,
+                street: sequence.event?.street,
+                language: language as 'zh' | 'en'
+              });
             }
           }
           
@@ -1716,7 +1828,8 @@ export function VideoExporter({
 
         // Get SEI data for this absolute time, with event.json GPS fallback
         const rawSeiData = getSeiForTime(absoluteTime);
-        const seiData = rawSeiData?.latitude_deg && rawSeiData?.longitude_deg
+        const hasNativeGps = rawSeiData?.latitude_deg && rawSeiData?.longitude_deg;
+        const seiData = hasNativeGps
           ? rawSeiData
           : sequence.event?.est_lat && sequence.event?.est_lon
             ? { ...(rawSeiData || {}), latitude_deg: sequence.event.est_lat, longitude_deg: sequence.event.est_lon } as typeof rawSeiData
@@ -1743,7 +1856,13 @@ export function VideoExporter({
           drawTelemetry(ctx, seiData, width, height, telemetryIcons, absoluteTime, isSingleOrPip);
         }
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {
-          await drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
+          await drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right', {
+            isEventJsonGps: !hasNativeGps && !!sequence.event?.est_lat,
+            eventReason: sequence.event?.reasonLabel || sequence.event?.reason,
+            city: sequence.event?.city,
+            street: sequence.event?.street,
+            language: language as 'zh' | 'en'
+          });
         }
 
         // Frame timestamp is relative to export start (0-based for exported video)
