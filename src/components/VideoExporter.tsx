@@ -1723,7 +1723,7 @@ export function VideoExporter({
         <button
           onClick={startExport}
           disabled={isExporting}
-          className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md"
         >
           <IconDownload size={14} />
           <span>Export</span>

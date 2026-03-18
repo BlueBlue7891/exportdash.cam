@@ -1699,22 +1699,7 @@ export function VideoPlayer({
                 </Tooltip>
               );
             })}
-            {/* Layout config button - show after camera buttons in multi-view layouts */}
-            {layout !== 'single' && (
-              <Tooltip content="Configure layout" position="top">
-                <button
-                  onClick={() => setShowLayoutConfig(prev => !prev)}
-                  className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
-                    showLayoutConfig
-                      ? 'bg-blue-500 text-white ring-2 ring-blue-400/50'
-                      : 'bg-gray-700 text-cyan-400 hover:bg-gray-600 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
-                  }`}
-                >
-                  <IconSettings2 size={14} />
-                </button>
-              </Tooltip>
-            )}
-            {/* Custom camera track button - show to the right of config button */}
+            {/* Custom camera track button */}
             {hasCustomCameraTrack && (
               <Tooltip content="Use custom camera track" position="top">
                 <button
@@ -1787,6 +1772,21 @@ export function VideoPlayer({
                 </Tooltip>
               );
             })}
+            {/* Layout config button - positioned after all layout buttons */}
+            {layout !== 'single' && (
+              <Tooltip content="Configure layout" position="top">
+                <button
+                  onClick={() => setShowLayoutConfig(prev => !prev)}
+                  className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
+                    showLayoutConfig
+                      ? 'bg-blue-500 text-white ring-2 ring-blue-400/50'
+                      : 'bg-gray-700 text-cyan-400 hover:bg-gray-600 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
+                  }`}
+                >
+                  <IconSettings2 size={14} />
+                </button>
+              </Tooltip>
+            )}
             {showLayoutConfig && layout !== 'single' && (
               <LayoutConfigPopover
                 layout={layout}
@@ -1926,26 +1926,6 @@ export function VideoPlayer({
             {/* Divider */}
             <div className="w-px h-4 bg-gray-600 mx-1" />
 
-            {/* Export */}
-            <VideoExporter
-              sequence={sequence}
-              selectedAngle={selectedAngle}
-              allSeiMessages={allSeiMessages}
-              fps={fps}
-              speedUnit={speedUnit}
-              filename={`tesla-${sequence.dateRange}-${sequence.timeRange.split(' - ')[0].replace(/:/g, '-')}`}
-              trimPoints={trimPoints}
-              cameraSegments={cameraSegments}
-              showTelemetry={showTelemetry}
-              showDateTime={showDateTime}
-              showMap={showMap}
-              layout={layout}
-              layoutConfig={layoutConfig}
-            />
-
-            {/* Divider */}
-            <div className="w-px h-4 bg-gray-600 mx-1" />
-
             {/* Video Browser Button (only when folder imported) */}
             {folderStructure && onOpenVideoBrowser && (
               <Tooltip content="Browse videos by date" position="top">
@@ -1975,6 +1955,26 @@ export function VideoPlayer({
                 {sequences.length > 1 ? `${sequences.indexOf(sequence) + 1}/${sequences.length}` : sequences.length === 1 ? '1/1' : 'Files'}
               </span>
             </button>
+
+            {/* Divider */}
+            <div className="w-px h-4 bg-gray-600 mx-1" />
+
+            {/* Export */}
+            <VideoExporter
+              sequence={sequence}
+              selectedAngle={selectedAngle}
+              allSeiMessages={allSeiMessages}
+              fps={fps}
+              speedUnit={speedUnit}
+              filename={`tesla-${sequence.dateRange}-${sequence.timeRange.split(' - ')[0].replace(/:/g, '-')}`}
+              trimPoints={trimPoints}
+              cameraSegments={cameraSegments}
+              showTelemetry={showTelemetry}
+              showDateTime={showDateTime}
+              showMap={showMap}
+              layout={layout}
+              layoutConfig={layoutConfig}
+            />
           </div>
         </div>
       </div>
