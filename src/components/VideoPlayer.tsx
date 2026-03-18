@@ -461,14 +461,9 @@ export function VideoPlayer({
   // Track previous trimming state to detect when exiting trim mode
   const prevIsTrimmingRef = useRef(isTrimming);
   
-  // Handle event marker visibility when entering/exiting trim mode
+  // Handle event marker visibility when exiting trim mode
   useEffect(() => {
     const wasTrimming = prevIsTrimmingRef.current;
-    
-    // Entering trim mode: enable event marker
-    if (!wasTrimming && isTrimming && sequence?.event) {
-      setShowEventMarker(true);
-    }
     
     // Exiting trim mode: check if event is outside trim range and disable if so
     if (wasTrimming && !isTrimming && !isEventMarkerInTrimRange) {
@@ -476,7 +471,7 @@ export function VideoPlayer({
     }
     
     prevIsTrimmingRef.current = isTrimming;
-  }, [isTrimming, isEventMarkerInTrimRange, sequence?.event]);
+  }, [isTrimming, isEventMarkerInTrimRange]);
 
   // Create object URLs for current moment's videos
   useEffect(() => {
