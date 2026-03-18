@@ -22,6 +22,19 @@ const PIP_LABELS: Record<string, string> = {
   map: 'Map',
 };
 
+// Position-specific allowed options for PiP layout
+// corners: [bottom-left, bottom-center, bottom-right, top-left, top-right]
+const PIP_POSITION_OPTIONS: string[][] = [
+  ['left_pillar', 'none', 'map'],      // 0: bottom-left (L Pillar)
+  ['front', 'back', 'none', 'map'],    // 1: bottom-center (Front/Rear)
+  ['right_pillar', 'none', 'map'],     // 2: bottom-right (R Pillar)
+  ['left_repeater', 'none', 'map'],    // 3: top-left (Left)
+  ['right_repeater', 'none', 'map'],   // 4: top-right (Right)
+];
+
+// Default values for each position when clearing
+const PIP_POSITION_DEFAULTS = ['left_pillar', 'back', 'right_pillar', 'left_repeater', 'right_repeater'];
+
 function CameraSelect({
   value,
   onChange,
@@ -89,16 +102,18 @@ export function LayoutConfigPopover({
 
       const c = [...corners] as [string, string, string, string, string];
       
-      // Only swap if newAngle is not 'none' and currentAngle is not 'none'
-      if (newAngle !== 'none' && currentAngle !== 'none') {
-        // Check if the new angle is already used by another corner
-        const existingIndex = c.findIndex((angle, i) => i !== index && angle === newAngle);
-        
-        if (existingIndex !== -1) {
-          // Swap: put current angle to the other corner
-          c[existingIndex] = currentAngle;
+      // Handle map uniqueness: if setting new map, clear previous map
+      // Map is a special display element that can only appear once
+      if (newAngle === 'map') {
+        const existingMapIndex = c.findIndex((angle, i) => i !== index && angle === 'map');
+        if (existingMapIndex !== -1) {
+          // Restore previous map position to its default value
+          c[existingMapIndex] = PIP_POSITION_DEFAULTS[existingMapIndex];
         }
       }
+      
+      // Note: Camera angles can appear in multiple corners (including same as main view)
+      // No uniqueness check for camera angles - they can repeat
       
       c[index] = newAngle;
       onChange({ ...config, pip: { corners: c } });
@@ -115,14 +130,14 @@ export function LayoutConfigPopover({
           </div>
           {/* Top row */}
           <div className="absolute top-1.5 left-1.5 right-1.5 flex justify-between">
-            <CameraSelect value={corners[3]} onChange={(a) => update(3, a)} label="" options={PIP_OPTIONS} labels={PIP_LABELS} />
-            <CameraSelect value={corners[4]} onChange={(a) => update(4, a)} label="" options={PIP_OPTIONS} labels={PIP_LABELS} />
+            <CameraSelect value={corners[3]} onChange={(a) => update(3, a)} label="" options={PIP_POSITION_OPTIONS[3]} labels={PIP_LABELS} />
+            <CameraSelect value={corners[4]} onChange={(a) => update(4, a)} label="" options={PIP_POSITION_OPTIONS[4]} labels={PIP_LABELS} />
           </div>
           {/* Bottom row */}
           <div className="absolute bottom-1.5 left-1.5 right-1.5 flex justify-between items-end">
-            <CameraSelect value={corners[0]} onChange={(a) => update(0, a)} label="" options={PIP_OPTIONS} labels={PIP_LABELS} />
-            <CameraSelect value={corners[1]} onChange={(a) => update(1, a)} label="" options={PIP_OPTIONS} labels={PIP_LABELS} />
-            <CameraSelect value={corners[2]} onChange={(a) => update(2, a)} label="" options={PIP_OPTIONS} labels={PIP_LABELS} />
+            <CameraSelect value={corners[0]} onChange={(a) => update(0, a)} label="" options={PIP_POSITION_OPTIONS[0]} labels={PIP_LABELS} />
+            <CameraSelect value={corners[1]} onChange={(a) => update(1, a)} label="" options={PIP_POSITION_OPTIONS[1]} labels={PIP_LABELS} />
+            <CameraSelect value={corners[2]} onChange={(a) => update(2, a)} label="" options={PIP_POSITION_OPTIONS[2]} labels={PIP_LABELS} />
           </div>
         </div>
       </div>
@@ -140,11 +155,13 @@ export function LayoutConfigPopover({
       const newCameras = [...cameras] as [string, string, string];
       
       // Check if the new angle is already used by another position
+      // If so, don't swap - just prevent the change (angles must be unique)
       const existingIndex = newCameras.findIndex((angle, i) => i !== index && angle === newAngle);
       
       if (existingIndex !== -1) {
-        // Swap: put current angle to the other position
-        newCameras[existingIndex] = currentAngle;
+        // Don't allow duplicate angles in triple view
+        // Revert to previous value by not updating
+        return;
       }
       
       newCameras[index] = newAngle;
@@ -178,20 +195,15 @@ export function LayoutConfigPopover({
       const allAngles = [...topRow, ...bottomRow];
       
       // Check if the new angle is already used by another position
+      // If so, don't allow the change (angles must be unique in all 6 layout)
       const existingGlobalIndex = allAngles.findIndex((angle, i) => {
         if (i === index) return false; // Skip self
         return angle === newAngle;
       });
       
       if (existingGlobalIndex !== -1) {
-        // Swap: put current angle to the other position
-        if (existingGlobalIndex < 3) {
-          // In top row
-          newTopRow[existingGlobalIndex] = currentAngle;
-        } else {
-          // In bottom row
-          newBottomRow[existingGlobalIndex - 3] = currentAngle;
-        }
+        // Don't allow duplicate angles
+        return;
       }
       
       newTopRow[index] = newAngle;
@@ -207,20 +219,15 @@ export function LayoutConfigPopover({
       const allAngles = [...topRow, ...bottomRow];
       
       // Check if the new angle is already used by another position
+      // If so, don't allow the change (angles must be unique in all 6 layout)
       const existingGlobalIndex = allAngles.findIndex((angle, i) => {
         if (i === index + 3) return false; // Skip self (index + 3 is the global position)
         return angle === newAngle;
       });
       
       if (existingGlobalIndex !== -1) {
-        // Swap: put current angle to the other position
-        if (existingGlobalIndex < 3) {
-          // In top row
-          newTopRow[existingGlobalIndex] = currentAngle;
-        } else {
-          // In bottom row
-          newBottomRow[existingGlobalIndex - 3] = currentAngle;
-        }
+        // Don't allow duplicate angles
+        return;
       }
       
       newBottomRow[index] = newAngle;

@@ -44,7 +44,7 @@ import {
   IconCheck,
   IconScissors,
   IconWand,
-  IconRefresh,
+
   IconClock,
   IconSettings2,
 } from '@tabler/icons-react';
@@ -724,47 +724,8 @@ export function VideoPlayer({
       // Save playback state before switching so video resumes after remount
       pendingRestoreRef.current = { time: localTime, playing: isPlaying };
       
-      // In PiP layout, swap the new angle with current angle in corners
-      if (layout === 'pip') {
-        const corners = layoutConfig.pip.corners;
-        const newAngleIdx = corners.findIndex(c => c === currentSegment.angle);
-        
-        if (newAngleIdx !== -1) {
-          // New angle is in corners, swap with current main angle
-          const newCorners = [...corners];
-          newCorners[newAngleIdx] = selectedAngle;
-          
-          // Find if current angle is already in corners
-          const currentAngleIdx = corners.findIndex(c => c === selectedAngle);
-          if (currentAngleIdx !== -1 && currentAngleIdx !== newAngleIdx) {
-            newCorners[currentAngleIdx] = currentSegment.angle;
-          }
-          
-          handleLayoutConfigChange({
-            ...layoutConfig,
-            pip: { corners: newCorners as [string, string, string, string, string] }
-          });
-        } else {
-          // New angle is NOT in corners - we need to add it
-          console.log('[PiP Track Switch] New angle not in corners:', currentSegment.angle, 'current corners:', corners);
-          
-          // Find a corner to replace (preferably 'none' or one that's not in the unique track angles)
-          const trackAnglesSet = new Set(cameraTrackUniqueAngles);
-          const replaceIdx = corners.findIndex(c => c === 'none' || !trackAnglesSet.has(c));
-          
-          if (replaceIdx !== -1) {
-            const newCorners = [...corners];
-            newCorners[replaceIdx] = currentSegment.angle;
-            console.log('[PiP Track Switch] Adding new angle to corners:', newCorners);
-            handleLayoutConfigChange({
-              ...layoutConfig,
-              pip: { corners: newCorners as [string, string, string, string, string] }
-            });
-          } else {
-            console.log('[PiP Track Switch] No available corner to replace!');
-          }
-        }
-      }
+      // Note: PiP corners no longer swap with main view when track changes
+      // The layout configuration remains fixed per user requirements
       
       setSelectedAngle(currentSegment.angle);
       
@@ -772,45 +733,8 @@ export function VideoPlayer({
       if (layout === 'triple' || layout === 'all') {
         setTrackHighlightVersion(v => v + 1);
       }
-      
-      // Trigger PiP corner flash animation (swap overlay animation removed)
-      if (layout === 'pip') {
-        const currentCorners = layoutConfig.pip.corners;
-        const newMainAngle = currentSegment.angle;
-        const newAngleIdx = currentCorners.findIndex(c => c === newMainAngle);
-        
-        if (newAngleIdx !== -1) {
-          // Calculate what the new corners will be after the swap
-          let nextCorners = [...currentCorners];
-          nextCorners[newAngleIdx] = selectedAngle;
-          const currentAngleIdx = currentCorners.findIndex(c => c === selectedAngle);
-          if (currentAngleIdx !== -1 && currentAngleIdx !== newAngleIdx) {
-            nextCorners[currentAngleIdx] = newMainAngle;
-          }
-          
-          // Find which corners will contain the OLD main angle after swap
-          const swappedInCorners: string[] = [];
-          nextCorners.forEach((cornerAngle, idx) => {
-            if (cornerAngle === selectedAngle) {
-              swappedInCorners.push(`${idx}-${selectedAngle}`);
-            }
-          });
-          
-          setPipSwitchAnim({
-            active: true,
-            fromAngle: selectedAngle,
-            toAngle: newMainAngle,
-            flashCorners: swappedInCorners
-          });
-          
-          // Clear flash animation after 600ms
-          setTimeout(() => {
-            setPipSwitchAnim({ active: false, fromAngle: null, toAngle: null, flashCorners: [] });
-          }, 600);
-        }
-      }
     }
-  }, [useCustomCameraTrack, absoluteTime, cameraSegments, selectedAngle, localTime, isPlaying, layout, layoutConfig]);
+  }, [useCustomCameraTrack, absoluteTime, cameraSegments, selectedAngle, localTime, isPlaying, layout]);
 
   // Custom setters that preserve playback state
   const handleLayoutChange = useCallback((newLayout: LayoutType) => {
@@ -865,64 +789,8 @@ export function VideoPlayer({
       }
     }
     
-    // Handle PiP layout - ensure all camera track angles are visible in corners
-    if (newLayout === 'pip' && hasCustomCameraTrack && cameraSegments.length > 0) {
-      console.log('[PiP Switch] Syncing corners with track', {
-        currentCorners: layoutConfig.pip.corners,
-        trackAngles: cameraTrackUniqueAngles,
-        selectedAngle
-      });
-      
-      const corners = [...layoutConfig.pip.corners];
-      const trackAngles = cameraTrackUniqueAngles;
-      const allAvailableAngles = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
-      
-      // First, ensure selectedAngle is not in corners (it's the main view)
-      const mainViewInCornerIdx = corners.findIndex(c => c === selectedAngle);
-      if (mainViewInCornerIdx !== -1) {
-        // Replace with first available angle (from all 6 angles) that's not already in corners
-        // and is not the main view
-        const replacement = allAvailableAngles.find(a => !corners.includes(a) && a !== selectedAngle);
-        corners[mainViewInCornerIdx] = replacement || 'none';
-        console.log('[PiP Switch] Removed main view from corners, replaced with:', corners[mainViewInCornerIdx]);
-      }
-      
-      // Find which track angles are missing from corners (excluding 'none' and 'map')
-      const videoCorners = corners.filter(c => c !== 'none' && c !== 'map');
-      const missingAngles = trackAngles.filter(angle => !videoCorners.includes(angle) && angle !== selectedAngle);
-      
-      console.log('[PiP Switch] Missing angles:', missingAngles);
-      
-      if (missingAngles.length > 0) {
-        // Replace corners that are not in track with missing angles
-        const trackAnglesSet = new Set(trackAngles);
-        let missingIdx = 0;
-        
-        for (let i = 0; i < corners.length && missingIdx < missingAngles.length; i++) {
-          const cornerValue = corners[i];
-          // Replace if corner is 'none' or not in track angles
-          if (cornerValue === 'none' || !trackAnglesSet.has(cornerValue)) {
-            corners[i] = missingAngles[missingIdx];
-            missingIdx++;
-          }
-        }
-        
-        // Only update if we actually changed something
-        if (missingIdx > 0) {
-          console.log('[PiP Switch] Updating corners to:', corners);
-          const newConfig = { ...layoutConfig, pip: { corners: corners as [string, string, string, string, string] } };
-          setLayoutConfig(newConfig);
-          saveLayoutConfig(newConfig);
-        }
-      }
-      
-      // If we replaced main view but didn't save yet, save now
-      if (mainViewInCornerIdx !== -1) {
-        const newConfig = { ...layoutConfig, pip: { corners: corners as [string, string, string, string, string] } };
-        setLayoutConfig(newConfig);
-        saveLayoutConfig(newConfig);
-      }
-    }
+    // Note: PiP layout no longer auto-adjusts corners based on camera track
+    // The layout configuration remains fixed per user requirements
     
     setLayout(newLayout);
   }, [layout, localTime, isPlaying, hasCustomCameraTrack, cameraTrackUniqueAngles, cameraSegments, layoutConfig, safePause, absoluteTime, selectedAngle, syncVideos, setLocalTime, setSelectedAngle, setLayoutConfig, setCameraSegments]);
@@ -942,28 +810,8 @@ export function VideoPlayer({
     
     pendingRestoreRef.current = { time: localTime, playing: isPlaying };
     
-    // In PiP layout, swap the new angle with current angle in corners
-    if (layout === 'pip') {
-      const corners = layoutConfig.pip.corners;
-      const newAngleIdx = corners.findIndex(c => c === newAngle);
-      
-      if (newAngleIdx !== -1) {
-        // New angle is in corners, swap with current main angle
-        const newCorners = [...corners];
-        newCorners[newAngleIdx] = selectedAngle;
-        
-        // Find if current angle is already in corners (shouldn't happen normally)
-        const currentAngleIdx = corners.findIndex(c => c === selectedAngle);
-        if (currentAngleIdx !== -1 && currentAngleIdx !== newAngleIdx) {
-          newCorners[currentAngleIdx] = newAngle;
-        }
-        
-        handleLayoutConfigChange({
-          ...layoutConfig,
-          pip: { corners: newCorners as [string, string, string, string, string] }
-        });
-      }
-    }
+    // Note: PiP corners no longer swap with main view when angle changes
+    // The layout configuration remains fixed per user requirements
     
     // Update the current segment's angle if camera segments exist
     // This works both in CustomCameraTrack mode and normal mode
@@ -985,7 +833,7 @@ export function VideoPlayer({
     }
     
     setSelectedAngle(newAngle);
-  }, [selectedAngle, localTime, isPlaying, layout, layoutConfig, cameraSegments, absoluteTime, setCameraSegments, safePause]);
+  }, [selectedAngle, localTime, isPlaying, cameraSegments, absoluteTime, setCameraSegments, safePause]);
 
   // Fullscreen handler
   const toggleFullscreen = useCallback(() => {
@@ -1365,67 +1213,45 @@ export function VideoPlayer({
         'absolute top-3 right-3',                          // 4: top-right
       ];
 
-      // Handle PiP corner click - swap with main view
+      // Handle PiP corner click - change main view and update current track segment
       const handlePipCornerClick = (clickedAngle: string, idx: number) => {
         if (clickedAngle === 'map' || clickedAngle === 'none') return;
         
-        // Find where the current main angle is in the corners (if it exists)
-        const mainAngleInCornersIdx = corners.findIndex(c => c === selectedAngle);
-        
-        // Swap the clicked angle with current main angle in corners array
-        const newCorners = [...corners];
-        newCorners[idx] = selectedAngle;
-        
-        // If main angle was already in corners, swap it with clicked angle
-        if (mainAngleInCornersIdx !== -1 && mainAngleInCornersIdx !== idx) {
-          newCorners[mainAngleInCornersIdx] = clickedAngle;
+        // Pause all videos before switching angle to prevent AbortError
+        if (isPlaying) {
+          safePause(mainVideoRef.current, 'main');
+          Object.entries(videoRefs.current).forEach(([angle, v]) => safePause(v, angle));
+          // Clear any pending play promises
+          Object.keys(playPromisesRef.current).forEach(key => {
+            playPromisesRef.current[key] = null;
+          });
         }
         
-        // Update layout config with swapped corners
-        handleLayoutConfigChange({
-          ...layoutConfig,
-          pip: { corners: newCorners as [string, string, string, string, string] }
-        });
+        pendingRestoreRef.current = { time: localTime, playing: isPlaying };
         
-        // Update selected angle to the clicked one
-        handleAngleChange(clickedAngle);
+        // Update the current segment's angle to the clicked angle
+        // This replaces the current track with the clicked angle
+        if (cameraSegments.length > 0) {
+          const currentSegment = findSegmentForTime(cameraSegments, absoluteTime);
+          const currentSegmentIndex = currentSegment ? cameraSegments.findIndex(seg => seg === currentSegment) : -1;
+          
+          if (currentSegmentIndex !== -1) {
+            const newSegments = [...cameraSegments];
+            newSegments[currentSegmentIndex] = {
+              ...newSegments[currentSegmentIndex],
+              angle: clickedAngle
+            };
+            setCameraSegments(newSegments);
+          }
+        }
+        
+        // Set selected angle to the clicked angle (main view changes to corner view)
+        setSelectedAngle(clickedAngle);
       };
 
-      // Debug: Log current state
-      console.log('[PiP Render]', {
-        corners,
-        selectedAngle,
-        availableAngles,
-        hasCustomCameraTrack,
-        cameraTrackUniqueAngles
-      });
-
-      // Ensure corners don't have main view and don't have duplicates
-      const allAvailableAngles = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
-      const seenAngles = new Set<string>();
-      const displayCorners = corners.map((angle, idx) => {
-        if (angle === 'none' || angle === 'map') return angle;
-        
-        // If this is the main view, replace it with an angle that's not in corners
-        if (angle === selectedAngle) {
-          const replacement = allAvailableAngles.find(a => !corners.includes(a) && a !== selectedAngle);
-          console.log('[PiP Render] Main view in corners, replacing with:', replacement);
-          return replacement || 'none';
-        }
-        
-        // If this angle is already seen (duplicate), replace it
-        if (seenAngles.has(angle)) {
-          console.log('[PiP Render] Duplicate angle found:', angle, 'at index', idx);
-          const replacement = allAvailableAngles.find(a => !corners.includes(a) && !seenAngles.has(a) && a !== selectedAngle);
-          console.log('[PiP Render] Replacement for duplicate:', replacement);
-          return replacement || 'none';
-        }
-        
-        seenAngles.add(angle);
-        return angle;
-      });
-      
-      console.log('[PiP Render] Display corners:', displayCorners);
+      // Use corners directly without any replacement logic
+      // Main view can appear in corners (no uniqueness constraint)
+      const displayCorners = corners;
 
       return (
         <div className="relative w-full bg-black flex items-center justify-center aspect-video max-h-full overflow-hidden">
@@ -1438,7 +1264,7 @@ export function VideoPlayer({
               {renderVideo(selectedAngle, true, 'w-full h-full')}
             </div>
             {/* All 5 PiP corners - each absolutely positioned */}
-            {/* Render all non-main videos first to keep them mounted */}
+            {/* Render all corners - main view can also appear in corners (no uniqueness constraint) */}
             {displayCorners.map((value, idx) => {
               if (value === 'none' || value === 'map') return null;
               const pos = cornerPositions[idx];
@@ -1449,8 +1275,8 @@ export function VideoPlayer({
               const cornerKey = `${idx}-${value}`;
               const shouldFlash = pipSwitchAnim.active && pipSwitchAnim.flashCorners.includes(cornerKey);
               
-              // If this angle is now the main view, hide the corner (but keep mounted to prevent flicker)
-              const isMainView = value === selectedAngle;
+              // Note: Main view can also appear in corners - no hiding logic
+              // This allows the same angle to be displayed in both main view and corner
               
               return (
                 <div
@@ -1458,12 +1284,12 @@ export function VideoPlayer({
                   ref={el => { cornerVideoRefs.current[idx] = el; }}
                   className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 ${
                     shouldFlash ? 'animate-pipFlash' : ''
-                  } ${isMainView ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                  } opacity-100`}
                   style={{ 
                     transition: 'opacity 150ms ease-out',
-                    zIndex: isMainView ? 0 : 10 
+                    zIndex: 10 
                   }}
-                  onClick={() => !isMainView && isAvailable && handlePipCornerClick(value, idx)}
+                  onClick={() => isAvailable && handlePipCornerClick(value, idx)}
                 >
                   {isAvailable ? renderVideo(value, false, 'w-full', true) : (
                     <div className="bg-gray-900 w-full h-full flex items-center justify-center text-gray-600 text-xs">
@@ -1834,77 +1660,6 @@ export function VideoPlayer({
                 </button>
               </Tooltip>
             )}
-            {/* Reset button for PIP layout - positioned before Custom button */}
-            {layout === 'pip' && hasCustomCameraTrack && (() => {
-              // Check if layout differs from default or angle is not front
-              const isDefaultLayout = JSON.stringify(layoutConfig.pip.corners) === JSON.stringify(DEFAULT_LAYOUT_CONFIG.pip.corners);
-              const isDefaultAngle = selectedAngle === 'front';
-              const needsReset = !isDefaultLayout || !isDefaultAngle;
-              
-              return (
-                <Tooltip content={needsReset ? "Reset PIP layout & seek to Front" : "Already default layout"} position="top">
-                  <button
-                    onClick={() => {
-                      console.log('[PiP Reset] Resetting layout...', {
-                        currentCorners: layoutConfig.pip.corners,
-                        defaultCorners: DEFAULT_LAYOUT_CONFIG.pip.corners,
-                        hasCustomCameraTrack
-                      });
-                      if (!needsReset) return;
-                      
-                      // Directly set layout config to ensure it updates
-                      const newConfig = { ...DEFAULT_LAYOUT_CONFIG };
-                      setLayoutConfig(newConfig);
-                      saveLayoutConfig(newConfig);
-                      
-                      // Also reset main angle to front
-                      setSelectedAngle('front');
-                      
-                      // Seek to Front Track position if it exists, otherwise change current segment to front
-                      const frontSegment = cameraSegments.find(seg => seg.angle === 'front');
-                      if (frontSegment) {
-                        // Use pendingRestoreRef to seek to the Front Track start time
-                        pendingRestoreRef.current = { time: frontSegment.startTime, playing: isPlaying };
-                        setLocalTime(frontSegment.startTime);
-                        // Sync videos to the front segment start time
-                        syncVideos(frontSegment.startTime);
-                        console.log('[PiP Reset] Seeking to Front Track at:', frontSegment.startTime);
-                      } else {
-                        // No Front Track - find current segment, change its angle to front, and seek to its start
-                        const currentSegment = findSegmentForTime(cameraSegments, absoluteTime);
-                        if (currentSegment) {
-                          // Update current segment to use front angle
-                          const segmentIndex = cameraSegments.findIndex(
-                            seg => seg.startTime === currentSegment.startTime && seg.endTime === currentSegment.endTime
-                          );
-                          if (segmentIndex !== -1) {
-                            const newSegments = [...cameraSegments];
-                            newSegments[segmentIndex] = { ...newSegments[segmentIndex], angle: 'front' };
-                            setCameraSegments(newSegments);
-                            
-                            // Seek to the start of this segment (which is now Front)
-                            pendingRestoreRef.current = { time: currentSegment.startTime, playing: isPlaying };
-                            setLocalTime(currentSegment.startTime);
-                            syncVideos(currentSegment.startTime);
-                            console.log('[PiP Reset] Changed current segment to Front and seeking to:', currentSegment.startTime);
-                          }
-                        }
-                      }
-                      
-                      console.log('[PiP Reset] Layout reset complete');
-                    }}
-                    disabled={!needsReset}
-                    className={`p-1.5 rounded text-xs font-medium transition-all ml-1 mr-1 ${
-                      needsReset
-                        ? 'bg-gray-700 text-cyan-400 hover:bg-gray-600 hover:text-cyan-300 ring-1 ring-cyan-500/30 hover:ring-cyan-400/50'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'
-                    }`}
-                  >
-                    <IconRefresh size={14} />
-                  </button>
-                </Tooltip>
-              );
-            })()}
             {/* Custom camera track button - show to the right of config button */}
             {hasCustomCameraTrack && (
               <Tooltip content="Use custom camera track" position="top">
