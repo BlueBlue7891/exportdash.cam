@@ -1209,7 +1209,7 @@ export function VideoPlayer({
       }
       return (
         <div className={`bg-gray-900 flex items-center justify-center text-gray-600 text-xs ${className}`}>
-          {ANGLE_LABELS[angle] || angle}
+          {t.angles[angle as keyof typeof t.angles] || angle}
         </div>
       );
     }
@@ -1245,7 +1245,7 @@ export function VideoPlayer({
             isMain && layout !== 'single' && layout !== 'pip' ? 'bg-green-600/70 border border-green-400/50' : 
             isMain ? 'bg-blue-600/50' : 'bg-black/50'
           }`}>
-            {ANGLE_LABELS[angle] || angle}
+            {t.angles[angle as keyof typeof t.angles] || angle}
           </div>
         )}
       </div>
@@ -1279,7 +1279,7 @@ export function VideoPlayer({
             {renderVideo(selectedAngle, true, 'w-full h-full')}
           </div>
           <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm rounded px-2 py-1 text-xs font-medium flex items-center gap-1">
-            {ANGLE_ICONS[selectedAngle]} {ANGLE_LABELS[selectedAngle]}
+            {ANGLE_ICONS[selectedAngle]} {t.angles[selectedAngle as keyof typeof t.angles]}
           </div>
           {/* Clip indicator for multi-clip sequences */}
           {sequence.clipCount > 1 && (
@@ -1293,7 +1293,7 @@ export function VideoPlayer({
             className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md rounded-full px-4 py-1.5 text-sm font-medium flex items-center gap-2 border border-white/20 shadow-lg animate-fadeIn"
           >
             <span className="text-blue-400">{ANGLE_ICONS[selectedAngle]}</span>
-            <span className="text-white">{ANGLE_LABELS[selectedAngle]}</span>
+            <span className="text-white">{t.angles[selectedAngle as keyof typeof t.angles]}</span>
           </div>
           {renderPlayOverlay()}
         </div>
@@ -1416,7 +1416,7 @@ export function VideoPlayer({
                 >
                   {isAvailable ? renderVideo(angle, false, 'w-full', true) : (
                     <div className="bg-gray-900 w-full h-full flex items-center justify-center text-gray-600 text-xs">
-                      {ANGLE_LABELS[angle] || angle}
+                      {t.angles[angle as keyof typeof t.angles] || angle}
                     </div>
                   )}
                 </div>
@@ -1580,7 +1580,7 @@ export function VideoPlayer({
               >
                 <div className="px-2 py-0.5 rounded-md bg-green-600/50 backdrop-blur-md text-white text-[10px] font-medium flex items-center gap-1 border border-green-400/30">
                   <span>{t.player.main}</span>
-                  <span className="font-semibold">{ANGLE_LABELS[selectedAngle]}</span>
+                  <span className="font-semibold">{t.angles[selectedAngle as keyof typeof t.angles]}</span>
                 </div>
               </div>
             )}
@@ -1746,7 +1746,7 @@ export function VideoPlayer({
               const isActive = selectedAngle === angle && !useCustomCameraTrack && canSelect;
 
               return (
-                <Tooltip key={angle} content={ANGLE_LABELS[angle]} position="top">
+                <Tooltip key={angle} content={t.angles[angle as keyof typeof t.angles]} position="top">
                   <button
                     disabled={isDisabled}
                     onClick={() => {
@@ -2007,7 +2007,7 @@ export function VideoPlayer({
                 </div>
               </button>
             </Tooltip>
-            <Tooltip content={`${t.player.speedUnit}: ${speedUnit.toUpperCase()}`} position="top">
+            <Tooltip content={`${t.player.speedUnit}: ${speedUnit === 'mph' ? 'MPH' : 'km/h'}`} position="top">
               <button
                 onClick={() => setSpeedUnit(prev => prev === 'mph' ? 'kmh' : 'mph')}
                 className="px-1.5 h-[28px] flex items-center rounded transition-all bg-gray-700 text-gray-300 hover:bg-gray-600 text-[10px] font-bold leading-none"

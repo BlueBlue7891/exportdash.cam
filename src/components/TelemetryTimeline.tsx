@@ -1264,7 +1264,7 @@ export function TelemetryTimeline({
                     width: `${Math.max(width, 1)}%`,
                     backgroundColor: ANGLE_COLORS[segment.angle] || '#6B7280',
                   }}
-                  title={`${t.angles[segment.angle as keyof typeof t.angles]} • Double-click to remove`}
+                  title={`${t.angles[segment.angle as keyof typeof t.angles]} • ${t.player.doubleClickToRemove}`}
                   onDoubleClick={handleSegmentDoubleClick(idx)}
                 >
                   {width > 5 && (

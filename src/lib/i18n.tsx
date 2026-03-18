@@ -122,13 +122,14 @@ export interface Translations {
     dragBoundariesDoubleClick: string;
     previousBoundary: string;
     nextBoundary: string;
+    doubleClickToRemove: string;
     dropHere: (angle: string) => string;
     pressPlayToPreview: string;
     onlyTripleViewEnabled: string;
     notInTripleView: (angle: string) => string;
     dragToTimeline: (angle: string) => string;
   };
-  // Camera angles - 统一使用：前视，后视，左前侧，右前侧，左 B 柱，右 B 柱
+  // Camera angles - 统一使用：前视角，后视角，左前侧，右前侧，左 B 柱，右 B 柱
   angles: {
     front: string;
     back: string;
@@ -408,6 +409,7 @@ const en: Translations = {
     dragBoundariesDoubleClick: 'Drag boundaries • Double-click segment to remove',
     previousBoundary: 'Previous boundary',
     nextBoundary: 'Next boundary',
+    doubleClickToRemove: 'Double-click to remove',
     dropHere: (angle: string) => `Drop ${angle} here`,
     pressPlayToPreview: 'Press play to preview camera switches',
     onlyTripleViewEnabled: 'Only triple view angles enabled. Configure layout to change.',
@@ -619,7 +621,7 @@ const zh: Translations = {
       },
       all6Cameras: {
         title: '6 路摄像头',
-        desc: '前视、后视、左前侧、右前侧、左 B 柱、右 B 柱，灵活布局',
+        desc: '前视角、后视角、左前侧、右前侧、左 B 柱、右 B 柱，灵活布局',
       },
       interactiveMap: {
         title: '地图数据',
@@ -693,16 +695,17 @@ const zh: Translations = {
     dragBoundariesDoubleClick: '拖动边界 • 双击片段移除',
     previousBoundary: '上一个边界',
     nextBoundary: '下一个边界',
+    doubleClickToRemove: '双击移除',
     dropHere: (angle: string) => `拖放 ${angle} 到此处`,
     pressPlayToPreview: '点击播放预览摄像头切换',
     onlyTripleViewEnabled: '仅启用三视图角度。配置布局以更改。',
     notInTripleView: (angle: string) => `${angle} 不在三视图布局中。配置布局以启用。`,
     dragToTimeline: (angle: string) => `拖放 ${angle} 到时间线`,
   },
-  // 统一视角名称：前视，后视，左前侧，右前侧，左 B 柱，右 B 柱
+  // 统一视角名称：前视角，后视角，左前侧，右前侧，左 B 柱，右 B 柱
   angles: {
-    front: '前视',
-    back: '后视',
+    front: '前视角',
+    back: '后视角',
     left_repeater: '左前侧',
     right_repeater: '右前侧',
     left_pillar: '左 B 柱',
