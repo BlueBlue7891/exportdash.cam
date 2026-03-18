@@ -1,11 +1,22 @@
 'use client';
 
-import { useMemo, useRef, useCallback, useEffect, useState } from 'react';
+import { useMemo, useRef, useCallback, useEffect, useState, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
+import { IconArrowUp, IconArrowDown, IconArrowDownLeft, IconArrowDownRight, IconArrowLeft, IconArrowRight } from '@tabler/icons-react';
 import { SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { TrimPoints, CameraSegment, ANGLE_COLORS, ANGLE_LABELS, TeslaEvent } from '@/types/video';
 import { Tooltip } from './Tooltip';
+
+// Camera angle icons for track labels
+const ANGLE_ICONS: Record<string, ReactNode> = {
+  front: <IconArrowUp size={10} />,
+  back: <IconArrowDown size={10} />,
+  left_repeater: <IconArrowDownLeft size={10} />,
+  right_repeater: <IconArrowDownRight size={10} />,
+  left_pillar: <IconArrowLeft size={10} />,
+  right_pillar: <IconArrowRight size={10} />,
+};
 
 // Helper function to merge adjacent segments with the angle
 function mergeAdjacentSegments(segments: CameraSegment[]): CameraSegment[] {
@@ -1065,7 +1076,7 @@ export function TelemetryTimeline({
 
           {/* Angle palette with drag instruction */}
           <div className="flex items-center gap-2 mb-2">
-            <div className="flex items-center gap-1">
+            <div className="flex items-stretch gap-1">
               {availableAngles.map((angle) => {
                 // In triple view, always restrict to layout angles regardless of custom track state
                 const isDisabledInTriple = layout === 'triple' && !tripleViewAngles.includes(angle);
@@ -1073,7 +1084,7 @@ export function TelemetryTimeline({
                 return (
                   <div
                     key={angle}
-                    className={`px-2 py-1.5 rounded text-[10px] font-medium select-none transition-all shadow-sm ${
+                    className={`h-[24px] px-2 rounded text-[10px] font-medium select-none transition-all shadow-sm flex items-center justify-center ${
                       draggingAngle === angle
                         ? 'opacity-50 scale-95 cursor-grabbing'
                         : isDisabledInTriple
@@ -1091,7 +1102,10 @@ export function TelemetryTimeline({
                       : `Drag ${ANGLE_LABELS[angle] || angle} to timeline`
                     }
                   >
-                    {ANGLE_LABELS[angle] || angle}
+                    <span className="flex items-center gap-0.5 truncate">
+                      {ANGLE_ICONS[angle]}
+                      <span className="truncate">{ANGLE_LABELS[angle] || angle}</span>
+                    </span>
                   </div>
                 );
               })}
@@ -1205,7 +1219,8 @@ export function TelemetryTimeline({
                   onDoubleClick={handleSegmentDoubleClick(idx)}
                 >
                   {width > 8 && (
-                    <span className="text-[10px] text-white/90 font-medium truncate px-1 pointer-events-none">
+                    <span className="text-[10px] text-white/90 font-medium truncate px-1 pointer-events-none flex items-center gap-0.5">
+                      {ANGLE_ICONS[segment.angle]}
                       {ANGLE_LABELS[segment.angle] || segment.angle}
                     </span>
                   )}
@@ -1249,7 +1264,7 @@ export function TelemetryTimeline({
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
                   </svg>
-                  Drop {ANGLE_LABELS[draggingAngle] || draggingAngle} here
+                  Drop <span className="font-bold">{ANGLE_LABELS[draggingAngle] || draggingAngle}</span> here
                 </div>
               </div>
             )}
@@ -1274,7 +1289,10 @@ export function TelemetryTimeline({
             boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           }}
         >
-          {ANGLE_LABELS[draggingAngle] || draggingAngle}
+          <span className="flex items-center gap-0.5">
+            {ANGLE_ICONS[draggingAngle]}
+            {ANGLE_LABELS[draggingAngle] || draggingAngle}
+          </span>
         </div>
       )}
     </div>

@@ -125,10 +125,10 @@ export function getReasonLabel(reason: string): string {
 export const ANGLE_LABELS: Record<string, string> = {
   front: 'Front',
   back: 'Rear',
-  left_repeater: 'Left',
-  right_repeater: 'Right',
-  left_pillar: 'L Pillar',
-  right_pillar: 'R Pillar',
+  left_repeater: 'Left Repeater',
+  right_repeater: 'Right Repeater',
+  left_pillar: 'Left Pillar',
+  right_pillar: 'Right Pillar',
 };
 
 export const ANGLE_ORDER = ['front', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar', 'back'];
