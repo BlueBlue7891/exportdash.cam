@@ -1229,6 +1229,7 @@ export function VideoPlayer({
           muted={!isMain}
           preload={isMain ? "auto" : "metadata"}
           playsInline
+          crossOrigin="anonymous"
           onTimeUpdate={isMain ? handleTimeUpdate : undefined}
           onLoadedMetadata={isMain ? handleLoadedMetadata : undefined}
           onEnded={isMain ? handleVideoEnded : undefined}

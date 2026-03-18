@@ -25,30 +25,11 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; media-src 'self' asset: https://asset.localhost; img-src 'self' asset: https://asset.localhost",
+      "csp": null,
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
-      },
-      "capabilities": [{
-        "identifier": "default",
-        "description": "Default capabilities",
-        "windows": ["main"],
-        "permissions": [
-          "dialog:allow-open",
-          "dialog:default",
-          "fs:allow-read-dir",
-          "fs:allow-read-file",
-          "fs:default",
-          "shell:allow-open",
-          "core:event:allow-listen",
-          "core:event:default",
-          {
-            "identifier": "fs:scope",
-            "allow": [{ "path": "**" }]
-          }
-        ]
-      }]
+      }
     }
   },
   "bundle": {
