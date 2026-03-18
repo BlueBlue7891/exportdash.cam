@@ -320,15 +320,23 @@ export function TelemetryTimeline({
   }, [event, sequenceStartTime]);
 
   // Calculate view bounds based on trim state
-  const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
-  let viewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
+  const trimStart = trimPoints?.inPoint ?? 0;
+  const trimEnd = trimPoints?.outPoint ?? duration;
   
-  // If event marker is shown and event is after video end, extend view to show it
-  // Only in normal playback mode (not trimming), and only when marker is visible
-  if (showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime > duration) {
-    // Add 2 seconds buffer after event to ensure marker is fully visible
-    viewEnd = Math.max(viewEnd, eventAbsoluteTime + 2);
-  }
+  // Check if event marker is outside video duration (after video end)
+  const isEventAfterVideoEnd = eventAbsoluteTime !== null && eventAbsoluteTime > duration;
+  // Check if event marker is before video start
+  const isEventBeforeVideoStart = eventAbsoluteTime !== null && eventAbsoluteTime < 0;
+  // Event is outside normal video range
+  const isEventOutsideRange = isEventAfterVideoEnd || isEventBeforeVideoStart;
+  
+  // Calculate view bounds
+  // When event is outside video range and marker is visible, extend view to include it
+  // without adding extra buffer - this ensures the timeline scales to fit everything
+  const viewStart = isTrimming ? 0 : trimStart;
+  let viewEnd = isTrimming 
+    ? (isEventOutsideRange && showEventMarker ? Math.max(duration, eventAbsoluteTime!) : duration)
+    : (isEventOutsideRange && showEventMarker ? Math.max(trimEnd, eventAbsoluteTime!) : trimEnd);
   
   const viewDuration = viewEnd - viewStart;
 
@@ -719,8 +727,6 @@ export function TelemetryTimeline({
   };
 
   // Calculate trim values (viewStart/viewEnd/viewDuration already calculated above for getTimeFromEvent)
-  const trimStart = trimPoints?.inPoint ?? 0;
-  const trimEnd = trimPoints?.outPoint ?? duration;
   const trimmedDuration = trimEnd - trimStart;
   const isTrimmed = trimStart > 0 || trimEnd < duration;
 
@@ -1179,7 +1185,7 @@ export function TelemetryTimeline({
             className="relative h-10 w-full overflow-visible"
             onMouseUp={draggingAngle ? handleCameraTrackDrop : undefined}
           >
-            {/* Background with border limited to actual video duration */}
+            {/* Background with border - shows the full view range */}
             <div 
               className={`absolute top-0 bottom-0 rounded-lg transition-all ${
                 draggingAngle
@@ -1188,27 +1194,19 @@ export function TelemetryTimeline({
               }`}
               style={{ 
                 left: '0%', 
-                width: `${((Math.min(duration, viewEnd) - viewStart) / viewDuration) * 100}%` 
+                width: '100%' 
               }}
             />
-            {/* Render all camera segments - show full timeline when trimming */}
+            {/* Render all camera segments - scaled to match current view */}
             {cameraSegments.map((segment, idx) => {
-              // When trimming, show all segments across full timeline
-              // When not trimming, clip to view range
-              let left: number, width: number;
+              // All segments are rendered relative to the current view range (viewStart to viewEnd)
+              // This ensures they sync with the timeline scaling
+              const clippedStart = Math.max(segment.startTime, viewStart);
+              const clippedEnd = Math.min(segment.endTime, viewEnd);
+              if (clippedStart >= clippedEnd) return null;
               
-              if (isTrimming) {
-                // Use full timeline (0 to duration)
-                left = (segment.startTime / duration) * 100;
-                width = ((segment.endTime - segment.startTime) / duration) * 100;
-              } else {
-                // Clip to visible range
-                const clippedStart = Math.max(segment.startTime, viewStart);
-                const clippedEnd = Math.min(segment.endTime, viewEnd);
-                if (clippedStart >= clippedEnd) return null;
-                left = timeToPosition(clippedStart);
-                width = ((clippedEnd - clippedStart) / viewDuration) * 100;
-              }
+              const left = timeToPosition(clippedStart);
+              const width = ((clippedEnd - clippedStart) / viewDuration) * 100;
 
               return (
                 <div
@@ -1232,26 +1230,28 @@ export function TelemetryTimeline({
               );
             })}
 
-            {/* Dimmed overlay for out-of-trim-range areas (similar to main timeline) */}
+            {/* Dimmed overlay for out-of-trim-range areas - synced with current view */}
             {isTrimming && trimPoints && (
               <>
                 <div
                   className="absolute top-0 bottom-0 bg-black/50 z-[3] pointer-events-none rounded-l"
-                  style={{ left: 0, width: `${(trimPoints.inPoint / duration) * 100}%` }}
+                  style={{ left: 0, width: `${timeToPosition(trimPoints.inPoint)}%` }}
                 />
                 <div
                   className="absolute top-0 bottom-0 bg-black/50 z-[3] pointer-events-none rounded-r"
-                  style={{ left: `${(trimPoints.outPoint / duration) * 100}%`, width: `${((duration - trimPoints.outPoint) / duration) * 100}%` }}
+                  style={{ 
+                    left: `${timeToPosition(trimPoints.outPoint)}%`, 
+                    width: `${100 - timeToPosition(trimPoints.outPoint)}%` 
+                  }}
                 />
               </>
             )}
 
             {/* Segment boundaries - draggable */}
-            {/* Show all boundaries when trimming, only boundaries in trim range when not trimming */}
+            {/* Show boundaries within current view range */}
             {cameraSegments.slice(1).map((segment, idx) => {
-              const rangeStart = isTrimming ? 0 : trimStart;
-              const rangeEnd = isTrimming ? duration : trimEnd;
-              if (segment.startTime <= rangeStart || segment.startTime >= rangeEnd) return null;
+              // Show boundary if it's within the current view range
+              if (segment.startTime <= viewStart || segment.startTime >= viewEnd) return null;
               const position = timeToPosition(segment.startTime);
 
               return (

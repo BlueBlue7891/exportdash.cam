@@ -433,16 +433,19 @@ export function VideoPlayer({
   }, [hasGpsData, hasTelemetryData, sequence?.id, sequence?.event]);
 
   // Check if event marker is within trim range
+  // The event marker switch is disabled only when:
+  // 1. The event is truly being trimmed out (event time < inPoint or event time > outPoint)
+  // 2. In trimming mode, always allow the switch (user can see where the event is)
   const isEventMarkerInTrimRange = useMemo(() => {
     if (!sequence?.event || !sequence.startTime) return true; // No event or start time, always "in range"
     
     const eventOffsetSeconds = (sequence.event.timestamp.getTime() - sequence.startTime.getTime()) / 1000;
     
-    // Check if event is within the trim range (inPoint to outPoint)
-    // This applies to both in-video events and post-video events
+    // Get current trim points
     const inPoint = trimPoints?.inPoint ?? 0;
     const outPoint = trimPoints?.outPoint ?? sequence.totalDuration;
     
+    // Event is in range if it's within the trim points
     return eventOffsetSeconds >= inPoint && eventOffsetSeconds <= outPoint;
   }, [sequence?.event, sequence?.startTime, sequence?.totalDuration, trimPoints]);
   
