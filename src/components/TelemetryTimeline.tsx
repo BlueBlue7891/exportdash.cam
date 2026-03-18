@@ -326,7 +326,11 @@ export function TelemetryTimeline({
   
   // Calculate buffer based on event position
   let viewEnd = rawViewEnd;
-  if (eventAbsoluteTime !== null && eventAbsoluteTime > rawViewEnd) {
+  // Only extend view to show event marker if:
+  // 1. Event marker is enabled
+  // 2. Event is after the raw video end (not just after trim end)
+  // 3. We're in trimming mode OR event is within/near the visible range
+  if (showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime > duration) {
     // Event is after video end, add buffer to show event marker
     // Event marker needs about 120px width (diamond + label), convert to time
     // Estimate: 120px / timelineWidth * totalDuration = bufferTime

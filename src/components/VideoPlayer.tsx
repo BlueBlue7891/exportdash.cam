@@ -134,6 +134,7 @@ export function VideoPlayer({
   const hasAutoEnabledTelemetryRef = useRef<boolean>(false);
   const hasAutoEnabledMapRef = useRef<boolean>(false);
   const hasAutoEnabledEventMarkerRef = useRef<boolean>(false);
+  const prevEventMarkerInRangeRef = useRef<boolean>(true);
 
   // Playback state
   const [selectedAngle, setSelectedAngle] = useState<string>('front');
@@ -430,6 +431,52 @@ export function VideoPlayer({
       hasAutoEnabledTelemetryRef.current = false;
     }
   }, [hasGpsData, hasTelemetryData, sequence?.id, sequence?.event]);
+
+  // Check if event marker is within trim range
+  const isEventMarkerInTrimRange = useMemo(() => {
+    if (!sequence?.event || !sequence.startTime) return true; // No event or start time, always "in range"
+    
+    const eventOffsetSeconds = (sequence.event.timestamp.getTime() - sequence.startTime.getTime()) / 1000;
+    
+    // If no trim points, use default range [0, duration] with buffer for post-video events
+    const inPoint = trimPoints?.inPoint ?? 0;
+    const rawOutPoint = trimPoints?.outPoint ?? sequence.totalDuration;
+    
+    // Check if we're in "default" state (no actual trimming applied)
+    const isDefaultTrim = inPoint === 0 && rawOutPoint === sequence.totalDuration;
+    
+    // If in default state AND event is after video end, extend the effective out point to show it
+    // This matches TelemetryTimeline's behavior for default view
+    // When user has actually trimmed (not default), respect their trim choice strictly
+    let effectiveOutPoint = rawOutPoint;
+    if (isDefaultTrim && eventOffsetSeconds > sequence.totalDuration) {
+      // Default state, event is after video end, add buffer to accommodate it
+      const eventBuffer = eventOffsetSeconds - rawOutPoint + 1; // 1 second after event
+      effectiveOutPoint = rawOutPoint + Math.max(eventBuffer, 0.5); // At least 0.5s buffer
+    }
+    
+    return eventOffsetSeconds >= inPoint && eventOffsetSeconds <= effectiveOutPoint;
+  }, [sequence?.event, sequence?.startTime, sequence?.totalDuration, trimPoints]);
+  
+  // Track previous trimming state to detect when exiting trim mode
+  const prevIsTrimmingRef = useRef(isTrimming);
+  
+  // Handle event marker visibility when entering/exiting trim mode
+  useEffect(() => {
+    const wasTrimming = prevIsTrimmingRef.current;
+    
+    // Entering trim mode: enable event marker
+    if (!wasTrimming && isTrimming && sequence?.event) {
+      setShowEventMarker(true);
+    }
+    
+    // Exiting trim mode: check if event is outside trim range and disable if so
+    if (wasTrimming && !isTrimming && !isEventMarkerInTrimRange) {
+      setShowEventMarker(false);
+    }
+    
+    prevIsTrimmingRef.current = isTrimming;
+  }, [isTrimming, isEventMarkerInTrimRange, sequence?.event]);
 
   // Create object URLs for current moment's videos
   useEffect(() => {
@@ -1885,15 +1932,24 @@ export function VideoPlayer({
                 </div>
               )}
             </div>
-            <Tooltip content={sequence?.event ? "Event Marker" : "No event data available"} position="top">
+            <Tooltip 
+              content={
+                !sequence?.event 
+                  ? "No event data available" 
+                  : (!isTrimming && !isEventMarkerInTrimRange)
+                    ? "Event marker outside trim range" 
+                    : "Event Marker"
+              } 
+              position="top"
+            >
               <button
-                onClick={() => sequence?.event && setShowEventMarker(prev => !prev)}
+                onClick={() => sequence?.event && (isTrimming || isEventMarkerInTrimRange) && setShowEventMarker(prev => !prev)}
                 className={`p-1.5 rounded transition-all ${
-                  sequence?.event
-                    ? showEventMarker
+                  !sequence?.event || (!isTrimming && !isEventMarkerInTrimRange)
+                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    : showEventMarker
                       ? 'bg-green-600 text-white'
                       : 'bg-green-600/30 text-green-400 hover:bg-green-600/50'
-                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                 }`}
               >
                 <div className="w-4 h-4 flex items-center justify-center">
