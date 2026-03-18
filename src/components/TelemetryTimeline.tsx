@@ -794,29 +794,6 @@ export function TelemetryTimeline({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Trim button / Done button */}
-          {isEditMode && (
-            isTrimming ? (
-              <button
-                onClick={() => onTrimmingChange?.(false)}
-                className="px-3 py-1 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors"
-              >
-                Done
-              </button>
-            ) : (
-              <button
-                onClick={() => onTrimmingChange?.(true)}
-                className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                  isTrimmed
-                    ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {isTrimmed ? 'Edit Trim' : 'Trim'}
-              </button>
-            )
-          )}
-
           {/* Track legend */}
           {showEventMarker && event && (
             <div className="flex items-center gap-1">

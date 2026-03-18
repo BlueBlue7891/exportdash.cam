@@ -1746,7 +1746,9 @@ export function VideoPlayer({
                     }}
                     className={`p-1.5 rounded text-xs font-medium transition-all ${
                       isActive
-                        ? isEditMode ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
+                        ? isTrimming 
+                          ? 'bg-yellow-500 text-black'
+                          : 'bg-blue-600 text-white'
                         : isDisabled
                         ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1858,22 +1860,34 @@ export function VideoPlayer({
           {/* Divider */}
           <div className="w-px h-5 bg-gray-700" />
 
-          {/* Trim button */}
-          <Tooltip content="Trim video (E)" position="top">
+          {/* Trim button: gray (no trim), yellow (trimmed, click to edit), yellow+Done (trimming) */}
+          <Tooltip content={trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? "Edit trim (E)" : "Trim video (E)"} position="top">
             <button
               onClick={toggleTrimMode}
               className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
                 isTrimming
                   ? 'bg-yellow-500 text-black'
-                  : isEditMode
-                    ? 'bg-purple-600 text-white'
+                  : trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration)
+                    ? 'bg-yellow-500/80 text-black hover:bg-yellow-500'
                     : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
               }`}
             >
               <IconScissors size={14} />
-              <span>Trim</span>
+              <span>{trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? 'Edit Trim' : 'Trim'}</span>
             </button>
           </Tooltip>
+
+          {/* Done button - shown when trimming, positioned right next to Trim */}
+          {isTrimming && (
+            <Tooltip content="Done trimming" position="top">
+              <button
+                onClick={() => setIsTrimming(false)}
+                className="px-2 py-1 rounded text-xs font-medium transition-all bg-yellow-500 text-black hover:bg-yellow-400 flex items-center gap-1"
+              >
+                <span>Done</span>
+              </button>
+            </Tooltip>
+          )}
 
           {/* Spacer */}
           <div className="flex-1" />
