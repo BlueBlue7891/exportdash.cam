@@ -715,9 +715,14 @@ export function TelemetryTimeline({
   }
 
   // Format time as m:ss
-  const formatTimeShort = (seconds: number) => {
+  const formatTimeShort = (seconds: number, showMs: boolean = true) => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
+    const ms = Math.round((seconds % 1) * 1000);
+    
+    if (showMs) {
+      return `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    }
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
@@ -774,9 +779,15 @@ export function TelemetryTimeline({
             {isTrimming ? 'Trim Video' : 'Timeline'}
           </span>
 
-          {/* Trim info badge */}
-          {isEditMode && !isTrimming && isTrimmed && (
-            <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded font-medium">
+          {/* Trim info badge - show in edit mode, real-time update during trimming */}
+          {isEditMode && (
+            <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+              isTrimming 
+                ? 'bg-yellow-500/30 text-yellow-300 border border-yellow-500/30' 
+                : isTrimmed 
+                  ? 'bg-yellow-500/20 text-yellow-400' 
+                  : 'bg-gray-700 text-gray-400'
+            }`}>
               {formatTimeShort(trimStart)} → {formatTimeShort(trimEnd)} ({formatTimeShort(trimmedDuration)})
             </span>
           )}
@@ -1206,9 +1217,24 @@ export function TelemetryTimeline({
                 width: `${((Math.min(duration, viewEnd) - viewStart) / viewDuration) * 100}%` 
               }}
             />
-            {visibleCameraSegments.map((segment, idx) => {
-              const left = timeToPosition(segment.startTime);
-              const width = ((segment.endTime - segment.startTime) / viewDuration) * 100;
+            {/* Render all camera segments - show full timeline when trimming */}
+            {cameraSegments.map((segment, idx) => {
+              // When trimming, show all segments across full timeline
+              // When not trimming, clip to view range
+              let left: number, width: number;
+              
+              if (isTrimming) {
+                // Use full timeline (0 to duration)
+                left = (segment.startTime / duration) * 100;
+                width = ((segment.endTime - segment.startTime) / duration) * 100;
+              } else {
+                // Clip to visible range
+                const clippedStart = Math.max(segment.startTime, viewStart);
+                const clippedEnd = Math.min(segment.endTime, viewEnd);
+                if (clippedStart >= clippedEnd) return null;
+                left = timeToPosition(clippedStart);
+                width = ((clippedEnd - clippedStart) / viewDuration) * 100;
+              }
 
               return (
                 <div
@@ -1222,7 +1248,7 @@ export function TelemetryTimeline({
                   title={`${ANGLE_LABELS[segment.angle]} • Double-click to remove`}
                   onDoubleClick={handleSegmentDoubleClick(idx)}
                 >
-                  {width > 8 && (
+                  {width > 5 && (
                     <span className="text-[10px] text-white/90 font-medium truncate px-1 pointer-events-none flex items-center gap-0.5">
                       {ANGLE_ICONS[segment.angle]}
                       {ANGLE_LABELS[segment.angle] || segment.angle}
@@ -1232,9 +1258,26 @@ export function TelemetryTimeline({
               );
             })}
 
+            {/* Dimmed overlay for out-of-trim-range areas (similar to main timeline) */}
+            {isTrimming && trimPoints && (
+              <>
+                <div
+                  className="absolute top-0 bottom-0 bg-black/50 z-[3] pointer-events-none rounded-l"
+                  style={{ left: 0, width: `${(trimPoints.inPoint / duration) * 100}%` }}
+                />
+                <div
+                  className="absolute top-0 bottom-0 bg-black/50 z-[3] pointer-events-none rounded-r"
+                  style={{ left: `${(trimPoints.outPoint / duration) * 100}%`, width: `${((duration - trimPoints.outPoint) / duration) * 100}%` }}
+                />
+              </>
+            )}
+
             {/* Segment boundaries - draggable */}
+            {/* Show all boundaries when trimming, only boundaries in trim range when not trimming */}
             {cameraSegments.slice(1).map((segment, idx) => {
-              if (segment.startTime <= trimStart || segment.startTime >= trimEnd) return null;
+              const rangeStart = isTrimming ? 0 : trimStart;
+              const rangeEnd = isTrimming ? duration : trimEnd;
+              if (segment.startTime <= rangeStart || segment.startTime >= rangeEnd) return null;
               const position = timeToPosition(segment.startTime);
 
               return (
