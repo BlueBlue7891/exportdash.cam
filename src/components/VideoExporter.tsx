@@ -142,9 +142,38 @@ async function loadMapTile(x: number, y: number, zoom: number): Promise<HTMLImag
       tileCache.set(key, img);
       resolve(img);
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => {
+      console.warn(`Failed to load map tile: ${key}`);
+      resolve(null);
+    };
     img.src = `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
   });
+}
+
+// Pre-load map tiles for a GPS position and its surrounding tiles
+async function preloadMapTilesForPosition(
+  lat: number, 
+  lng: number, 
+  zoom: number,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<void> {
+  const tile = latLngToTile(lat, lng, zoom);
+  const tilesToLoad: Array<{ x: number; y: number; z: number }> = [];
+  
+  // Collect all tiles in 3x3 grid around center
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      tilesToLoad.push({ x: tile.x + dx, y: tile.y + dy, z: zoom });
+    }
+  }
+  
+  // Load all tiles
+  let loaded = 0;
+  for (const { x, y, z } of tilesToLoad) {
+    await loadMapTile(x, y, z);
+    loaded++;
+    onProgress?.(loaded, tilesToLoad.length);
+  }
 }
 
 export function VideoExporter({
@@ -578,7 +607,7 @@ export function VideoExporter({
   };
 
   // Draw mini map with actual map tiles
-  const drawMiniMap = (
+  const drawMiniMap = async (
     ctx: CanvasRenderingContext2D,
     seiData: SeiData | null,
     width: number,
@@ -614,21 +643,38 @@ export function VideoExporter({
     ctx.roundRect(x, y, mapSize, mapSize, 8 * scale);
     ctx.clip();
 
-    // Draw tiles from cache (3x3 grid around center) - synchronous, skip if not cached
+    // Draw tiles from cache or load on-demand (3x3 grid around center)
     const tileSize = 256;
     const centerX = x + mapSize / 2;
     const centerY = y + mapSize / 2;
+    const tilePromises: Promise<void>[] = [];
 
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
+        const tileX = centerX - offset.px + dx * tileSize;
+        const tileY = centerY - offset.py + dy * tileSize;
         const key = `${zoom}/${tile.x + dx}/${tile.y + dy}`;
-        const tileImg = tileCache.get(key);
-        if (tileImg) {
-          const tileX = centerX - offset.px + dx * tileSize;
-          const tileY = centerY - offset.py + dy * tileSize;
-          ctx.drawImage(tileImg, tileX, tileY, tileSize, tileSize);
+        
+        // Try to get from cache first
+        const cachedTile = tileCache.get(key);
+        if (cachedTile) {
+          ctx.drawImage(cachedTile, tileX, tileY, tileSize, tileSize);
+        } else {
+          // Load tile asynchronously and draw when ready
+          const loadAndDraw = async () => {
+            const tileImg = await loadMapTile(tile.x + dx, tile.y + dy, zoom);
+            if (tileImg) {
+              ctx.drawImage(tileImg, tileX, tileY, tileSize, tileSize);
+            }
+          };
+          tilePromises.push(loadAndDraw());
         }
       }
+    }
+
+    // Wait for all tiles to load and draw
+    if (tilePromises.length > 0) {
+      await Promise.all(tilePromises);
     }
 
     ctx.restore();
@@ -1697,7 +1743,7 @@ export function VideoExporter({
           drawTelemetry(ctx, seiData, width, height, telemetryIcons, absoluteTime, isSingleOrPip);
         }
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {
-          drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
+          await drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right');
         }
 
         // Frame timestamp is relative to export start (0-based for exported video)
