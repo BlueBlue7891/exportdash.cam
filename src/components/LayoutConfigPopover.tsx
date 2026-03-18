@@ -25,15 +25,18 @@ const PIP_LABELS: Record<string, string> = {
 // Position-specific allowed options for PiP layout
 // corners: [bottom-left, bottom-center, bottom-right, top-left, top-right]
 const PIP_POSITION_OPTIONS: string[][] = [
-  ['left_pillar', 'none', 'map'],      // 0: bottom-left (L Pillar)
-  ['front', 'back', 'none', 'map'],    // 1: bottom-center (Front/Rear)
-  ['right_pillar', 'none', 'map'],     // 2: bottom-right (R Pillar)
-  ['left_repeater', 'none', 'map'],    // 3: top-left (Left)
-  ['right_repeater', 'none', 'map'],   // 4: top-right (Right)
+  ['left_pillar', 'front', 'back', 'none', 'map'],      // 0: bottom-left
+  ['front', 'back', 'none', 'map'],                     // 1: bottom-center
+  ['right_pillar', 'front', 'back', 'none', 'map'],     // 2: bottom-right
+  ['left_repeater', 'front', 'back', 'none', 'map'],    // 3: top-left
+  ['right_repeater', 'front', 'back', 'none', 'map'],   // 4: top-right
 ];
 
 // Default values for each position when clearing
 const PIP_POSITION_DEFAULTS = ['left_pillar', 'back', 'right_pillar', 'left_repeater', 'right_repeater'];
+
+// Special values that should be unique across corners (like map, front, back)
+const PIP_UNIQUE_VALUES = ['map', 'front', 'back'];
 
 function CameraSelect({
   value,
@@ -102,18 +105,26 @@ export function LayoutConfigPopover({
 
       const c = [...corners] as [string, string, string, string, string];
       
-      // Handle map uniqueness: if setting new map, clear previous map
-      // Map is a special display element that can only appear once
-      if (newAngle === 'map') {
-        const existingMapIndex = c.findIndex((angle, i) => i !== index && angle === 'map');
-        if (existingMapIndex !== -1) {
-          // Restore previous map position to its default value
-          c[existingMapIndex] = PIP_POSITION_DEFAULTS[existingMapIndex];
+      // Handle unique values (map, front, back): if setting a unique value, clear previous occurrence
+      // These are special display elements that can only appear once across all corners
+      if (PIP_UNIQUE_VALUES.includes(newAngle)) {
+        const existingIndex = c.findIndex((angle, i) => i !== index && angle === newAngle);
+        if (existingIndex !== -1) {
+          // Restore previous position to its default value
+          const defaultValue = PIP_POSITION_DEFAULTS[existingIndex];
+          // If the default is also a unique value (e.g., index 1 defaults to 'back'),
+          // set to 'none' instead to avoid duplicates
+          if (PIP_UNIQUE_VALUES.includes(defaultValue)) {
+            c[existingIndex] = 'none';
+          } else {
+            c[existingIndex] = defaultValue;
+          }
         }
       }
       
-      // Note: Camera angles can appear in multiple corners (including same as main view)
-      // No uniqueness check for camera angles - they can repeat
+      // Note: Other camera angles (left_repeater, right_repeater, left_pillar, right_pillar) 
+      // can appear in multiple corners (including same as main view)
+      // No uniqueness check for these angles - they can repeat
       
       c[index] = newAngle;
       onChange({ ...config, pip: { corners: c } });

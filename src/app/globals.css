@@ -145,6 +145,26 @@ input[type="range"]::-webkit-slider-thumb:hover {
   animation: pipFlash 600ms ease-out forwards;
 }
 
+/* PiP corner breathing glow animation - when corner matches main view */
+@keyframes pipGlow {
+  0% {
+    box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.4);
+    border-color: rgba(34, 197, 94, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 15px 3px rgba(34, 197, 94, 0.7);
+    border-color: rgba(34, 197, 94, 1);
+  }
+  100% {
+    box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.4);
+    border-color: rgba(34, 197, 94, 0.6);
+  }
+}
+
+.animate-pipGlow {
+  animation: pipGlow 2s ease-in-out infinite;
+}
+
 /* Fade in animation for single view angle label */
 @keyframes fadeIn {
   0% {

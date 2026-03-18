@@ -1275,16 +1275,17 @@ export function VideoPlayer({
               const cornerKey = `${idx}-${value}`;
               const shouldFlash = pipSwitchAnim.active && pipSwitchAnim.flashCorners.includes(cornerKey);
               
-              // Note: Main view can also appear in corners - no hiding logic
-              // This allows the same angle to be displayed in both main view and corner
+              // Check if this corner matches the main view angle
+              // If so, show green breathing glow effect
+              const isMatchingMainView = value === selectedAngle;
               
               return (
                 <div
                   key={`pip-corner-${idx}-${value}`}
                   ref={el => { cornerVideoRefs.current[idx] = el; }}
-                  className={`${pos} w-[18%] rounded-lg overflow-hidden border border-white/20 shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 ${
+                  className={`${pos} w-[18%] rounded-lg overflow-hidden shadow-lg cursor-pointer hover:ring-2 hover:ring-white/50 border ${
                     shouldFlash ? 'animate-pipFlash' : ''
-                  } opacity-100`}
+                  } ${isMatchingMainView ? 'animate-pipGlow border-green-500/60' : 'border-white/20'}`}
                   style={{ 
                     transition: 'opacity 150ms ease-out',
                     zIndex: 10 
