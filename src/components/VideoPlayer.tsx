@@ -1265,7 +1265,7 @@ export function VideoPlayer({
         'absolute top-3 right-3',                          // 4: top-right
       ];
 
-      // Handle PiP corner click - change main view and update current track segment
+      // Handle PiP corner click - swap with main view (Front/Rear only) and update track
       const handlePipCornerClick = (displayedAngle: string, actualAngle: string, idx: number) => {
         if (displayedAngle === 'map' || displayedAngle === 'none') return;
         
@@ -1281,12 +1281,29 @@ export function VideoPlayer({
         
         pendingRestoreRef.current = { time: localTime, playing: isPlaying };
         
-        // Use the actual angle (from layout config) for track update, not the displayed angle
-        // This ensures the track reflects what the user configured
-        const targetAngle = actualAngle;
+        // Use the DISPLAYED angle as the target (what user sees and wants to switch to)
+        const targetAngle = displayedAngle;
+        
+        // Determine whether to swap in layout
+        // If both current main angle and clicked (displayed) angle are Front/Rear, swap them
+        const FRONT_REAR_ANGLES = ['front', 'back'];
+        const isFrontRearSwap = FRONT_REAR_ANGLES.includes(selectedAngle) && 
+                                FRONT_REAR_ANGLES.includes(targetAngle) &&
+                                selectedAngle !== targetAngle;
+        
+        if (isFrontRearSwap) {
+          // Swap: the clicked corner gets current main angle
+          const newCorners = [...corners] as [string, string, string, string, string];
+          newCorners[idx] = selectedAngle;
+          
+          // Update layout config with swapped corners
+          const newConfig = { ...layoutConfig, pip: { corners: newCorners } };
+          setLayoutConfig(newConfig);
+          saveLayoutConfig(newConfig);
+        }
         
         // Update the current segment's angle to the target angle
-        // This replaces the current track with the clicked angle
+        // This replaces the current track
         if (cameraSegments.length > 0) {
           const currentSegment = findSegmentForTime(cameraSegments, absoluteTime);
           const currentSegmentIndex = currentSegment ? cameraSegments.findIndex(seg => seg === currentSegment) : -1;
