@@ -26,6 +26,7 @@ interface VideoExporterProps {
   showMap?: boolean;
   layout?: LayoutType;
   layoutConfig?: LayoutCameraConfig;
+  mapSize?: number;
 }
 
 // Map tile cache
@@ -191,6 +192,7 @@ export function VideoExporter({
   showMap = true,
   layout = 'single',
   layoutConfig = DEFAULT_LAYOUT_CONFIG,
+  mapSize: mapSizeProp = 160,
 }: VideoExporterProps) {
   const { t, language } = useLanguage();
   const [isExporting, setIsExporting] = useState(false);
@@ -626,7 +628,7 @@ export function VideoExporter({
     if (seiData.latitude_deg === 0 && seiData.longitude_deg === 0) return;
 
     const scale = Math.min(width / 1280, height / 720);
-    const mapSize = typeof position === 'object' ? position.size : 160 * scale;
+    const mapSize = typeof position === 'object' ? position.size : mapSizeProp * scale;
     const padding = 12 * scale;
     const x = typeof position === 'object' ? position.x : width - mapSize - padding;
     const y = typeof position === 'object' ? position.y : position === 'top-right' ? padding : height - mapSize - padding;

@@ -2081,6 +2081,7 @@ export function VideoPlayer({
               showMap={showMap}
               layout={layout}
               layoutConfig={layoutConfig}
+              mapSize={mapSize}
             />
           </div>
         </div>
