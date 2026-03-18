@@ -1860,24 +1860,24 @@ export function VideoPlayer({
           {/* Divider */}
           <div className="w-px h-5 bg-gray-700" />
 
-          {/* Trim button: gray (no trim), yellow (trimmed, click to edit), yellow+Done (trimming) */}
-          <Tooltip content={trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? "Edit trim (E)" : "Trim video (E)"} position="top">
-            <button
-              onClick={toggleTrimMode}
-              className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
-                isTrimming
-                  ? 'bg-yellow-500 text-black'
-                  : trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration)
+          {/* Trim button - for entering trim mode */}
+          {!isTrimming && (
+            <Tooltip content={trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? "Edit trim (E)" : "Trim video (E)"} position="top">
+              <button
+                onClick={toggleTrimMode}
+                className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
+                  trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration)
                     ? 'bg-yellow-500/80 text-black hover:bg-yellow-500'
                     : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-              }`}
-            >
-              <IconScissors size={14} />
-              <span>{trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? 'Edit Trim' : 'Trim'}</span>
-            </button>
-          </Tooltip>
+                }`}
+              >
+                <IconScissors size={14} />
+                <span>{trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? 'Edit Trim' : 'Trim'}</span>
+              </button>
+            </Tooltip>
+          )}
 
-          {/* Done button - shown when trimming, positioned right next to Trim */}
+          {/* Done button - for exiting trim mode */}
           {isTrimming && (
             <Tooltip content="Done trimming" position="top">
               <button
