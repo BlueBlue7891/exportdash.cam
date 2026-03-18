@@ -7,6 +7,7 @@ import { IconArrowUp, IconArrowDown, IconArrowDownLeft, IconArrowDownRight, Icon
 import { SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { TrimPoints, CameraSegment, ANGLE_COLORS, ANGLE_LABELS, TeslaEvent } from '@/types/video';
 import { Tooltip } from './Tooltip';
+import { useLanguage, Translations } from '@/lib/i18n';
 
 // Camera angle icons for track labels
 const ANGLE_ICONS: Record<string, ReactNode> = {
@@ -34,6 +35,49 @@ function mergeAdjacentSegments(segments: CameraSegment[]): CameraSegment[] {
   return merged;
 }
 
+// Helper function to get translated event reason
+function getTranslatedReason(reason: string, t: Translations): string {
+  // Map snake_case reasons to translation keys
+  const reasonMap: Record<string, string> = {
+    'user_interaction_dashcam_multifunction_selected': t.eventReasons.userInteractionDashcamMultifunctionSelected,
+    'user_interaction_dashcam_icon_tapped': t.eventReasons.userInteractionDashcamIconTapped,
+    'user_interaction_dashcam_launcher_action_tapped': t.eventReasons.userInteractionDashcamLauncherActionTapped,
+    'user_interaction_honk': t.eventReasons.userInteractionHonk,
+    'sentry_aware_object_detection': t.eventReasons.sentryAwareObjectDetection,
+    'sentry_aware_accel': t.eventReasons.sentryAwareAccel,
+    'sentry_aware_intrusion': t.eventReasons.sentryAwareIntrusion,
+    'sentry_aware_proximity': t.eventReasons.sentryAwareProximity,
+    'sentry_ion': t.eventReasons.sentryIon,
+    'sentry_ioff': t.eventReasons.sentryIoff,
+    'dashcam_clip_request': t.eventReasons.dashcamClipRequest,
+    'emergency_braking': t.eventReasons.emergencyBraking,
+    'forward_collision_warning': t.eventReasons.forwardCollisionWarning,
+    'auto_emergency_braking': t.eventReasons.autoEmergencyBraking,
+    'ap_forward_collision': t.eventReasons.apForwardCollision,
+  };
+
+  // Check exact match first
+  if (reasonMap[reason]) {
+    return reasonMap[reason];
+  }
+
+  // Handle sentry_panic_accel_* pattern
+  const panicAccelMatch = reason.match(/^sentry_panic_accel_([\d.]+)$/);
+  if (panicAccelMatch) {
+    const gForce = parseFloat(panicAccelMatch[1]);
+    return t.eventReasons.sentryPanicAccel(gForce);
+  }
+
+  // Handle sentry_panic_* patterns
+  if (reason.startsWith('sentry_panic_')) {
+    const panicType = reason.replace('sentry_panic_', '');
+    return t.eventReasons.sentryPanic(panicType);
+  }
+
+  // Fallback: format the reason string
+  return reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // Event Tooltip Component with fixed positioning to avoid clipping
 interface EventTooltipProps {
   event: TeslaEvent;
@@ -41,6 +85,7 @@ interface EventTooltipProps {
 }
 
 function EventTooltip({ event, markerRect }: EventTooltipProps) {
+  const { t } = useLanguage();
   const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +142,9 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
     right: Math.min(Math.max(arrowX, arrowPadding), tooltipWidth - arrowPadding),
   };
 
+  // Get translated reason
+  const translatedReason = getTranslatedReason(event.reason, t);
+
   return createPortal(
     <div 
       className="fixed pointer-events-none z-[9999]"
@@ -106,7 +154,7 @@ function EventTooltip({ event, markerRect }: EventTooltipProps) {
         ref={contentRef}
         className="bg-gray-900/30 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
       >
-        <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
+        <div className="font-semibold text-orange-400">{translatedReason}</div>
         {(event.city || event.street) && (
           <div className="text-gray-400 mt-0.5">
             {[event.street, event.city].filter(Boolean).join(', ')}
@@ -195,6 +243,7 @@ export function TelemetryTimeline({
   tripleViewAngles = [],
   hasCustomCameraTrack = false,
 }: TelemetryTimelineProps) {
+  const { t } = useLanguage();
   // Process telemetry data into timeline tracks
   const tracks = useMemo((): TrackData[] => {
     if (allSeiMessages.length === 0 || fps <= 0) return [];
@@ -266,7 +315,7 @@ export function TelemetryTimeline({
     return [
       {
         id: 'gas',
-        label: 'Gas',
+        label: t.telemetry.gas,
         color: '#22c55e', // green
         segments: buildIntensitySegments((msg) => {
           const val = msg.sei.accelerator_pedal_position || 0;
@@ -275,25 +324,25 @@ export function TelemetryTimeline({
       },
       {
         id: 'brake',
-        label: 'Brake',
+        label: t.telemetry.brake,
         color: '#ef4444', // red
         segments: buildBooleanSegments((msg) => msg.sei.brake_applied === true),
       },
       {
         id: 'left-blinker',
-        label: 'Left',
+        label: t.telemetry.left,
         color: '#f59e0b', // amber
         segments: buildBooleanSegments((msg) => msg.sei.blinker_on_left === true),
       },
       {
         id: 'right-blinker',
-        label: 'Right',
+        label: t.telemetry.right,
         color: '#f59e0b', // amber
         segments: buildBooleanSegments((msg) => msg.sei.blinker_on_right === true),
       },
       {
         id: 'steering',
-        label: 'Steer',
+        label: t.telemetry.steer,
         color: '#3b82f6', // blue
         segments: buildIntensitySegments((msg) => {
           const angle = Math.abs(msg.sei.steering_wheel_angle || 0);
@@ -775,7 +824,7 @@ export function TelemetryTimeline({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-400 font-medium">
-            {isTrimming ? 'Trim Video' : 'Timeline'}
+            {isTrimming ? t.player.trimVideo : t.player.timeline}
           </span>
 
           {/* Trim info badge - only show when trimming or when video is trimmed */}
@@ -795,7 +844,7 @@ export function TelemetryTimeline({
           {showEventMarker && event && (
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rotate-45 bg-orange-500" />
-              <span className="text-[10px] text-orange-400 font-medium">{event.reasonLabel}</span>
+              <span className="text-[10px] text-orange-400 font-medium">{getTranslatedReason(event.reason, t)}</span>
             </div>
           )}
           {tracks.map((track) => (
@@ -810,7 +859,7 @@ export function TelemetryTimeline({
       {/* Trim mode instructions */}
       {isTrimming && (
         <div className="text-[10px] text-yellow-400">
-          Drag the yellow handles to set start and end points, then click Done
+          {t.player.dragHandlesToTrim}
         </div>
       )}
 
@@ -1061,9 +1110,9 @@ export function TelemetryTimeline({
       {cameraSegments.length > 0 && (
         <div className="border-t border-gray-700 pt-3 mt-1">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-purple-400 font-medium">Camera Track</span>
+            <span className="text-xs text-purple-400 font-medium">{t.player.cameraTrack}</span>
             <span className="text-[10px] text-gray-500">
-              {cameraSegments.length > 1 ? 'Drag boundaries • Double-click segment to remove' : ''}
+              {cameraSegments.length > 1 ? t.player.dragBoundariesDoubleClick : ''}
             </span>
           </div>
 
@@ -1091,13 +1140,13 @@ export function TelemetryTimeline({
                     }}
                     onMouseDown={(e) => !isDisabledInTriple && handleAngleDragStart(angle, e)}
                     title={isDisabledInTriple 
-                      ? `${ANGLE_LABELS[angle] || angle} is not in triple view layout. Configure layout to enable.`
-                      : `Drag ${ANGLE_LABELS[angle] || angle} to timeline`
+                      ? t.player.notInTripleView(t.angles[angle as keyof typeof t.angles] || angle)
+                      : t.player.dragToTimeline(t.angles[angle as keyof typeof t.angles] || angle)
                     }
                   >
                     <span className="flex items-center gap-0.5 truncate">
                       {ANGLE_ICONS[angle]}
-                      <span className="truncate">{ANGLE_LABELS[angle] || angle}</span>
+                      <span className="truncate">{t.angles[angle as keyof typeof t.angles] || angle}</span>
                     </span>
                   </div>
                 );
@@ -1110,7 +1159,7 @@ export function TelemetryTimeline({
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <span>Only triple view angles enabled. Configure layout to change.</span>
+                <span>{t.player.onlyTripleViewEnabled}</span>
               </div>
             )}
             
@@ -1120,7 +1169,7 @@ export function TelemetryTimeline({
                 <svg className="w-4 h-4 text-purple-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-5 5m0 0l-5-5m5 5V6" />
                 </svg>
-                <span>drag to track</span>
+                <span>{t.player.dragToTrack}</span>
               </div>
             )}
             
@@ -1144,7 +1193,7 @@ export function TelemetryTimeline({
                   }}
                   disabled={currentTime <= cameraSegments[0].startTime + 0.1}
                   className="p-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Previous boundary"
+                  title={t.player.previousBoundary}
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1167,7 +1216,7 @@ export function TelemetryTimeline({
                   }}
                   disabled={currentTime >= cameraSegments[cameraSegments.length - 1].endTime - 0.1}
                   className="p-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Next boundary"
+                  title={t.player.nextBoundary}
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1215,13 +1264,13 @@ export function TelemetryTimeline({
                     width: `${Math.max(width, 1)}%`,
                     backgroundColor: ANGLE_COLORS[segment.angle] || '#6B7280',
                   }}
-                  title={`${ANGLE_LABELS[segment.angle]} • Double-click to remove`}
+                  title={`${t.angles[segment.angle as keyof typeof t.angles]} • Double-click to remove`}
                   onDoubleClick={handleSegmentDoubleClick(idx)}
                 >
                   {width > 5 && (
                     <span className="text-[10px] text-white/90 font-medium truncate px-1 pointer-events-none flex items-center gap-0.5">
                       {ANGLE_ICONS[segment.angle]}
-                      {ANGLE_LABELS[segment.angle] || segment.angle}
+                      {t.angles[segment.angle as keyof typeof t.angles] || segment.angle}
                     </span>
                   )}
                 </div>
@@ -1283,7 +1332,7 @@ export function TelemetryTimeline({
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
                   </svg>
-                  Drop <span className="font-bold">{ANGLE_LABELS[draggingAngle] || draggingAngle}</span> here
+                  {t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}
                 </div>
               </div>
             )}
@@ -1291,7 +1340,7 @@ export function TelemetryTimeline({
 
           {/* Playback hint */}
           <div className="text-[10px] text-gray-500 mt-1.5">
-            Press play to preview camera switches
+            {t.player.pressPlayToPreview}
           </div>
         </div>
       )}
@@ -1310,7 +1359,7 @@ export function TelemetryTimeline({
         >
           <span className="flex items-center gap-0.5">
             {ANGLE_ICONS[draggingAngle]}
-            {ANGLE_LABELS[draggingAngle] || draggingAngle}
+            {t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle}
           </span>
         </div>
       )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState, useEffect, useRef } from 'react';
+import { useLanguage } from '@/lib/i18n';
 
 interface DropZoneProps {
   onFilesAdded: (files: File[]) => void;
@@ -13,6 +14,7 @@ const isTauri = () => typeof window !== 'undefined' &&
   (('__TAURI__' in window) || (window as any).__TAURI_INTERNALS__);
 
 export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZoneProps) {
+  const { t } = useLanguage();
   const [isDragging, setIsDragging] = useState(false);
   const isTauriSetupRef = useRef(false);
   const [hasTauri, setHasTauri] = useState(false);
@@ -344,7 +346,7 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
     >
       {hasVideos ? (
         <label className="cursor-pointer text-gray-400 hover:text-gray-300">
-          <span className="text-sm">Drop more videos or click to add</span>
+          <span className="text-sm">{t.home.dropHint}</span>
           <input
             type="file"
             accept="video/mp4,application/json"
@@ -361,16 +363,16 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
             </svg>
           </div>
           <div className="text-center">
-            <p className="text-xl font-medium text-gray-200">Import TeslaCam Recordings</p>
+            <p className="text-xl font-medium text-gray-200">{t.home.importTitle}</p>
             <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-              <span className="text-gray-400">Quick Load</span> — drop clips or a folder to import instantly<br />
-              <span className="text-gray-400">Select Clips</span> — click <span className="text-gray-300 font-medium">Browse Files</span> to pick multiple clips<br />
-              <span className="text-gray-400">Browse by Date</span> — click <span className="text-gray-300 font-medium">Open Folder(s)</span> to explore via <span className="text-gray-300 font-medium">calendar</span>
+              <span className="text-gray-400">{t.home.quickLoad}</span> — {t.home.importDesc}<br />
+              <span className="text-gray-400">{t.home.selectClips}</span> — <span className="text-gray-300 font-medium">{t.home.browseFiles}</span><br />
+              <span className="text-gray-400">{t.home.browseByDate}</span> — <span className="text-gray-300 font-medium">{t.home.openFolders}</span>
             </p>
           </div>
           <div className="flex items-center gap-3 mt-4">
             <label className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg cursor-pointer transition-colors border border-gray-600">
-              <span>Browse Files</span>
+              <span>{t.home.browseFiles}</span>
               <input type="file" accept="video/mp4,application/json" multiple onChange={handleFileInput} className="hidden" />
             </label>
             {hasTauri ? (
@@ -378,11 +380,11 @@ export function DropZone({ onFilesAdded, hasVideos, onScanProgress }: DropZonePr
                 onClick={handleOpenFoldersTauri}
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors"
               >
-                Open Folder(s)
+                {t.home.openFolders}
               </button>
             ) : (
               <label className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors">
-                <span>Open Folder(s)</span>
+                <span>{t.home.openFolders}</span>
                 <input type="file" {...{ webkitdirectory: 'true', directory: 'true' } as any} onChange={handleFileInput} className="hidden" />
               </label>
             )}

@@ -7,6 +7,7 @@ import { SeiData, SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { Output, Mp4OutputFormat, BufferTarget, VideoSampleSource, VideoSample } from 'mediabunny';
 import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, ANGLE_LABELS } from '@/types/video';
 import { Tooltip } from './Tooltip';
+import { useLanguage } from '@/lib/i18n';
 
 type LayoutType = 'single' | 'pip' | 'triple' | 'all';
 
@@ -161,6 +162,7 @@ export function VideoExporter({
   layout = 'single',
   layoutConfig = DEFAULT_LAYOUT_CONFIG,
 }: VideoExporterProps) {
+  const { t } = useLanguage();
   const [isExporting, setIsExporting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -668,12 +670,12 @@ export function VideoExporter({
 
   const startExport = useCallback(async () => {
     if (!sequence || sequence.moments.length === 0) {
-      alert('No video sequence to export');
+      alert(t.exporter.noVideo);
       return;
     }
 
     if (typeof VideoEncoder === 'undefined') {
-      alert('Your browser does not support video encoding. Please use Chrome or Edge.');
+      alert(t.exporter.noSupport);
       return;
     }
 
@@ -852,13 +854,13 @@ export function VideoExporter({
       canvas.height = height;
       const ctx = canvas.getContext('2d')!;
 
-      setStatus('Loading telemetry icons...');
+      setStatus(t.exporter.loadingIcons);
       const telemetryIcons = await loadTelemetryIcons();
       
-      setStatus('Loading angle icons...');
+      setStatus(t.exporter.loadingIcons);
       const angleIcons = await loadAngleIcons();
 
-      setStatus('Pre-loading map tiles...');
+      setStatus(t.exporter.loadingTiles);
 
       // Pre-load map tiles for all unique positions within export range
       const uniqueTiles = new Set<string>();
@@ -882,11 +884,11 @@ export function VideoExporter({
         const [z, x, y] = tileArray[i].split('/').map(Number);
         await loadMapTile(x, y, z);
         if (i % 10 === 0) {
-          setStatus(`Pre-loading map tiles... ${Math.round((i / tileArray.length) * 100)}%`);
+          setStatus(`${t.exporter.loadingTiles} ${Math.round((i / tileArray.length) * 100)}%`);
         }
       }
 
-      setStatus('Initializing encoder...');
+      setStatus(t.exporter.initEncoder);
 
       const output = new Output({
         format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
@@ -962,7 +964,7 @@ export function VideoExporter({
         const { clipIdx, localTime } = clipInfo;
         const moment = sequence.moments[clipIdx];
 
-        setStatus(`Processing: ${formatDuration(absoluteTime - exportStart)} / ${formatDuration(exportDuration)}`);
+        setStatus(`${t.exporter.processing}: ${formatDuration(absoluteTime - exportStart)} / ${formatDuration(exportDuration)}`);
 
         if (layout === 'triple') {
           // Load and seek all 3 angles
@@ -1725,7 +1727,7 @@ export function VideoExporter({
         return;
       }
 
-      setStatus('Finalizing...');
+      setStatus(`${t.exporter.processing}...`);
 
       await output.finalize();
 
@@ -1738,13 +1740,13 @@ export function VideoExporter({
 
       setExportUrl(url);
       setProgress(100);
-      setStatus('Export complete!');
+      setStatus(t.exporter.complete);
       setIsComplete(true);
       // Keep isExporting true to show the dialog with download button
 
     } catch (err) {
       console.error('Export error:', err);
-      setStatus(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setStatus(`${t.exporter.error}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setIsExporting(false);
     } finally {
       // Cleanup - only revoke if it's an object URL (not Tauri asset URL)
@@ -1785,14 +1787,14 @@ export function VideoExporter({
 
   return (
     <>
-      <Tooltip content="Export to MP4" position="top">
+      <Tooltip content={t.exporter.exportToMP4} position="top">
         <button
           onClick={startExport}
           disabled={isExporting}
           className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md"
         >
           <IconDownload size={14} />
-          <span>Export</span>
+          <span>{t.exporter.export}</span>
         </button>
       </Tooltip>
 
@@ -1812,7 +1814,7 @@ export function VideoExporter({
               </div>
 
               <h3 className="text-xl font-semibold text-white mb-2">
-                {isComplete ? 'Export Complete!' : 'Exporting Video'}
+                {isComplete ? `${t.exporter.complete}!` : t.exporter.exporting}
               </h3>
               <p className="text-gray-400 mb-6">{status}</p>
 
@@ -1838,13 +1840,13 @@ export function VideoExporter({
                       className="flex items-center gap-2 justify-center w-full px-6 py-3 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-all"
                     >
                       <IconDownload size={18} />
-                      Download MP4
+                      {t.exporter.download} MP4
                     </button>
                     <button
                       onClick={closeDialog}
                       className="px-6 py-2.5 rounded-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-all"
                     >
-                      Close
+                      {t.common.close}
                     </button>
                   </>
                 ) : (
@@ -1853,7 +1855,7 @@ export function VideoExporter({
                     className="flex items-center gap-2 mx-auto px-6 py-2.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500 transition-all"
                   >
                     <IconPlayerStop size={18} />
-                    Cancel Export
+                    {t.exporter.cancel} {t.exporter.export}
                   </button>
                 )}
               </div>

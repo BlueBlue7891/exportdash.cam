@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { SeiData } from '@/lib/dashcam-mp4';
 import Image from 'next/image';
+import { useLanguage } from '@/lib/i18n';
 
 interface TelemetryCardProps {
   seiData: SeiData | null;
@@ -12,13 +13,6 @@ interface TelemetryCardProps {
   onSpeedUnitToggle: () => void;
 }
 
-const AUTOPILOT_LABELS: Record<number, string> = {
-  0: 'OFF',
-  1: 'Self Driving',
-  2: 'Autosteer',
-  3: 'TACC',
-};
-
 export function TelemetryCard({
   seiData,
   isLoading,
@@ -26,6 +20,8 @@ export function TelemetryCard({
   speedUnit,
   onSpeedUnitToggle,
 }: TelemetryCardProps) {
+  const { t } = useLanguage();
+
   const displaySpeed = useMemo(() => {
     if (!seiData?.vehicle_speed_mps) return 0;
     return speedUnit === 'mph'
@@ -42,7 +38,14 @@ export function TelemetryCard({
   // Clamp accelerator to 0-100% (value might already be 0-100 or 0-1)
   const rawAccel = seiData?.accelerator_pedal_position || 0;
   const acceleratorPosition = Math.min(100, rawAccel > 1 ? rawAccel : rawAccel * 100);
-  const autopilotLabel = AUTOPILOT_LABELS[seiData?.autopilot_state ?? 0] || 'OFF';
+  
+  const autopilotLabels: Record<number, string> = {
+    0: 'OFF',
+    1: t.telemetry.selfDriving,
+    2: t.telemetry.autosteer,
+    3: t.telemetry.tacc,
+  };
+  const autopilotLabel = autopilotLabels[seiData?.autopilot_state ?? 0] || 'OFF';
   const isAutopilotActive = (seiData?.autopilot_state ?? 0) > 0;
 
   if (isLoading) {
@@ -50,7 +53,7 @@ export function TelemetryCard({
       <div className="telemetry-card">
         <div className="flex items-center justify-center py-4 text-gray-500">
           <div className="w-5 h-5 border-2 border-gray-400 border-t-white rounded-full animate-spin mr-2" />
-          Loading telemetry...
+          {t.telemetry.loading}
         </div>
       </div>
     );
@@ -67,7 +70,7 @@ export function TelemetryCard({
   if (!seiData) {
     return (
       <div className="telemetry-card">
-        <div className="text-center py-3 text-gray-500 text-sm">No telemetry data</div>
+        <div className="text-center py-3 text-gray-500 text-sm">{t.telemetry.noData}</div>
       </div>
     );
   }
@@ -79,24 +82,24 @@ export function TelemetryCard({
         <div className="telemetry-column">
           <div className="telemetry-circle telemetry-gear">{gearLetter}</div>
           <div className={`telemetry-circle telemetry-brake ${seiData.brake_applied ? 'active' : ''}`}>
-            <Image src="/left-pedal.png" alt="Brake" width={13} height={13} className="pedal-icon" />
+            <Image src="/left-pedal.png" alt={t.telemetry.brake} width={13} height={13} className="pedal-icon" />
           </div>
         </div>
 
         {/* Left Blinker */}
         <div className={`telemetry-blinker left ${seiData.blinker_on_left ? 'active' : ''}`}>
-          <Image src="/blinker.svg" alt="Left" width={16} height={16} />
+          <Image src="/blinker.svg" alt={t.telemetry.left} width={16} height={16} />
         </div>
 
         {/* Speed Display */}
         <div className="telemetry-speed" onClick={onSpeedUnitToggle}>
           <div className="speed-value">{displaySpeed}</div>
-          <div className="speed-unit">{speedUnit === 'mph' ? 'MPH' : 'km/h'}</div>
+          <div className="speed-unit">{speedUnit === 'mph' ? t.player.mph : t.player.kmh}</div>
         </div>
 
         {/* Right Blinker */}
         <div className={`telemetry-blinker right ${seiData.blinker_on_right ? 'active' : ''}`}>
-          <Image src="/blinker.svg" alt="Right" width={16} height={16} className="rotate-180" />
+          <Image src="/blinker.svg" alt={t.telemetry.right} width={16} height={16} className="rotate-180" />
         </div>
 
         {/* Column 2: Steering + Accelerator */}
@@ -104,7 +107,7 @@ export function TelemetryCard({
           <div className={`telemetry-circle telemetry-steering ${isAutopilotActive ? 'autopilot' : ''}`}>
             <Image
               src="/wheel.svg"
-              alt="Steering"
+              alt={t.telemetry.steering}
               width={16}
               height={16}
               className="wheel-icon"
@@ -113,7 +116,7 @@ export function TelemetryCard({
           </div>
           <div className="telemetry-circle telemetry-accelerator">
             <div className="accelerator-fill" style={{ height: `${acceleratorPosition}%` }} />
-            <Image src="/right-pedal.png" alt="Accelerator" width={6} height={6} className="pedal-icon overlay" />
+            <Image src="/right-pedal.png" alt={t.telemetry.accelerator} width={6} height={6} className="pedal-icon overlay" />
           </div>
         </div>
       </div>

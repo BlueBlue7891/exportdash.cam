@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useCallback } from 'react';
-import { LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, ANGLE_LABELS } from '@/types/video';
+import { LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG } from '@/types/video';
 import { IconRefresh, IconX } from '@tabler/icons-react';
+import { useLanguage } from '@/lib/i18n';
 
 type LayoutType = 'pip' | 'triple' | 'all';
 
@@ -16,11 +17,6 @@ interface LayoutConfigPopoverProps {
 const ALL_ANGLES = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
 
 const PIP_OPTIONS = ['none', ...ALL_ANGLES, 'map'];
-const PIP_LABELS: Record<string, string> = {
-  ...ANGLE_LABELS,
-  none: 'None',
-  map: 'Map',
-};
 
 // Position-specific allowed options for PiP layout
 // corners: [bottom-left, bottom-center, bottom-right, top-left, top-right]
@@ -51,8 +47,14 @@ function CameraSelect({
   options?: string[];
   labels?: Record<string, string>;
 }) {
+  const { t } = useLanguage();
   const opts = options || ALL_ANGLES;
-  const lbls = labels || ANGLE_LABELS;
+  const defaultLabels: Record<string, string> = {
+    ...t.angles,
+    none: t.layoutConfig.none,
+    map: t.layoutConfig.map,
+  };
+  const lbls = labels || defaultLabels;
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -78,6 +80,8 @@ export function LayoutConfigPopover({
   onChange,
   onClose,
 }: LayoutConfigPopoverProps) {
+  const { t } = useLanguage();
+
   // Close on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -93,6 +97,13 @@ export function LayoutConfigPopover({
   const handleReset = useCallback(() => {
     onChange({ ...DEFAULT_LAYOUT_CONFIG });
   }, [onChange]);
+
+  // Get PIP labels with translations
+  const pipLabels: Record<string, string> = {
+    ...t.angles,
+    none: t.layoutConfig.none,
+    map: t.layoutConfig.map,
+  };
 
   // PiP config — screen simulation
   // corners: [bottom-left, bottom-center, bottom-right, top-left, top-right]
@@ -148,23 +159,23 @@ export function LayoutConfigPopover({
 
     return (
       <div className="space-y-2">
-        <div className="text-[10px] text-gray-400 text-center">Corner cameras around main view</div>
+        <div className="text-[10px] text-gray-400 text-center">{t.layoutConfig.cornerCamerasAroundMain}</div>
         {/* Screen simulation */}
         <div className="relative bg-gray-900 rounded-lg border border-gray-600 aspect-video mx-auto max-w-[320px]">
           {/* Main label */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[10px] text-gray-600">Main Camera</span>
+            <span className="text-[10px] text-gray-600">{t.layoutConfig.mainCameraLabel}</span>
           </div>
           {/* Top row */}
           <div className="absolute top-1.5 left-1.5 right-1.5 flex justify-between">
-            <CameraSelect value={corners[3]} onChange={(a) => update(3, a)} label="" options={PIP_POSITION_OPTIONS[3]} labels={PIP_LABELS} />
-            <CameraSelect value={corners[4]} onChange={(a) => update(4, a)} label="" options={PIP_POSITION_OPTIONS[4]} labels={PIP_LABELS} />
+            <CameraSelect value={corners[3]} onChange={(a) => update(3, a)} label="" options={PIP_POSITION_OPTIONS[3]} labels={pipLabels} />
+            <CameraSelect value={corners[4]} onChange={(a) => update(4, a)} label="" options={PIP_POSITION_OPTIONS[4]} labels={pipLabels} />
           </div>
           {/* Bottom row */}
           <div className="absolute bottom-1.5 left-1.5 right-1.5 flex justify-between items-end">
-            <CameraSelect value={corners[0]} onChange={(a) => update(0, a)} label="" options={PIP_POSITION_OPTIONS[0]} labels={PIP_LABELS} />
-            <CameraSelect value={corners[1]} onChange={(a) => update(1, a)} label="" options={PIP_POSITION_OPTIONS[1]} labels={PIP_LABELS} />
-            <CameraSelect value={corners[2]} onChange={(a) => update(2, a)} label="" options={PIP_POSITION_OPTIONS[2]} labels={PIP_LABELS} />
+            <CameraSelect value={corners[0]} onChange={(a) => update(0, a)} label="" options={PIP_POSITION_OPTIONS[0]} labels={pipLabels} />
+            <CameraSelect value={corners[1]} onChange={(a) => update(1, a)} label="" options={PIP_POSITION_OPTIONS[1]} labels={pipLabels} />
+            <CameraSelect value={corners[2]} onChange={(a) => update(2, a)} label="" options={PIP_POSITION_OPTIONS[2]} labels={pipLabels} />
           </div>
         </div>
       </div>
@@ -197,12 +208,12 @@ export function LayoutConfigPopover({
 
     return (
       <div className="space-y-2">
-        <div className="text-[10px] text-gray-400 text-center">Three cameras side by side</div>
+        <div className="text-[10px] text-gray-400 text-center">{t.layoutConfig.threeCamerasSideBySide}</div>
         <div className="relative bg-gray-900 rounded-lg border border-gray-600 aspect-video mx-auto max-w-[320px]">
           <div className="absolute inset-0 flex items-end justify-center gap-2 p-2">
-            <CameraSelect value={cameras[0]} onChange={(a) => updateCamera(0, a)} label="Left" />
-            <CameraSelect value={cameras[1]} onChange={(a) => updateCamera(1, a)} label="Center" />
-            <CameraSelect value={cameras[2]} onChange={(a) => updateCamera(2, a)} label="Right" />
+            <CameraSelect value={cameras[0]} onChange={(a) => updateCamera(0, a)} label={t.layoutConfig.left} />
+            <CameraSelect value={cameras[1]} onChange={(a) => updateCamera(1, a)} label={t.layoutConfig.center} />
+            <CameraSelect value={cameras[2]} onChange={(a) => updateCamera(2, a)} label={t.layoutConfig.right} />
           </div>
         </div>
       </div>
@@ -263,18 +274,18 @@ export function LayoutConfigPopover({
 
     return (
       <div className="space-y-2">
-        <div className="text-[10px] text-gray-400 text-center">Two rows of three cameras</div>
+        <div className="text-[10px] text-gray-400 text-center">{t.layoutConfig.twoRowsOfThree}</div>
         <div className="relative bg-gray-900 rounded-lg border border-gray-600 aspect-video mx-auto max-w-[320px]">
           <div className="absolute inset-0 flex flex-col justify-center gap-2 p-2">
             <div className="flex justify-center gap-2">
-              <CameraSelect value={topRow[0]} onChange={(a) => updateTop(0, a)} label="Top L" />
-              <CameraSelect value={topRow[1]} onChange={(a) => updateTop(1, a)} label="Top C" />
-              <CameraSelect value={topRow[2]} onChange={(a) => updateTop(2, a)} label="Top R" />
+              <CameraSelect value={topRow[0]} onChange={(a) => updateTop(0, a)} label={t.layoutConfig.topLeftShort} />
+              <CameraSelect value={topRow[1]} onChange={(a) => updateTop(1, a)} label={t.layoutConfig.topCenterShort} />
+              <CameraSelect value={topRow[2]} onChange={(a) => updateTop(2, a)} label={t.layoutConfig.topRightShort} />
             </div>
             <div className="flex justify-center gap-2">
-              <CameraSelect value={bottomRow[0]} onChange={(a) => updateBottom(0, a)} label="Bot L" />
-              <CameraSelect value={bottomRow[1]} onChange={(a) => updateBottom(1, a)} label="Bot C" />
-              <CameraSelect value={bottomRow[2]} onChange={(a) => updateBottom(2, a)} label="Bot R" />
+              <CameraSelect value={bottomRow[0]} onChange={(a) => updateBottom(0, a)} label={t.layoutConfig.bottomLeftShort} />
+              <CameraSelect value={bottomRow[1]} onChange={(a) => updateBottom(1, a)} label={t.layoutConfig.bottomCenterShort} />
+              <CameraSelect value={bottomRow[2]} onChange={(a) => updateBottom(2, a)} label={t.layoutConfig.bottomRightShort} />
             </div>
           </div>
         </div>
@@ -283,9 +294,9 @@ export function LayoutConfigPopover({
   };
 
   const titles: Record<LayoutType, string> = {
-    pip: 'PiP Layout',
-    triple: 'Triple Layout',
-    all: 'All 6 Layout',
+    pip: t.layoutConfig.pipTitle,
+    triple: t.layoutConfig.tripleTitle,
+    all: t.layoutConfig.all6Title,
   };
 
   return (
@@ -302,7 +313,7 @@ export function LayoutConfigPopover({
               className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-200 transition-colors"
             >
               <IconRefresh size={10} />
-              Reset
+              {t.layoutConfig.resetToDefault}
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
               <IconX size={14} />

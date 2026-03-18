@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useLanguage } from '@/lib/i18n';
 import { 
   DateEntry, 
   TimeSlot, 
   hasAllCameras, 
   getCameraCount, 
-  SOURCE_LABELS, 
   SOURCE_COLORS, 
   VideoSource 
 } from '@/types/folder';
@@ -41,6 +41,7 @@ type MonthState = { year: number; month: number };
 const COMPLETE_BADGE_COLOR = 'bg-teal-600/20 text-teal-400';
 
 export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selectedTimeSlotIds, onSelectionChange, onClear, currentSequence }: VideoBrowserProps) {
+  const { t } = useLanguage();
   const [selectedSources, setSelectedSources] = useState<Set<VideoSource>>(new Set(ALL_SOURCES));
   
   // Draft selection state - independent from imported state
@@ -271,8 +272,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
     return days;
   }, [currentMonth, dateSources]);
 
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                      'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthNames = t.browser.months;
 
   // Get all months that have video data
   const availableMonths = useMemo(() => {
@@ -604,7 +604,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                     ? 'text-gray-700 cursor-not-allowed' 
                     : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
                 }`}
-                title="Jump to earliest"
+                title={t.browser.jumpToEarliest}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
@@ -626,7 +626,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
               </button>
               
               <h3 className="text-lg font-semibold text-white">
-                {monthNames[currentMonth.month]} {currentMonth.year}
+                {t.browser.months[currentMonth.month]} {currentMonth.year}
               </h3>
               
               <button
@@ -651,7 +651,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                     ? 'text-gray-700 cursor-not-allowed' 
                     : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
                 }`}
-                title="Jump to latest"
+                title={t.browser.jumpToLatest}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
@@ -660,7 +660,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
             </div>
 
             <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              {t.browser.weekdays.map(day => (
                 <div key={day} className="text-center text-xs text-gray-500 py-1">
                   {day}
                 </div>
@@ -707,19 +707,19 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
           {/* Filter Section */}
           <div className="flex-1 min-h-0 overflow-y-auto border-t border-gray-700 p-5">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-medium text-white">Filter by Source</h4>
+              <h4 className="text-sm font-medium text-white">{t.browser.selectSources}</h4>
               <div className="flex gap-2">
                 <button
                   onClick={selectAllSources}
                   className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-600/10"
                 >
-                  All
+                  {t.browser.all}
                 </button>
                 <button
                   onClick={clearAllSources}
                   className="text-xs text-gray-500 hover:text-gray-400 px-2 py-1 rounded hover:bg-gray-800"
                 >
-                  None
+                  {t.browser.none}
                 </button>
               </div>
             </div>
@@ -761,7 +761,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                     <span className={`w-2 h-2 rounded-full ${bgColor.replace('/20', '')}`} />
                     
                     <span className={`flex-1 text-sm ${isSelected ? 'text-white' : 'text-gray-400'}`}>
-                      {SOURCE_LABELS[source]}
+                      {t.browser.sourceLabels[source]}
                     </span>
                     
                     <span className={`text-xs tabular-nums ${isSelected ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -774,7 +774,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
 
             <div className="mt-4 pt-4 border-t border-gray-800">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">Total recordings</span>
+                <span className="text-gray-500">{t.browser.totalRecordings}</span>
                 <span className="text-white font-medium">{totalRecordings}</span>
               </div>
             </div>
@@ -787,11 +787,11 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
           <div className="p-4 border-b border-gray-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h3 className="font-semibold text-white">
-                {selectedDateEntry ? selectedDateEntry.displayDate : 'Select a date'}
+                {selectedDateEntry ? selectedDateEntry.displayDate : t.browser.selectDate}
               </h3>
               {selectedDateEntry && (
                 <span className="text-xs text-gray-400">
-                  {selectedDateEntry.timeSlots.length} recordings
+                  {selectedDateEntry.timeSlots.length} {t.browser.recordings}
                 </span>
               )}
             </div>
@@ -802,13 +802,13 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   onClick={selectAllTimeSlots}
                   className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-600/10"
                 >
-                  Select All
+                  {t.browser.selectAll}
                 </button>
                 <button
                   onClick={clearAllTimeSlots}
                   className="text-xs text-gray-500 hover:text-gray-400 px-2 py-1 rounded hover:bg-gray-800"
                 >
-                  Clear Selected
+                  {t.browser.clearSelected}
                 </button>
               </div>
             )}
@@ -877,7 +877,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                               {timeSlot.displayTime}
                             </div>
                             <div className="text-xs text-gray-500">
-                              {allCameras ? 'All 6 cameras' : `${cameraCount} camera${cameraCount > 1 ? 's' : ''}`}
+                              {allCameras ? t.browser.allCameras : `${cameraCount} ${cameraCount > 1 ? t.browser.cameras : t.browser.camera}`}
                               {(timeSlot.city || timeSlot.street) && (
                                 <span className="ml-2 text-gray-400">
                                   {timeSlot.city}{timeSlot.city && timeSlot.street ? ' · ' : ''}{timeSlot.street}
@@ -908,12 +908,12 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                               key={source}
                               className={`px-2 py-0.5 text-[10px] rounded ${SOURCE_COLORS[source]}`}
                             >
-                              {SOURCE_LABELS[source]}
+                              {t.browser.sourceLabels[source]}
                             </span>
                           ))}
                           {allCameras && (
                             <span className={`px-2 py-0.5 text-[10px] rounded ${COMPLETE_BADGE_COLOR}`}>
-                              Complete
+                              {t.browser.complete}
                             </span>
                           )}
                         </div>
@@ -928,8 +928,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <p className="text-sm">Select a date from the calendar</p>
-                  <p className="text-xs text-gray-600 mt-1">Use filters to narrow down recordings</p>
+                  <p className="text-sm">{t.browser.selectDateHint}</p>
+                  <p className="text-xs text-gray-600 mt-1">{t.browser.useFilters}</p>
                 </div>
               </div>
             )}
@@ -940,8 +940,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-400">
                 {selectedCount > 0 
-                  ? `${selectedCount} item${selectedCount > 1 ? 's' : ''} selected` 
-                  : 'No items selected'}
+                  ? `${selectedCount} ${selectedCount > 1 ? t.browser.items : t.browser.item} ${t.browser.selected}` 
+                  : t.browser.noItems}
               </span>
               <div className="flex items-center gap-3">
                 <button
@@ -951,7 +951,7 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  Discard
+                  {t.browser.discard}
                 </button>
                 <button
                   onClick={() => {
@@ -972,12 +972,12 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
                   }`}
                 >
                   {isSelectionUnchanged && hasImportedSelections
-                    ? 'Imported' 
+                    ? t.browser.imported 
                     : hasImportedSelections
                       ? selectionChangeType.type === 'increased' 
-                        ? `Update (${selectionChangeType.count})`
-                        : 'Update'
-                      : `Import ${selectedCount > 1 ? `(${selectedCount})` : ''}`}
+                        ? t.browser.updateCount.replace('{{count}}', String(selectionChangeType.count))
+                        : t.browser.update
+                      : `${t.browser.import}${selectedCount > 1 ? ` (${selectedCount})` : ''}`}
                 </button>
               </div>
             </div>

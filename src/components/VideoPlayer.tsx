@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, lazy, Suspense, ReactNode, useMemo } from 'react';
+import { useLanguage } from '@/lib/i18n';
 import { useSeiData } from '@/hooks/useSeiData';
 import { TelemetryCard } from './TelemetryCard';
 import { VideoSequence, ANGLE_LABELS, ANGLE_ORDER, VideoMoment, TrimPoints, CameraSegment, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, loadLayoutConfig, saveLayoutConfig, loadMapSize, saveMapSize, DEFAULT_MAP_SIZE, MIN_MAP_SIZE, MAX_MAP_SIZE, formatDuration } from '@/types/video';
@@ -88,32 +89,7 @@ interface LayoutConfig {
   description: string;
 }
 
-const LAYOUTS: LayoutConfig[] = [
-  {
-    id: 'single',
-    label: 'Single',
-    icon: <IconSquare size={14} />,
-    description: 'One camera',
-  },
-  {
-    id: 'pip',
-    label: 'PiP',
-    icon: <IconPictureInPicture size={14} />,
-    description: 'Main + corners',
-  },
-  {
-    id: 'triple',
-    label: 'Triple',
-    icon: <IconColumns3 size={14} />,
-    description: 'Front + sides',
-  },
-  {
-    id: 'all',
-    label: 'All 6',
-    icon: <IconLayoutGrid size={14} />,
-    description: 'All cameras',
-  },
-];
+// LAYOUTS is now computed inside the component to use translations
 
 export function VideoPlayer({
   sequences,
@@ -125,6 +101,36 @@ export function VideoPlayer({
   folderStructure,
   onOpenVideoBrowser,
 }: VideoPlayerProps) {
+  const { t, language } = useLanguage();
+  
+  // Layout configurations with translations
+  const LAYOUTS: LayoutConfig[] = useMemo(() => [
+    {
+      id: 'single',
+      label: t.player.single,
+      icon: <IconSquare size={14} />,
+      description: t.player.single,
+    },
+    {
+      id: 'pip',
+      label: t.player.pip,
+      icon: <IconPictureInPicture size={14} />,
+      description: t.player.pip,
+    },
+    {
+      id: 'triple',
+      label: t.player.triple,
+      icon: <IconColumns3 size={14} />,
+      description: t.player.triple,
+    },
+    {
+      id: 'all',
+      label: t.player.all6,
+      icon: <IconLayoutGrid size={14} />,
+      description: t.player.all6,
+    },
+  ], [t]);
+  
   const [showSequenceMenu, setShowSequenceMenu] = useState(false);
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
@@ -143,7 +149,7 @@ export function VideoPlayer({
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
   const [localTime, setLocalTime] = useState(0);  // Time within current clip
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speedUnit, setSpeedUnit] = useState<'mph' | 'kmh'>('kmh');
+  const [speedUnit, setSpeedUnit] = useState<'mph' | 'kmh'>(language === 'zh' ? 'kmh' : 'mph');
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showMap, setShowMap] = useState(true);
   const [showTelemetry, setShowTelemetry] = useState(true);
@@ -1166,7 +1172,7 @@ export function VideoPlayer({
           <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
-          <p>Select a sequence to play</p>
+          <p>{t.home.selectSequenceToPlay}</p>
         </div>
       </div>
     );
@@ -1278,7 +1284,7 @@ export function VideoPlayer({
           {/* Clip indicator for multi-clip sequences */}
           {sequence.clipCount > 1 && (
             <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm rounded px-2 py-1 text-xs font-medium">
-              Clip {currentMomentIndex + 1}/{sequence.clipCount}
+              {t.player.clip} {currentMomentIndex + 1}/{sequence.clipCount}
             </div>
           )}
           {/* Bottom center angle label */}
@@ -1573,7 +1579,7 @@ export function VideoPlayer({
                 }`}
               >
                 <div className="px-2 py-0.5 rounded-md bg-green-600/50 backdrop-blur-md text-white text-[10px] font-medium flex items-center gap-1 border border-green-400/30">
-                  <span>Main:</span>
+                  <span>{t.player.main}</span>
                   <span className="font-semibold">{ANGLE_LABELS[selectedAngle]}</span>
                 </div>
               </div>
@@ -1584,7 +1590,7 @@ export function VideoPlayer({
               <div className="absolute rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto bottom-4 right-4" style={{ width: mapSize, height: mapSize }}>
                 <Suspense fallback={
                   <div className="bg-gray-900 w-full h-full flex items-center justify-center">
-                    <div className="text-gray-500 text-xs">Loading...</div>
+                    <div className="text-gray-500 text-xs">{t.player.loading}</div>
                   </div>
                 }>
                   <MapView seiData={mapSeiData} eventReason={sequence?.event?.reasonLabel} isEventJsonGps={isEventJsonGps} city={sequence?.event?.city} street={sequence?.event?.street} />
@@ -1599,7 +1605,7 @@ export function VideoPlayer({
           <div className="absolute bottom-4 right-4 rounded-lg overflow-hidden shadow-xl opacity-90 hover:opacity-100 transition-opacity pointer-events-auto z-30" style={{ width: mapSize, height: mapSize }}>
             <Suspense fallback={
               <div className="bg-gray-900 w-full h-full flex items-center justify-center">
-                <div className="text-gray-500 text-xs">Loading...</div>
+                <div className="text-gray-500 text-xs">{t.player.loading}</div>
               </div>
             }>
               <MapView seiData={mapSeiData} eventReason={sequence?.event?.reasonLabel} isEventJsonGps={isEventJsonGps} city={sequence?.event?.city} street={sequence?.event?.street} />
@@ -1615,7 +1621,7 @@ export function VideoPlayer({
         <div className="flex items-center gap-2">
           {/* Skip to Previous Clip */}
           {sequence.clipCount > 1 && (
-            <Tooltip content="Previous clip ([)" position="bottom">
+            <Tooltip content={t.player.prevClip} position="bottom">
               <button
                 onClick={skipToPreviousClip}
                 disabled={currentMomentIndex === 0}
@@ -1631,7 +1637,7 @@ export function VideoPlayer({
           )}
 
           {/* Skip Back 15s */}
-          <Tooltip content="Back 15s" position="bottom">
+          <Tooltip content={t.player.back15s} position="bottom">
             <button
               onClick={() => seekToAbsoluteTime(absoluteTime - 15)}
               className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all"
@@ -1641,7 +1647,7 @@ export function VideoPlayer({
           </Tooltip>
 
           {/* Play/Pause Button */}
-          <Tooltip content={isPlaying ? "Pause (Space)" : "Play (Space)"} position="bottom">
+          <Tooltip content={isPlaying ? t.player.pause : t.player.play} position="bottom">
             <button
               onClick={togglePlay}
               className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 transition-all"
@@ -1655,7 +1661,7 @@ export function VideoPlayer({
           </Tooltip>
 
           {/* Skip Forward 15s */}
-          <Tooltip content="Forward 15s" position="bottom">
+          <Tooltip content={t.player.forward15s} position="bottom">
             <button
               onClick={() => seekToAbsoluteTime(absoluteTime + 15)}
               className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all"
@@ -1666,7 +1672,7 @@ export function VideoPlayer({
 
           {/* Skip to Next Clip */}
           {sequence.clipCount > 1 && (
-            <Tooltip content="Next clip (])" position="bottom">
+            <Tooltip content={t.player.nextClip} position="bottom">
               <button
                 onClick={skipToNextClip}
                 disabled={currentMomentIndex >= sequence.moments.length - 1}
@@ -1729,7 +1735,7 @@ export function VideoPlayer({
         <div className="flex items-center gap-3 flex-wrap">
           {/* Camera buttons — always visible, disabled for triple/all unless in edit mode */}
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-gray-500 mr-1">Cameras:</span>
+            <span className="text-[10px] text-gray-500 mr-1">{t.player.cameras}</span>
             {BUTTON_ORDER.map((angle) => {
               const isAvailable = availableAngles.includes(angle);
               // In triple/all layouts, disable camera buttons (they show all cameras at once)
@@ -1766,7 +1772,7 @@ export function VideoPlayer({
             })}
             {/* Custom camera track button */}
             {hasCustomCameraTrack && (
-              <Tooltip content="Use custom camera track" position="top">
+              <Tooltip content={t.player.useCustomTrack} position="top">
                 <button
                   onClick={() => setUseCustomCameraTrack(true)}
                   className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
@@ -1776,7 +1782,7 @@ export function VideoPlayer({
                   }`}
                 >
                   <IconWand size={14} />
-                  <span>Custom</span>
+                  <span>{t.player.customTrack}</span>
                 </button>
               </Tooltip>
             )}
@@ -1787,7 +1793,7 @@ export function VideoPlayer({
 
           {/* Layout buttons */}
           <div className="flex items-center gap-1 relative">
-            <span className="text-[10px] text-gray-500 mr-1">Layout:</span>
+            <span className="text-[10px] text-gray-500 mr-1">{t.player.layout}</span>
             {LAYOUTS.map((l) => {
               // Check if triple view is disabled due to camera track incompatibility
               const isTripleDisabled = l.id === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length !== 3;
@@ -1796,9 +1802,9 @@ export function VideoPlayer({
               if (l.id === 'triple' && hasCustomCameraTrack) {
                 const count = cameraTrackUniqueAngles.length;
                 if (count < 3) {
-                  tooltipContent = `Triple view requires 3 camera angles (current: ${count}). Add ${3 - count} more track(s) to enable.`;
+                  tooltipContent = t.player.tripleViewNeeds3(count, 3 - count);
                 } else if (count > 3) {
-                  tooltipContent = `Triple view requires 3 camera angles (current: ${count}). Remove ${count - 3} track(s) to enable.`;
+                  tooltipContent = t.player.tripleViewHasMore(count, count - 3);
                 }
               }
               
@@ -1808,7 +1814,7 @@ export function VideoPlayer({
                   content={
                     <div className="flex flex-col items-center">
                       <span>{tooltipContent}</span>
-                      {l.id !== 'single' && <span className="text-[10px] text-gray-400 mt-1">Right-click to configure</span>}
+                      {l.id !== 'single' && <span className="text-[10px] text-gray-400 mt-1">{t.player.rightClickConfigure}</span>}
                     </div>
                   } 
                   position="top"
@@ -1839,7 +1845,7 @@ export function VideoPlayer({
             })}
             {/* Layout config button - positioned after all layout buttons */}
             {layout !== 'single' && (
-              <Tooltip content="Configure layout" position="top">
+              <Tooltip content={t.player.configureLayout} position="top">
                 <button
                   onClick={() => setShowLayoutConfig(prev => !prev)}
                   className={`p-1.5 rounded text-xs font-medium transition-all ml-1 ${
@@ -1867,7 +1873,7 @@ export function VideoPlayer({
 
           {/* Trim button - for entering trim mode */}
           {!isTrimming && (
-            <Tooltip content={trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? "Edit trim (E)" : "Trim video (E)"} position="top">
+            <Tooltip content={trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? t.player.editTrim : t.player.trim} position="top">
               <button
                 onClick={toggleTrimMode}
                 className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
@@ -1877,19 +1883,19 @@ export function VideoPlayer({
                 }`}
               >
                 <IconScissors size={14} />
-                <span>{trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? 'Edit Trim' : 'Trim'}</span>
+                <span>{trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? t.player.editTrim : t.player.trim}</span>
               </button>
             </Tooltip>
           )}
 
           {/* Done button - for exiting trim mode */}
           {isTrimming && (
-            <Tooltip content="Done trimming" position="top">
+            <Tooltip content={t.player.done} position="top">
               <button
                 onClick={() => setIsTrimming(false)}
                 className="px-2 py-1 rounded text-xs font-medium transition-all bg-yellow-500 text-black hover:bg-yellow-400 flex items-center gap-1"
               >
-                <span>Done</span>
+                <span>{t.player.done}</span>
               </button>
             </Tooltip>
           )}
@@ -1899,8 +1905,8 @@ export function VideoPlayer({
 
           {/* Overlay Toggles */}
           <div className="flex items-center gap-1 relative z-10">
-            <span className="text-[10px] text-gray-500 mr-1">Show:</span>
-            <Tooltip content="Date/Time (D)" position="top">
+            <span className="text-[10px] text-gray-500 mr-1">{t.player.show}</span>
+            <Tooltip content={t.player.dateTime} position="top">
               <button
                 onClick={() => setShowDateTime(prev => !prev)}
                 className={`p-1.5 rounded transition-all ${
@@ -1912,7 +1918,7 @@ export function VideoPlayer({
                 <IconClock size={16} />
               </button>
             </Tooltip>
-            <Tooltip content={hasTelemetryData ? "Telemetry (T)" : "No telemetry data available"} position="top">
+            <Tooltip content={hasTelemetryData ? t.player.telemetry : t.player.noTelemetry} position="top">
               <button
                 onClick={() => hasTelemetryData && setShowTelemetry(prev => !prev)}
                 className={`p-1.5 rounded transition-all ${
@@ -1927,7 +1933,7 @@ export function VideoPlayer({
               </button>
             </Tooltip>
             <div className="relative flex items-center z-10">
-              <Tooltip content={hasGpsData ? "Map (M) - Right-click to resize" : "No GPS data available"} position="top">
+              <Tooltip content={hasGpsData ? t.player.map : t.player.noGps} position="top">
                 <button
                   onClick={() => hasGpsData && setShowMap(prev => !prev)}
                   onContextMenu={(e) => {
@@ -1950,7 +1956,7 @@ export function VideoPlayer({
               {/* Map Size Control Popover */}
               {showMapSizeControl && showMap && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 rounded-lg p-3 shadow-xl border border-gray-700 z-[100] w-40">
-                  <div className="text-xs text-gray-400 mb-2">Map Size ({mapSize}px)</div>
+                  <div className="text-xs text-gray-400 mb-2">{t.player.mapSize} ({mapSize}px)</div>
                   <input
                     type="range"
                     min={180}
@@ -1965,10 +1971,10 @@ export function VideoPlayer({
             <Tooltip 
               content={
                 !sequence?.event 
-                  ? "No event data available" 
+                  ? t.player.noEventData 
                   : !isEventMarkerInTrimRange
-                    ? "Event context trimmed (need video within 1s of event)"
-                    : "Event Marker"
+                    ? t.player.eventTrimmed
+                    : t.player.eventMarker
               } 
               position="top"
             >
@@ -2001,7 +2007,7 @@ export function VideoPlayer({
                 </div>
               </button>
             </Tooltip>
-            <Tooltip content={`Speed: ${speedUnit === 'mph' ? 'MPH' : 'km/h'} (click to switch)`} position="top">
+            <Tooltip content={`${t.player.speedUnit}: ${speedUnit.toUpperCase()}`} position="top">
               <button
                 onClick={() => setSpeedUnit(prev => prev === 'mph' ? 'kmh' : 'mph')}
                 className="px-1.5 h-[28px] flex items-center rounded transition-all bg-gray-700 text-gray-300 hover:bg-gray-600 text-[10px] font-bold leading-none"
@@ -2014,7 +2020,7 @@ export function VideoPlayer({
             <div className="w-px h-4 bg-gray-600 mx-1" />
 
             {/* Fullscreen */}
-            <Tooltip content={isFullscreen ? "Exit fullscreen (F)" : "Fullscreen (F)"} position="top">
+            <Tooltip content={isFullscreen ? t.player.exitFullscreen : t.player.fullscreen} position="top">
               <button
                 onClick={toggleFullscreen}
                 className="p-1.5 rounded bg-gray-700 text-gray-400 hover:bg-gray-600 transition-all"
@@ -2028,7 +2034,7 @@ export function VideoPlayer({
 
             {/* Video Browser Button (only when folder imported) */}
             {folderStructure && onOpenVideoBrowser && (
-              <Tooltip content="Browse videos by date" position="top">
+              <Tooltip content={t.home.browseByDate} position="top">
                 <button
                   onClick={onOpenVideoBrowser}
                   className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-all bg-amber-600/20 text-amber-400 border border-amber-500/30 hover:bg-amber-600/30 h-[28px]"
@@ -2036,7 +2042,7 @@ export function VideoPlayer({
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <span>Calendar</span>
+                  <span>{t.home.browseByDate}</span>
                 </button>
               </Tooltip>
             )}
@@ -2084,7 +2090,7 @@ export function VideoPlayer({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowSequenceMenu(false)}>
           <div className="bg-gray-900 rounded-xl w-80 max-h-[70vh] shadow-2xl border border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">Video Files</h3>
+              <h3 className="text-sm font-semibold text-white">{t.home.selectClips}</h3>
               <button onClick={() => setShowSequenceMenu(false)} className="text-gray-400 hover:text-white">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2124,9 +2130,9 @@ export function VideoPlayer({
                       </div>
                       {/* Duration and clip count - always show clip count */}
                       <div className="text-xs text-gray-500 flex items-center gap-2">
-                        <span>Duration: {seq.durationFormatted}</span>
+                        <span>{seq.durationFormatted}</span>
                         <span>·</span>
-                        <span>{seq.clipCount} clip{seq.clipCount !== 1 ? 's' : ''}</span>
+                        <span>{seq.clipCount} {t.player.clip}{seq.clipCount !== 1 ? '' : ''}</span>
                       </div>
                     </button>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -2149,7 +2155,7 @@ export function VideoPlayer({
                             ? 'text-red-400 hover:bg-red-600/20 opacity-100' 
                             : 'text-gray-500 hover:text-red-400 hover:bg-red-600/20 opacity-0 group-hover:opacity-100'
                         }`}
-                        title={sequences.length === 1 ? 'Discard all' : 'Delete this sequence'}
+                        title={sequences.length === 1 ? t.common.delete : t.common.delete}
                       >
                         <IconTrash size={14} />
                       </button>
@@ -2169,7 +2175,7 @@ export function VideoPlayer({
                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-medium transition-colors"
               >
                 <IconTrash size={14} />
-                Discard
+                {t.common.delete}
               </button>
             </div>
           </div>

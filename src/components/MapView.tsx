@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { SeiData } from '@/lib/dashcam-mp4';
 import { wgs84ToGcj02, gcj02ToWgs84, isInChina, isOutOfChina, distance } from '@/lib/coord-transform';
+import { useLanguage } from '@/lib/i18n';
 
 interface MapViewProps {
   seiData: SeiData | null;
@@ -16,12 +17,21 @@ interface MapViewProps {
 type MapProvider = 'amap' | 'osm';
 
 export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, street }: MapViewProps) {
+  const { language, t } = useLanguage();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const [isMapReady, setIsMapReady] = useState(false);
-  const [mapProvider, setMapProvider] = useState<MapProvider>('amap');
+  // English only shows OSM, Chinese shows both
+  const [mapProvider, setMapProvider] = useState<MapProvider>(language === 'zh' ? 'amap' : 'osm');
   const [L, setL] = useState<typeof import('leaflet') | null>(null);
+
+  // Update map provider when language changes
+  useEffect(() => {
+    if (language === 'en') {
+      setMapProvider('osm');
+    }
+  }, [language]);
 
   const rawLat = seiData?.latitude_deg;
   const rawLng = seiData?.longitude_deg;
@@ -167,29 +177,31 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
 
   return (
     <div className="relative rounded-lg overflow-hidden bg-gray-900 w-full h-full" style={{ minHeight: '150px' }}>
-      {/* Map provider switcher */}
-      <div className="absolute top-2 right-2 z-[1000] flex bg-black/60 rounded-lg overflow-hidden">
-        <button
-          onClick={() => setMapProvider('amap')}
-          className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-            mapProvider === 'amap' 
-              ? 'bg-blue-600 text-white' 
-              : 'text-gray-400 hover:text-white hover:bg-gray-700'
-          }`}
-        >
-          AMap
-        </button>
-        <button
-          onClick={() => setMapProvider('osm')}
-          className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-            mapProvider === 'osm' 
-              ? 'bg-blue-600 text-white' 
-              : 'text-gray-400 hover:text-white hover:bg-gray-700'
-          }`}
-        >
-          OSM
-        </button>
-      </div>
+      {/* Map provider switcher - only show for Chinese */}
+      {language === 'zh' && (
+        <div className="absolute top-2 right-2 z-[1000] flex bg-black/60 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setMapProvider('amap')}
+            className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+              mapProvider === 'amap' 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+            }`}
+          >
+            {t.map.amap}
+          </button>
+          <button
+            onClick={() => setMapProvider('osm')}
+            className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+              mapProvider === 'osm' 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+            }`}
+          >
+            {t.map.osm}
+          </button>
+        </div>
+      )}
 
       <div
         ref={mapContainerRef}
@@ -199,7 +211,7 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
       {/* Loading state */}
       {!isMapReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-          <div className="text-gray-500 text-sm">Loading map...</div>
+          <div className="text-gray-500 text-sm">{t.map.loading}</div>
         </div>
       )}
 
@@ -211,8 +223,8 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <p>No GPS Data</p>
-            <p className="text-xs text-gray-600 mt-1">No GPS data or event.json timestamp mismatch</p>
+            <p>{t.map.noGpsData}</p>
+            <p className="text-xs text-gray-600 mt-1">{t.map.noGpsDesc}</p>
           </div>
         </div>
       )}
@@ -224,15 +236,15 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
             // 使用 event.json 回退（视频无原生 GPS）
             <>
               <div className="text-yellow-400">
-                Estimated: {rawLat?.toFixed(5)}, {rawLng?.toFixed(5)}
+                {t.map.estimated}: {rawLat?.toFixed(5)}, {rawLng?.toFixed(5)}
               </div>
               {isChina && mapProvider === 'amap' && (
                 <div className="text-[8px] text-white/60">
-                  AMap: {lat?.toFixed(5)}, {lng?.toFixed(5)} (Offset: {offset.toFixed(0)}m)
+                  {t.map.amap}: {lat?.toFixed(5)}, {lng?.toFixed(5)} (Offset: {offset.toFixed(0)}m)
                 </div>
               )}
               <div className="text-[8px] text-white/70 truncate">
-                From event.json ({eventReason || 'Event Trigger'})
+                {t.map.fromEvent} ({eventReason || 'Event Trigger'})
               </div>
               {(city || street) && (
                 <div className="text-[8px] text-white/60 truncate">
@@ -244,7 +256,7 @@ export function MapView({ seiData, heading, eventReason, isEventJsonGps, city, s
             // 视频包含原生 GPS 数据 + 高德地图
             <>
               <div className="text-green-400">
-                AMap: {lat?.toFixed(5)}, {lng?.toFixed(5)} 
+                {t.map.amap}: {lat?.toFixed(5)}, {lng?.toFixed(5)} 
                 {headingDeg > 0 && <span className="text-green-600 ml-1">{Math.round(headingDeg)}°</span>}
               </div>
               <div className="text-[8px] text-white/70">

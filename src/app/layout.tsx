@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { LanguageProvider } from "@/lib/i18n";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export const metadata: Metadata = {
   title: "ExportDash — Tesla Dashcam Viewer",
@@ -14,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        {children}
+        <LanguageProvider>
+          {children}
+          <LanguageSwitcher />
+        </LanguageProvider>
       </body>
     </html>
   );
