@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { IconDownload, IconPlayerStop, IconLoader2, IconCheck, IconArrowUp, IconArrowDown, IconArrowLeft, IconArrowRight, IconArrowDownLeft, IconArrowDownRight } from '@tabler/icons-react';
 import { SeiData, SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { Output, Mp4OutputFormat, BufferTarget, VideoSampleSource, VideoSample } from 'mediabunny';
-import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, ANGLE_LABELS } from '@/types/video';
+import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG } from '@/types/video';
 import { Tooltip } from './Tooltip';
 import { useLanguage } from '@/lib/i18n';
 
@@ -1070,7 +1070,7 @@ export function VideoExporter({
             
             // Draw angle label at bottom left of each cell
             // Use baseUIScale (no 1.25x multiplier) for labels
-            const label = ANGLE_LABELS[angle] || angle;
+            const label = (t.angles as Record<string, string>)[angle] || angle;
             const labelFontSize = Math.max(16, Math.floor(16 * baseUIScale));
             ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
             
@@ -1256,7 +1256,7 @@ export function VideoExporter({
             }
             
             // Draw angle label at bottom-left of PiP
-            const label = ANGLE_LABELS[angle] || angle;
+            const label = (t.angles as Record<string, string>)[angle] || angle;
             ctx.font = `500 ${mainLabelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
             const labelWidth = ctx.measureText(label).width + mainLabelPaddingX * 2;
             const labelHeight = mainLabelFontSize + mainLabelPaddingY * 2;
@@ -1363,7 +1363,7 @@ export function VideoExporter({
             breatheIntensity = (Math.sin(breatheProgress * Math.PI * 2) + 1) / 2;
           }
           
-          const mainLabel = `Main: ${ANGLE_LABELS[frameAngle] || frameAngle}`;
+          const mainLabel = `${t.player.main} ${(t.angles as Record<string, string>)[frameAngle] || frameAngle}`;
           ctx.font = `600 ${mainLabelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
           const mainLabelWidth = ctx.measureText(mainLabel).width + mainLabelPaddingX * 2;
           const mainLabelHeight = mainLabelFontSize + mainLabelPaddingY * 2;
@@ -1482,7 +1482,7 @@ export function VideoExporter({
                 ctx.font = `600 ${14 * uiScale}px -apple-system, BlinkMacSystemFont, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                const label = ANGLE_LABELS[angle] || angle;
+                const label = (t.angles as Record<string, string>)[angle] || angle;
                 ctx.fillText(label, px + pw / 2, py + ph / 2);
                 continue;
               }
@@ -1553,7 +1553,7 @@ export function VideoExporter({
 
               // Draw angle label at bottom left of each cell
               // Use baseUIScale (no 1.25x multiplier) for labels
-              const label = ANGLE_LABELS[angle] || angle;
+              const label = (t.angles as Record<string, string>)[angle] || angle;
               const labelFontSize = Math.max(16, Math.floor(16 * baseUIScale));
               ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
               
@@ -1628,7 +1628,7 @@ export function VideoExporter({
           
           // Use frameAngle to ensure it updates with camera track
           const currentAngle = frameAngle;
-          const angleLabel = ANGLE_LABELS[currentAngle] || currentAngle;
+          const angleLabel = (t.angles as Record<string, string>)[currentAngle] || currentAngle;
           
           // Icon (arrow) settings - blue color like in edit page
           const iconSize = 22 * capsuleScale; // Slightly larger icon
