@@ -621,42 +621,6 @@ export function VideoPlayer({
     }
   }, [selectedAngle, getVisibleAngles]);
 
-  // Use requestAnimationFrame for smooth progress bar updates
-  useEffect(() => {
-    if (!isPlaying) {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      return;
-    }
-
-    const updateFrame = () => {
-      if (mainVideoRef.current) {
-        const currentTime = mainVideoRef.current.currentTime;
-        // Update local time for smooth UI updates (throttled to ~60fps for state updates)
-        // Use requestAnimationFrame timestamp for consistent timing
-        const now = performance.now();
-        if (now - lastTimeUpdateRef.current >= 16) { // ~60fps
-          setLocalTime(currentTime);
-          lastTimeUpdateRef.current = now;
-        }
-        // Sync other videos without triggering React state updates
-        syncVideos();
-      }
-      rafRef.current = requestAnimationFrame(updateFrame);
-    };
-
-    rafRef.current = requestAnimationFrame(updateFrame);
-
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-  }, [isPlaying, syncVideos]);
-
   // Fallback timeupdate handler for when not playing
   const handleTimeUpdate = useCallback(() => {
     if (mainVideoRef.current && !isPlaying) {
@@ -1031,6 +995,58 @@ export function VideoPlayer({
       if (v) v.playbackRate = rate;
     });
   }, []);
+
+  // Use requestAnimationFrame for smooth progress bar updates
+  useEffect(() => {
+    if (!isPlaying) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    const updateFrame = () => {
+      if (mainVideoRef.current) {
+        const currentTime = mainVideoRef.current.currentTime;
+        
+        // Check if we've reached the trim end point (for trimmed playback)
+        if (!isTrimming && trimPoints && sequence) {
+          const currentAbsoluteTime = toAbsoluteTime(sequence, currentMomentIndex, currentTime);
+          if (currentAbsoluteTime >= trimPoints.outPoint) {
+            // Reached trim end - pause the video element directly first
+            mainVideoRef.current.pause();
+            Object.values(videoRefs.current).forEach(v => v?.pause());
+            // Then update React state
+            setIsPlaying(false);
+            // Sync to exact trim end position
+            syncVideos();
+            return;
+          }
+        }
+        
+        // Update local time for smooth UI updates (throttled to ~60fps for state updates)
+        // Use requestAnimationFrame timestamp for consistent timing
+        const now = performance.now();
+        if (now - lastTimeUpdateRef.current >= 16) { // ~60fps
+          setLocalTime(currentTime);
+          lastTimeUpdateRef.current = now;
+        }
+        // Sync other videos without triggering React state updates
+        syncVideos();
+      }
+      rafRef.current = requestAnimationFrame(updateFrame);
+    };
+
+    rafRef.current = requestAnimationFrame(updateFrame);
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isPlaying, syncVideos, isTrimming, trimPoints, sequence, currentMomentIndex]);
 
   // Skip to previous/next clip
   const skipToPreviousClip = useCallback(() => {
