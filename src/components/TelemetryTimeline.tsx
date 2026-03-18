@@ -320,24 +320,16 @@ export function TelemetryTimeline({
   }, [event, sequenceStartTime]);
 
   // Calculate view bounds based on trim state
-  // Smart buffer: only add buffer if event is after video end
+  // Always ensure view includes any post-video events
   const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
-  const rawViewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
+  let viewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
   
-  // Calculate buffer based on event position
-  let viewEnd = rawViewEnd;
-  // Only extend view to show event marker if:
-  // 1. Event marker is enabled
-  // 2. Event is after the raw video end (not just after trim end)
-  // 3. We're in trimming mode OR event is within/near the visible range
-  if (showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime > duration) {
-    // Event is after video end, add buffer to show event marker
-    // Event marker needs about 120px width (diamond + label), convert to time
-    // Estimate: 120px / timelineWidth * totalDuration = bufferTime
-    // Use a safe estimate: 2 seconds or (eventTime - rawViewEnd + 1 second), whichever is larger
-    const eventBuffer = eventAbsoluteTime - rawViewEnd + 1; // 1 second after event
-    viewEnd = rawViewEnd + Math.max(eventBuffer, 0.5); // At least 0.5s buffer
+  // If event is after video end, extend view to show it (with buffer for marker visibility)
+  if (eventAbsoluteTime !== null && eventAbsoluteTime > duration) {
+    // Add 2 seconds buffer after event to ensure marker is fully visible
+    viewEnd = Math.max(viewEnd, eventAbsoluteTime + 2);
   }
+  
   const viewDuration = viewEnd - viewStart;
 
   const [showEventTooltip, setShowEventTooltip] = useState(false);
@@ -840,8 +832,12 @@ export function TelemetryTimeline({
           );
         })}
 
-        {/* Event marker */}
-        {showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
+        {/* Event marker - always show if in trim range (even if beyond video duration) */}
+        {showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && (
+          // For post-video events, always show them in trimming mode
+          // For normal playback, only show if within trim range
+          (isTrimming || eventAbsoluteTime <= viewEnd || eventAbsoluteTime > duration)
+         ) && (
           <div
             ref={eventMarkerRef}
             className="absolute top-0 bottom-0 z-[5] group"

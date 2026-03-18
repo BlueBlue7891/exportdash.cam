@@ -438,24 +438,17 @@ export function VideoPlayer({
     
     const eventOffsetSeconds = (sequence.event.timestamp.getTime() - sequence.startTime.getTime()) / 1000;
     
-    // If no trim points, use default range [0, duration] with buffer for post-video events
-    const inPoint = trimPoints?.inPoint ?? 0;
-    const rawOutPoint = trimPoints?.outPoint ?? sequence.totalDuration;
-    
-    // Check if we're in "default" state (no actual trimming applied)
-    const isDefaultTrim = inPoint === 0 && rawOutPoint === sequence.totalDuration;
-    
-    // If in default state AND event is after video end, extend the effective out point to show it
-    // This matches TelemetryTimeline's behavior for default view
-    // When user has actually trimmed (not default), respect their trim choice strictly
-    let effectiveOutPoint = rawOutPoint;
-    if (isDefaultTrim && eventOffsetSeconds > sequence.totalDuration) {
-      // Default state, event is after video end, add buffer to accommodate it
-      const eventBuffer = eventOffsetSeconds - rawOutPoint + 1; // 1 second after event
-      effectiveOutPoint = rawOutPoint + Math.max(eventBuffer, 0.5); // At least 0.5s buffer
+    // Event is AFTER video end - always "in range" since it's not part of the video content
+    // Post-video events (like manual save timestamps) should not be affected by video trimming
+    if (eventOffsetSeconds > sequence.totalDuration) {
+      return true;
     }
     
-    return eventOffsetSeconds >= inPoint && eventOffsetSeconds <= effectiveOutPoint;
+    // Event is within video duration - check if it's within the trim range
+    const inPoint = trimPoints?.inPoint ?? 0;
+    const outPoint = trimPoints?.outPoint ?? sequence.totalDuration;
+    
+    return eventOffsetSeconds >= inPoint && eventOffsetSeconds <= outPoint;
   }, [sequence?.event, sequence?.startTime, sequence?.totalDuration, trimPoints]);
   
   // Track previous trimming state to detect when exiting trim mode
