@@ -134,6 +134,7 @@ export function VideoPlayer({
   const hasAutoEnabledTelemetryRef = useRef<boolean>(false);
   const hasAutoEnabledMapRef = useRef<boolean>(false);
   const hasAutoEnabledEventMarkerRef = useRef<boolean>(false);
+  const hasUserDisabledEventMarkerRef = useRef<boolean>(false);
   const prevEventMarkerInRangeRef = useRef<boolean>(true);
 
   // Playback state
@@ -395,7 +396,10 @@ export function VideoPlayer({
       // Reset auto-enable flags for new sequence
       hasAutoEnabledTelemetryRef.current = false;
       hasAutoEnabledMapRef.current = false;
-      hasAutoEnabledEventMarkerRef.current = false;
+      // Only reset event marker auto-enable if user hasn't manually disabled it
+      if (!hasUserDisabledEventMarkerRef.current) {
+        hasAutoEnabledEventMarkerRef.current = false;
+      }
       lastSequenceIdRef.current = sequence.id;
     }
     
@@ -412,7 +416,8 @@ export function VideoPlayer({
     }
     
     // Auto-enable event marker when event data becomes available (only once per sequence)
-    if (sequence?.event && !hasAutoEnabledEventMarkerRef.current) {
+    // But only if user hasn't manually disabled it
+    if (sequence?.event && !hasAutoEnabledEventMarkerRef.current && !hasUserDisabledEventMarkerRef.current) {
       setShowEventMarker(true);
       hasAutoEnabledEventMarkerRef.current = true;
     }
@@ -425,6 +430,8 @@ export function VideoPlayer({
     if (!sequence?.event) {
       setShowEventMarker(false);
       hasAutoEnabledEventMarkerRef.current = false;
+      // Reset user preference when there's no event data
+      hasUserDisabledEventMarkerRef.current = false;
     }
     if (!hasTelemetryData) {
       setShowTelemetry(false);
@@ -433,9 +440,9 @@ export function VideoPlayer({
   }, [hasGpsData, hasTelemetryData, sequence?.id, sequence?.event]);
 
   // Check if event marker is within trim range
-  // The event marker switch is disabled only when:
+  // The event marker switch is disabled when:
   // 1. The event is truly being trimmed out (event time < inPoint or event time > outPoint)
-  // 2. In trimming mode, always allow the switch (user can see where the event is)
+  // 2. No video within 1 second of the event (no context before or after)
   const isEventMarkerInTrimRange = useMemo(() => {
     if (!sequence?.event || !sequence.startTime) return true; // No event or start time, always "in range"
     
@@ -445,8 +452,15 @@ export function VideoPlayer({
     const inPoint = trimPoints?.inPoint ?? 0;
     const outPoint = trimPoints?.outPoint ?? sequence.totalDuration;
     
-    // Event is in range if it's within the trim points
-    return eventOffsetSeconds >= inPoint && eventOffsetSeconds <= outPoint;
+    // Check if there's any video within 1 second of the event (before or after)
+    // This provides more flexibility - as long as we have some context around the event
+    const contextWindowStart = eventOffsetSeconds - 1;
+    const contextWindowEnd = eventOffsetSeconds + 1;
+    
+    // Check if the trim range overlaps with the context window around the event
+    const hasContextInRange = contextWindowStart < outPoint && contextWindowEnd > inPoint;
+    
+    return hasContextInRange;
   }, [sequence?.event, sequence?.startTime, sequence?.totalDuration, trimPoints]);
   
   // Track previous trimming state to detect when exiting trim mode
@@ -1952,14 +1966,30 @@ export function VideoPlayer({
               content={
                 !sequence?.event 
                   ? "No event data available" 
-                  : "Event Marker"
+                  : !isEventMarkerInTrimRange
+                    ? "Event context trimmed (need video within 1s of event)"
+                    : "Event Marker"
               } 
               position="top"
             >
               <button
-                onClick={() => sequence?.event && setShowEventMarker(prev => !prev)}
+                onClick={() => {
+                  if (!sequence?.event || !isEventMarkerInTrimRange) return;
+                  setShowEventMarker(prev => {
+                    const newValue = !prev;
+                    // Track if user manually disabled the event marker
+                    if (!newValue) {
+                      hasUserDisabledEventMarkerRef.current = true;
+                    } else {
+                      // User is re-enabling, reset the flag so new videos will auto-enable
+                      hasUserDisabledEventMarkerRef.current = false;
+                    }
+                    return newValue;
+                  });
+                }}
+                disabled={!sequence?.event || !isEventMarkerInTrimRange}
                 className={`p-1.5 rounded transition-all ${
-                  !sequence?.event
+                  !sequence?.event || !isEventMarkerInTrimRange
                     ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     : showEventMarker
                       ? 'bg-green-600 text-white'
