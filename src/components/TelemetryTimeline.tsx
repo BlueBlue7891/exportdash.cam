@@ -320,12 +320,12 @@ export function TelemetryTimeline({
   }, [event, sequenceStartTime]);
 
   // Calculate view bounds based on trim state
-  // Always ensure view includes any post-video events
   const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
   let viewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
   
-  // If event is after video end, extend view to show it (with buffer for marker visibility)
-  if (eventAbsoluteTime !== null && eventAbsoluteTime > duration) {
+  // If event marker is shown and event is after video end, extend view to show it
+  // Only in normal playback mode (not trimming), and only when marker is visible
+  if (showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime > duration) {
     // Add 2 seconds buffer after event to ensure marker is fully visible
     viewEnd = Math.max(viewEnd, eventAbsoluteTime + 2);
   }
@@ -728,9 +728,10 @@ export function TelemetryTimeline({
   const timeToPosition = (time: number) => ((time - viewStart) / viewDuration) * 100;
   const playheadPosition = timeToPosition(Math.max(viewStart, Math.min(viewEnd, currentTime)));
 
-  // Trim handle positions (relative to full timeline, only when trimming)
-  const inPointPosition = trimPoints ? (trimPoints.inPoint / duration) * 100 : 0;
-  const outPointPosition = trimPoints ? (trimPoints.outPoint / duration) * 100 : 100;
+  // Trim handle positions (relative to current view range)
+  // Use timeToPosition to ensure consistency with timeline scaling
+  const inPointPosition = trimPoints ? timeToPosition(trimPoints.inPoint) : 0;
+  const outPointPosition = trimPoints ? timeToPosition(trimPoints.outPoint) : 100;
 
   // Generate time markers
   const timeMarkers = useMemo(() => {

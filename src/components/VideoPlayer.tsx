@@ -438,13 +438,8 @@ export function VideoPlayer({
     
     const eventOffsetSeconds = (sequence.event.timestamp.getTime() - sequence.startTime.getTime()) / 1000;
     
-    // Event is AFTER video end - always "in range" since it's not part of the video content
-    // Post-video events (like manual save timestamps) should not be affected by video trimming
-    if (eventOffsetSeconds > sequence.totalDuration) {
-      return true;
-    }
-    
-    // Event is within video duration - check if it's within the trim range
+    // Check if event is within the trim range (inPoint to outPoint)
+    // This applies to both in-video events and post-video events
     const inPoint = trimPoints?.inPoint ?? 0;
     const outPoint = trimPoints?.outPoint ?? sequence.totalDuration;
     
