@@ -778,14 +778,12 @@ export function TelemetryTimeline({
             {isTrimming ? 'Trim Video' : 'Timeline'}
           </span>
 
-          {/* Trim info badge - show in edit mode, real-time update during trimming */}
-          {isEditMode && (
+          {/* Trim info badge - only show when trimming or when video is trimmed */}
+          {(isTrimming || isTrimmed) && (
             <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
               isTrimming 
                 ? 'bg-yellow-500/30 text-yellow-300 border border-yellow-500/30' 
-                : isTrimmed 
-                  ? 'bg-yellow-500/20 text-yellow-400' 
-                  : 'bg-gray-700 text-gray-400'
+                : 'bg-yellow-500/20 text-yellow-400'
             }`}>
               {formatTimeShort(trimStart)} → {formatTimeShort(trimEnd)} ({formatTimeShort(trimmedDuration)})
             </span>
