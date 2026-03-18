@@ -25,11 +25,11 @@ const PIP_LABELS: Record<string, string> = {
 // Position-specific allowed options for PiP layout
 // corners: [bottom-left, bottom-center, bottom-right, top-left, top-right]
 const PIP_POSITION_OPTIONS: string[][] = [
-  ['left_pillar', 'front', 'back', 'none', 'map'],      // 0: bottom-left
-  ['front', 'back', 'none', 'map'],                     // 1: bottom-center
-  ['right_pillar', 'front', 'back', 'none', 'map'],     // 2: bottom-right
-  ['left_repeater', 'front', 'back', 'none', 'map'],    // 3: top-left
-  ['right_repeater', 'front', 'back', 'none', 'map'],   // 4: top-right
+  ['left_pillar', 'front', 'back', 'map', 'none'],      // 0: bottom-left
+  ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar', 'map', 'none'],  // 1: bottom-center
+  ['right_pillar', 'front', 'back', 'map', 'none'],     // 2: bottom-right
+  ['left_repeater', 'front', 'back', 'map', 'none'],    // 3: top-left
+  ['right_repeater', 'front', 'back', 'map', 'none'],   // 4: top-right
 ];
 
 // Default values for each position when clearing
@@ -122,9 +122,25 @@ export function LayoutConfigPopover({
         }
       }
       
-      // Note: Other camera angles (left_repeater, right_repeater, left_pillar, right_pillar) 
-      // can appear in multiple corners (including same as main view)
-      // No uniqueness check for these angles - they can repeat
+      // Handle side camera angles (left_repeater, right_repeater, left_pillar, right_pillar)
+      // These are mutually exclusive between center (index 1) and corners (indices 0, 2, 3, 4)
+      const SIDE_ANGLES = ['left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
+      if (SIDE_ANGLES.includes(newAngle)) {
+        const CENTER_INDEX = 1;
+        const CORNER_INDICES = [0, 2, 3, 4];
+        
+        if (index === CENTER_INDEX) {
+          // Setting center: clear any corner that has the same angle
+          CORNER_INDICES.forEach(cornerIdx => {
+            if (c[cornerIdx] === newAngle) {
+              c[cornerIdx] = 'none';
+            }
+          });
+        } else if (CORNER_INDICES.includes(index)) {
+          // Setting a corner: reset center to default ('back')
+          c[CENTER_INDEX] = 'back';
+        }
+      }
       
       c[index] = newAngle;
       onChange({ ...config, pip: { corners: c } });
