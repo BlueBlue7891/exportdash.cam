@@ -771,7 +771,7 @@ export function TelemetryTimeline({
   }, [cameraSegments, isTrimming, trimStart, trimEnd, duration]);
 
   return (
-    <div className="bg-gray-800/50 rounded-xl p-3 space-y-2">
+    <div className="bg-gray-800/50 rounded-xl p-3 space-y-2 px-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
