@@ -558,8 +558,9 @@ export function VideoPlayer({
     const visibleAngles = getVisibleAngles();
     
     // Only sync visible videos to reduce overhead
+    // Include all visible angles, including those matching selectedAngle (for PiP layout)
     Object.entries(videoRefs.current).forEach(([angle, video]) => {
-      if (video && angle !== selectedAngle && visibleAngles.includes(angle)) {
+      if (video && visibleAngles.includes(angle)) {
         // Only update if difference is significant (> 0.2s) to reduce jitter
         if (Math.abs(video.currentTime - mainTime) > 0.2) {
           video.currentTime = mainTime;
@@ -655,14 +656,19 @@ export function VideoPlayer({
           setIsPlaying(true);
           safePlay(mainVideoRef.current, 'main');
           
-          const visibleAngles = getVisibleAngles();
-          let delay = 50;
-          Object.entries(videoRefs.current).forEach(([angle, v]) => {
-            if (v && angle !== selectedAngle && visibleAngles.includes(angle)) {
-              setTimeout(() => safePlay(v, angle), delay);
-              delay += 50;
-            }
-          });
+          // Delay playing corner videos to ensure React has updated the refs
+          // This is needed because when switching tracks, the video elements may not be fully mounted yet
+          setTimeout(() => {
+            const visibleAngles = getVisibleAngles();
+            let delay = 50;
+            Object.entries(videoRefs.current).forEach(([angle, v]) => {
+              // Play all visible videos including those matching selectedAngle
+              if (v && visibleAngles.includes(angle)) {
+                setTimeout(() => safePlay(v, angle), delay);
+                delay += 50;
+              }
+            });
+          }, 100);
         }
         pendingRestoreRef.current = null;
       }
@@ -672,14 +678,18 @@ export function VideoPlayer({
         setIsPlaying(true);
         safePlay(mainVideoRef.current, 'main');
         
-        const visibleAngles = getVisibleAngles();
-        let delay = 50;
-        Object.entries(videoRefs.current).forEach(([angle, v]) => {
-          if (v && angle !== selectedAngle && visibleAngles.includes(angle)) {
-            setTimeout(() => safePlay(v, angle), delay);
-            delay += 50;
-          }
-        });
+        // Delay playing corner videos to ensure React has updated the refs
+        setTimeout(() => {
+          const visibleAngles = getVisibleAngles();
+          let delay = 50;
+          Object.entries(videoRefs.current).forEach(([angle, v]) => {
+            // Play all visible videos including those matching selectedAngle
+            if (v && visibleAngles.includes(angle)) {
+              setTimeout(() => safePlay(v, angle), delay);
+              delay += 50;
+            }
+          });
+        }, 100);
         shouldAutoPlayRef.current = false;
       }
     }
@@ -706,6 +716,26 @@ export function VideoPlayer({
   // Refs for measuring video elements
   const mainVideoContainerRef = useRef<HTMLDivElement>(null);
   const cornerVideoRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
+  // Sync corner videos playback state when isPlaying changes
+  // This ensures corner videos play when the main video is playing
+  useEffect(() => {
+    if (layout !== 'pip') return;
+    
+    if (isPlaying) {
+      // When starting playback, ensure all visible corner videos are playing
+      // Including those that match the main view angle (for PiP layout)
+      const visibleAngles = getVisibleAngles();
+      let delay = 0;
+      Object.entries(videoRefs.current).forEach(([angle, v]) => {
+        // Play all visible videos including those matching selectedAngle
+        if (v && visibleAngles.includes(angle) && v.paused) {
+          setTimeout(() => safePlay(v, angle), delay);
+          delay += 30;
+        }
+      });
+    }
+  }, [isPlaying, layout, selectedAngle, getVisibleAngles, safePlay]);
 
   // Switch cameras based on camera segments (when custom track enabled)
   // Works both during playback AND when scrubbing timeline
@@ -894,10 +924,14 @@ export function VideoPlayer({
       await safePlay(mainVideoRef.current, 'main');
       
       // Then play visible videos with staggered timing to reduce load
+      // Note: In PiP layout, we play all visible angles including those that match selectedAngle
+      // This ensures corner videos play even when they show the same angle as main view
       const visibleAngles = getVisibleAngles();
       let delay = 0;
       Object.entries(videoRefs.current).forEach(([angle, v]) => {
-        if (v && angle !== selectedAngle && visibleAngles.includes(angle)) {
+        // Play all visible videos, including those matching selectedAngle (for PiP corners)
+        // The main video is already playing via safePlay(mainVideoRef.current, 'main') above
+        if (v && visibleAngles.includes(angle)) {
           setTimeout(() => safePlay(v, angle), delay);
           delay += 50; // 50ms stagger between each video
         }
