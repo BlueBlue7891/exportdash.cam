@@ -6,15 +6,17 @@ import { DropZone } from '@/components/DropZone';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { VideoBrowser } from '@/components/VideoBrowser';
-import { VideoSequence, ProcessingProgress } from '@/types/video';
+import { VideoSequence, VideoMoment, TeslaEvent, ProcessingProgress } from '@/types/video';
 import { FolderStructure, parseFolderStructure, parseFolderStructureAsync, TimeSlot } from '@/types/folder';
 import { processFilesToMoments, detectSequences } from '@/lib/sequence-detector';
+import { useLanguage } from '@/lib/i18n';
 
 const openExternalLink = (url: string) => {
   open(url);
 };
 
 export default function Home() {
+  const { t, language } = useLanguage();
   const [sequences, setSequences] = useState<VideoSequence[]>([]);
   const [selectedSequence, setSelectedSequence] = useState<VideoSequence | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -27,6 +29,23 @@ export default function Home() {
   // Folder import state
   const [folderStructure, setFolderStructure] = useState<FolderStructure | null>(null);
   const [showVideoBrowser, setShowVideoBrowser] = useState(false);
+  // Persist selected time slots across calendar opens (keyed by date_time)
+  // Selection persists after import to remind user what's been imported
+  const [selectedTimeSlotIds, setSelectedTimeSlotIds] = useState<Set<string>>(new Set());
+
+  // Handle scan progress from DropZone
+  const handleScanProgress = useCallback((current: number, total: number) => {
+    // Only show processing if we have files to process
+    if (total > 0) {
+      setIsProcessing(true);
+      setProcessingProgress({
+        stage: 'scanning',
+        current,
+        total,
+        message: t.home.scanning,
+      });
+    }
+  }, []);
 
   const handleFilesAdded = useCallback(async (newFiles: File[]) => {
     if (newFiles.length === 0) return;
@@ -41,7 +60,7 @@ export default function Home() {
         stage: 'scanning',
         current: 0,
         total: newFiles.length,
-        message: 'Parsing folder structure...',
+        message: t.home.parsingFolder,
       });
       
       // Parse folder structure asynchronously with progress
@@ -50,7 +69,7 @@ export default function Home() {
           ...prev,
           current,
           total,
-          message: `Parsing folder structure... ${current}/${total}`,
+          message: `${t.home.parsingFolder} ${current}/${total}`,
         }));
       });
       
@@ -66,7 +85,7 @@ export default function Home() {
       stage: 'scanning',
       current: 0,
       total: newFiles.length,
-      message: 'Scanning files...',
+      message: t.home.scanning,
     });
 
     try {
@@ -89,52 +108,298 @@ export default function Home() {
         stage: 'error',
         current: 0,
         total: newFiles.length,
-        message: 'Error processing videos',
+        message: t.common.error,
       });
     } finally {
       setIsProcessing(false);
     }
   }, []);
   
-  const handleSelectTimeSlot = useCallback(async (timeSlot: TimeSlot) => {
-    const files = Object.values(timeSlot.files);
-    if (files.length === 0) return;
+  const handleSelectTimeSlot = useCallback(async (timeSlot: TimeSlot | TimeSlot[], sequenceIdToReplace?: string) => {
+    // Handle both single slot and array of slots
+    const timeSlots = Array.isArray(timeSlot) ? timeSlot : [timeSlot];
     
+    // Build a set of already imported file paths for quick lookup
+    const importedFilePaths = new Set<string>();
+    for (const seq of sequences) {
+      for (const moment of seq.moments) {
+        for (const video of moment.videos) {
+          const path = (video.file as any).webkitRelativePath || (video.file as any).tauriPath || video.file.name;
+          importedFilePaths.add(path);
+        }
+      }
+    }
+    
+    // Check if any new files have GPS data (event.json)
+    let hasNewGpsData = false;
+    for (const slot of timeSlots) {
+      const files = Object.values(slot.files);
+      const firstVideo = files[0];
+      if (!firstVideo) continue;
+      
+      const videoPath = (firstVideo as any).webkitRelativePath || (firstVideo as any).tauriPath || '';
+      const normalizedVideoPath = videoPath.replace(/\\/g, '/');
+      const videoDir = normalizedVideoPath.substring(0, normalizedVideoPath.lastIndexOf('/'));
+      
+      // Find event.json in the same directory
+      const eventJson = folderStructure?.allFiles.find(f => {
+        if (f.name !== 'event.json') return false;
+        const eventPath = (f as any).webkitRelativePath || (f as any).tauriPath || '';
+        const normalizedEventPath = eventPath.replace(/\\/g, '/');
+        const eventDir = normalizedEventPath.substring(0, normalizedEventPath.lastIndexOf('/'));
+        return eventDir === videoDir;
+      });
+      
+      if (eventJson) {
+        // Check if any video from this slot is new
+        const hasNewVideo = files.some(f => {
+          const fp = (f as any).webkitRelativePath || (f as any).tauriPath || f.name;
+          return !importedFilePaths.has(fp);
+        });
+        if (hasNewVideo) {
+          hasNewGpsData = true;
+          break;
+        }
+      }
+    }
+    
+    // If adding GPS data, do full re-import of all selected files
+    // Otherwise use incremental import
+    const useFullImport = hasNewGpsData;
+    
+    // Collect files from selected time slots
+    let newFiles: File[] = [];
+    const processedDirs = new Set<string>();
+    let skippedCount = 0;
+    
+    for (const slot of timeSlots) {
+      const files = Object.values(slot.files);
+      
+      for (const file of files) {
+        const filePath = (file as any).webkitRelativePath || (file as any).tauriPath || file.name;
+        if (!useFullImport && importedFilePaths.has(filePath)) {
+          // Skip already imported files for incremental import
+          skippedCount++;
+        } else {
+          newFiles.push(file);
+        }
+      }
+      
+      // Get the directory path from the first video file to find event.json
+      if (files.length > 0) {
+        const firstVideo = files[0];
+        const videoPath = (firstVideo as any).webkitRelativePath || (firstVideo as any).tauriPath || '';
+        const normalizedVideoPath = videoPath.replace(/\\/g, '/');
+        const videoDir = normalizedVideoPath.substring(0, normalizedVideoPath.lastIndexOf('/'));
+        
+        if (!processedDirs.has(videoDir)) {
+          processedDirs.add(videoDir);
+          
+          // Find event.json in the same directory
+          const eventJson = folderStructure?.allFiles.find(f => {
+            if (f.name !== 'event.json') return false;
+            const eventPath = (f as any).webkitRelativePath || (f as any).tauriPath || '';
+            const normalizedEventPath = eventPath.replace(/\\/g, '/');
+            const eventDir = normalizedEventPath.substring(0, normalizedEventPath.lastIndexOf('/'));
+            return eventDir === videoDir;
+          });
+          
+          if (eventJson) {
+            // For full import, always add event.json
+            // For incremental, only add if there's new video in this directory
+            const shouldAddEvent = useFullImport || files.some(f => {
+              const fp = (f as any).webkitRelativePath || (f as any).tauriPath || f.name;
+              return !importedFilePaths.has(fp);
+            });
+            if (shouldAddEvent) {
+              newFiles.push(eventJson);
+            }
+          }
+        }
+      }
+    }
+    
+    // Collect existing moments from sequences that are not being replaced
+    // and whose files are still in the selection
+    const selectedTimeSlotIds = new Set(timeSlots.map(ts => {
+      // Build time slot ID from files
+      const firstFile = Object.values(ts.files)[0];
+      if (!firstFile) return '';
+      const match = firstFile.name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+      if (!match) return '';
+      const [, year, month, day, hour, minute, second] = match;
+      return `${year}-${month}-${day}_${hour}-${minute}-${second}`;
+    }).filter(Boolean));
+    
+    // Collect moments and events to keep from the sequence being updated
+    // Only for incremental import (not when adding GPS data)
+    let existingMomentsToKeep: VideoMoment[] = [];
+    let existingEventsToKeep: TeslaEvent[] = [];
+    
+    if (!useFullImport && sequenceIdToReplace) {
+      const sequenceToUpdate = sequences.find(seq => seq.id === sequenceIdToReplace);
+      if (sequenceToUpdate) {
+        // Keep the event from this sequence if it exists
+        if (sequenceToUpdate.event) {
+          existingEventsToKeep.push(sequenceToUpdate.event);
+        }
+        for (const moment of sequenceToUpdate.moments) {
+          const momentId = `${moment.date}_${moment.time.replace(/:/g, '-')}`;
+          if (selectedTimeSlotIds.has(momentId)) {
+            // This moment is still selected, keep it
+            existingMomentsToKeep.push(moment);
+          }
+        }
+      }
+    }
+    
+    // If no new files and no existing moments to keep, nothing to do
+    if (newFiles.length === 0 && existingMomentsToKeep.length === 0) {
+      setShowVideoBrowser(false);
+      return;
+    }
+    
+    // Close browser before processing
     setShowVideoBrowser(false);
+    // Mark selected slots as imported
     setIsProcessing(true);
+    
+    const totalFilesToProcess = newFiles.length + existingMomentsToKeep.length;
     setProcessingProgress({
       stage: 'scanning',
       current: 0,
-      total: files.length,
-      message: 'Scanning files...',
+      total: totalFilesToProcess,
+      message: useFullImport 
+        ? t.home.processing
+        : skippedCount > 0 
+          ? `${t.home.processing} (${skippedCount} skipped)`
+          : t.home.scanning,
     });
 
     try {
-      // Also include event.json from the same folder if available
-      const allFiles = [...files];
-      const eventJson = folderStructure?.allFiles.find(f => f.name === 'event.json');
-      if (eventJson) {
-        allFiles.push(eventJson);
+      let allMoments: VideoMoment[] = [...existingMomentsToKeep];
+      let allEvents: TeslaEvent[] = [...existingEventsToKeep];
+      
+      // Process only new files
+      if (newFiles.length > 0) {
+        const { moments: newMoments, events: newEvents } = await processFilesToMoments(newFiles, setProcessingProgress);
+        allMoments = [...allMoments, ...newMoments];
+        allEvents = [...allEvents, ...newEvents];
       }
       
-      const { moments, events } = await processFilesToMoments(allFiles, setProcessingProgress);
-      const detectedSequences = detectSequences(moments, events);
+      // Sort all moments by timestamp
+      allMoments.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
       
-      setSequences(detectedSequences);
-      if (detectedSequences.length > 0) {
-        setSelectedSequence(detectedSequences[0]);
+      const detectedSequences = detectSequences(allMoments, allEvents);
+      
+      if (sequenceIdToReplace && sequences.length > 0) {
+        // Replace only the specified sequence, keep others
+        // Note: detectedSequences may contain multiple sequences if selected videos are not continuous
+        
+        // Build new sequences: keep non-replaced sequences + all newly detected sequences
+        const keptSequences = sequences.filter(seq => 
+          seq.id !== sequenceIdToReplace
+        );
+        
+        // Combine kept sequences with all detected sequences
+        let newSequences: VideoSequence[] = [...keptSequences, ...detectedSequences];
+        
+        // Remove duplicates by ID
+        const seenIds = new Set<string>();
+        newSequences = newSequences.filter(seq => {
+          if (seenIds.has(seq.id)) return false;
+          seenIds.add(seq.id);
+          return true;
+        });
+        
+        // Check containment and remove contained sequences iteratively until stable
+        // This handles cases like: A contains B, B contains C, etc.
+        let changed = true;
+        while (changed) {
+          changed = false;
+          const filtered: VideoSequence[] = [];
+          for (const seq of newSequences) {
+            // Check if this sequence is contained by any other sequence in the list
+            const isContained = newSequences.some(other => 
+              other.id !== seq.id && sequenceContains(other, seq)
+            );
+            if (!isContained) {
+              filtered.push(seq);
+            } else {
+              changed = true;
+            }
+          }
+          newSequences = filtered;
+        }
+        
+        setSequences(newSequences);
+        
+        // Keep current selection if it's not the replaced sequence
+        // Otherwise update to the replacement sequence
+        const currentSelectedId = selectedSequence?.id;
+        if (currentSelectedId && currentSelectedId !== sequenceIdToReplace) {
+          // Current selection is not the replaced one, keep it (if still exists)
+          const stillExists = newSequences.some(seq => seq.id === currentSelectedId);
+          if (!stillExists && newSequences.length > 0) {
+            // Current selection was removed (contained by another), select first
+            setSelectedSequence(newSequences[0]);
+          }
+          // Otherwise keep current selection (already in state)
+        } else if (currentSelectedId === sequenceIdToReplace) {
+          // Current selection was replaced, update to replacement
+          const replacementInNew = newSequences.find(seq => 
+            detectedSequences.some(ds => ds.id === seq.id)
+          );
+          if (replacementInNew) {
+            setSelectedSequence(replacementInNew);
+          } else if (newSequences.length > 0) {
+            setSelectedSequence(newSequences[0]);
+          }
+        }
+        // If no current selection, don't auto-select (keep as is)
+      } else {
+        // No sequence to replace, set all detected sequences
+        setSequences(detectedSequences);
+        // Only auto-select if nothing is currently selected
+        if (!selectedSequence && detectedSequences.length > 0) {
+          setSelectedSequence(detectedSequences[0]);
+        }
       }
     } catch (error) {
       console.error('Error processing videos:', error);
     } finally {
       setIsProcessing(false);
     }
-  }, [folderStructure]);
+  }, [folderStructure, sequences, selectedSequence]);
 
   const handleClear = useCallback(() => {
     setSequences([]);
     setSelectedSequence(null);
     setFolderStructure(null);
+    setSelectedTimeSlotIds(new Set());
+
+  }, []);
+
+  // Delete a specific sequence
+  const handleDeleteSequence = useCallback((sequenceId: string) => {
+    setSequences(prev => {
+      const newSequences = prev.filter(seq => seq.id !== sequenceId);
+      // Update selected sequence if the deleted one was selected
+      if (selectedSequence?.id === sequenceId) {
+        setSelectedSequence(newSequences.length > 0 ? newSequences[0] : null);
+      }
+      return newSequences;
+    });
+  }, [selectedSequence]);
+
+  // Check if sequence A contains all moments of sequence B
+  const sequenceContains = useCallback((container: VideoSequence, contained: VideoSequence): boolean => {
+    if (contained.moments.length === 0) return true;
+    if (container.moments.length < contained.moments.length) return false;
+    // Build a set of moment IDs from container (use moment.id for accuracy)
+    const containerMomentIds = new Set(container.moments.map(m => m.id));
+    // Check if all moments of contained are in container
+    return contained.moments.every(m => containerMomentIds.has(m.id));
   }, []);
 
   return (
@@ -147,7 +412,7 @@ export default function Home() {
         {sequences.length === 0 ? (
           /* Empty State */
           <div className="max-w-4xl mx-auto">
-            <DropZone onFilesAdded={handleFilesAdded} hasVideos={false} />
+            <DropZone onFilesAdded={handleFilesAdded} hasVideos={false} onScanProgress={handleScanProgress} />
 
             {/* Features */}
             <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -158,8 +423,8 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
-                <h3 className="font-semibold mb-1">100% Private</h3>
-                <p className="text-sm text-gray-500">Everything runs in your browser. No uploads, no servers, no tracking.</p>
+                <h3 className="font-semibold mb-1">100% {language === 'zh' ? '私密' : 'Private'}</h3>
+                <p className="text-sm text-gray-500">{language === 'zh' ? '所有处理在您设备内完成。无上传，无服务器，无追踪' : 'Everything runs locally on your device. No uploads, no servers, no tracking.'}</p>
               </div>
 
               {/* Seamless Playback */}
@@ -176,8 +441,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold mb-1">Seamless Playback</h3>
-                  <p className="text-sm text-gray-500">Consecutive clips merged into continuous video</p>
+                  <h3 className="font-semibold mb-1">{language === 'zh' ? '无缝播放' : 'Seamless Playback'}</h3>
+                  <p className="text-sm text-gray-500">{language === 'zh' ? '连续片段合并为流畅视频' : 'Consecutive clips merged into continuous video'}</p>
                 </div>
               </div>
 
@@ -194,8 +459,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold mb-1">Live Telemetry</h3>
-                  <p className="text-sm text-gray-500">Speed, GPS, steering angle, and G-forces overlaid in real-time</p>
+                  <h3 className="font-semibold mb-1">{t.home.features.liveTelemetry.title}</h3>
+                  <p className="text-sm text-gray-500">{t.home.features.liveTelemetry.desc}</p>
                 </div>
               </div>
 
@@ -212,8 +477,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold mb-1">All 6 Cameras</h3>
-                  <p className="text-sm text-gray-500">Front, rear, repeaters, and pillars with flexible layouts</p>
+                  <h3 className="font-semibold mb-1">{t.home.features.all6Cameras.title}</h3>
+                  <p className="text-sm text-gray-500">{t.home.features.all6Cameras.desc}</p>
                 </div>
               </div>
 
@@ -231,8 +496,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold mb-1">Interactive Map</h3>
-                  <p className="text-sm text-gray-500">Live GPS tracking synced with video playback</p>
+                  <h3 className="font-semibold mb-1">{t.home.features.interactiveMap.title}</h3>
+                  <p className="text-sm text-gray-500">{t.home.features.interactiveMap.desc}</p>
                 </div>
               </div>
 
@@ -249,8 +514,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold mb-1">Event Timeline</h3>
-                  <p className="text-sm text-gray-500">Visual timeline showing brake, gas, blinkers, and steering</p>
+                  <h3 className="font-semibold mb-1">{t.home.features.eventTimeline.title}</h3>
+                  <p className="text-sm text-gray-500">{t.home.features.eventTimeline.desc}</p>
                 </div>
               </div>
 
@@ -267,8 +532,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold mb-1">Video Editor</h3>
-                  <p className="text-sm text-gray-500">Trim with in/out points and switch cameras at any time</p>
+                  <h3 className="font-semibold mb-1">{t.home.features.videoEditor.title}</h3>
+                  <p className="text-sm text-gray-500">{t.home.features.videoEditor.desc}</p>
                 </div>
               </div>
 
@@ -285,8 +550,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold mb-1">Camera Track</h3>
-                  <p className="text-sm text-gray-500">Define which camera to show at each moment in the timeline</p>
+                  <h3 className="font-semibold mb-1">{t.home.features.cameraTrack.title}</h3>
+                  <p className="text-sm text-gray-500">{t.home.features.cameraTrack.desc}</p>
                 </div>
               </div>
 
@@ -297,8 +562,8 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
                 </div>
-                <h3 className="font-semibold mb-1">Video Export</h3>
-                <p className="text-sm text-gray-500">Export trimmed clips with overlays and camera switches</p>
+                <h3 className="font-semibold mb-1">{t.home.features.videoExport.title}</h3>
+                <p className="text-sm text-gray-500">{t.home.features.videoExport.desc}</p>
               </div>
 
             </div>
@@ -306,14 +571,14 @@ export default function Home() {
             {/* Credits */}
             <div className="mt-16 pt-8 border-t border-gray-800 text-center">
               <p className="text-xs text-gray-600">
-                MIT licensed ·{' '}
+                {t.footer.mitLicense} ·{' '}
                 <button
-                  onClick={() => openExternalLink('https://github.com/nobig-deals/exportdash.cam')}
+                  onClick={() => openExternalLink('https://github.com/BlueBlue7891/exportdash.cam')}
                   className="text-gray-500 hover:text-gray-400 underline underline-offset-2 bg-transparent border-none cursor-pointer"
                 >
-                  Open Source on GitHub
+                  {t.footer.openSource}
                 </button>
-                {' '}· 100% built with{' '}
+                {' '}· {t.footer.builtWith}{' '}
                 <button
                   onClick={() => openExternalLink('https://claude.ai/code')}
                   className="text-gray-500 hover:text-gray-400 relative pl-5 bg-transparent border-none cursor-pointer"
@@ -323,16 +588,39 @@ export default function Home() {
                   </svg>
                   Claude Code
                 </button>
+                ,{' '}
+                <button
+                  onClick={() => openExternalLink('https://www.kimi.com/code')}
+                  className="text-gray-500 hover:text-gray-400 bg-transparent border-none cursor-pointer"
+                >
+                  Kimi K2.5
+                </button>
+                {' '}{t.common.and}{' '}
+                <button
+                  onClick={() => openExternalLink('https://minimaxi.com/')}
+                  className="text-gray-500 hover:text-gray-400 bg-transparent border-none cursor-pointer"
+                >
+                  MiniMax M2.5
+                </button>
               </p>
               <p className="mt-2 text-xs text-gray-600">
-                Uses{' '}
+                {t.footer.forkedFrom}{' '}
+                <button
+                  onClick={() => openExternalLink('https://github.com/nobig-deals/exportdash.cam')}
+                  className="text-gray-500 hover:text-gray-400 underline underline-offset-2 bg-transparent border-none cursor-pointer"
+                >
+                  nobig-deals/exportdash.cam
+                </button>
+              </p>
+              <p className="mt-2 text-xs text-gray-600">
+                {t.footer.uses}{' '}
                 <button
                   onClick={() => openExternalLink('https://github.com/teslamotors/dashcam')}
                   className="text-gray-500 hover:text-gray-400 underline underline-offset-2 bg-transparent border-none cursor-pointer"
                 >
-                  Tesla&apos;s SEI metadata spec
+                  {t.footer.teslaSpec}
                 </button>
-                {' '}· Inspired by{' '}
+                {' '}· {t.footer.inspiredBy}{' '}
                 <button
                   onClick={() => openExternalLink('https://viewdash.cam/')}
                   className="text-gray-500 hover:text-gray-400 underline underline-offset-2 bg-transparent border-none cursor-pointer"
@@ -343,12 +631,12 @@ export default function Home() {
 
               {/* CTA */}
               <p className="mt-6 text-xs text-gray-600">
-                Got an idea? Looking for a skilled AI-native team?{' '}
+                {t.footer.cta}{' '}
                 <button
                   onClick={() => openExternalLink('https://nobig.deals')}
                   className="text-gray-400 hover:text-gray-300 underline underline-offset-2 bg-transparent border-none cursor-pointer"
                 >
-                  Drop us a message →
+                  {t.footer.contact}
                 </button>
               </p>
             </div>
@@ -360,6 +648,7 @@ export default function Home() {
             selectedSequence={selectedSequence}
             onSelectSequence={setSelectedSequence}
             onClear={handleClear}
+            onDeleteSequence={handleDeleteSequence}
             onAddFiles={handleFilesAdded}
             folderStructure={folderStructure}
             onOpenVideoBrowser={() => setShowVideoBrowser(true)}
@@ -372,6 +661,10 @@ export default function Home() {
             folderStructure={folderStructure}
             onSelectTimeSlot={handleSelectTimeSlot}
             onClose={() => setShowVideoBrowser(false)}
+            selectedTimeSlotIds={selectedTimeSlotIds}
+            onSelectionChange={setSelectedTimeSlotIds}
+            onClear={handleClear}
+            currentSequence={selectedSequence}
           />
         )}
       </main>

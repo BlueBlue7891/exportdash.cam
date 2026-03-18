@@ -124,3 +124,86 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .leaflet-tile-pane {
   filter: saturate(0.8) brightness(0.95);
 }
+
+/* PiP camera switch flash animation */
+@keyframes pipFlash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.8);
+    border-color: rgba(34, 197, 94, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(34, 197, 94, 0.6);
+    border-color: rgba(34, 197, 94, 1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.animate-pipFlash {
+  animation: pipFlash 600ms ease-out forwards;
+}
+
+/* PiP corner breathing glow animation - when corner matches main view */
+@keyframes pipGlow {
+  0% {
+    box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.4);
+    border-color: rgba(34, 197, 94, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 15px 3px rgba(34, 197, 94, 0.7);
+    border-color: rgba(34, 197, 94, 1);
+  }
+  100% {
+    box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.4);
+    border-color: rgba(34, 197, 94, 0.6);
+  }
+}
+
+.animate-pipGlow {
+  animation: pipGlow 2s ease-in-out infinite;
+}
+
+/* Fade in animation for single view angle label */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px) scale(0.9);
+  }
+  60% {
+    opacity: 0.8;
+    transform: translateX(-50%) translateY(-2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 500ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* PiP swap animations */
+@keyframes pipSwapOut {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.18);
+    opacity: 0.3;
+  }
+}
+
+@keyframes pipSwapIn {
+  0% {
+    transform: scale(0.18);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

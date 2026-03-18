@@ -1,20 +1,22 @@
 'use client';
 
 import { ProcessingProgress } from '@/types/video';
+import { useLanguage } from '@/lib/i18n';
 
 interface LoadingScreenProps {
   progress: ProcessingProgress;
 }
 
-const STAGES = [
-  { id: 'scanning', label: 'Scanning', description: 'Finding video files' },
-  { id: 'metadata', label: 'Processing', description: 'Extracting metadata' },
-  { id: 'ready', label: 'Ready', description: 'Preparing playback' },
-] as const;
-
 export function LoadingScreen({ progress }: LoadingScreenProps) {
+  const { t } = useLanguage();
   const { stage, current, total, message } = progress;
   const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+
+  const STAGES = [
+    { id: 'scanning', label: t.home.scanning, description: t.home.scanning },
+    { id: 'metadata', label: t.common.loading, description: t.common.loading },
+    { id: 'ready', label: t.common.done, description: t.common.done },
+  ] as const;
 
   // Find current stage index
   const currentStageIndex = STAGES.findIndex(s => s.id === stage);
@@ -29,9 +31,9 @@ export function LoadingScreen({ progress }: LoadingScreenProps) {
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-white">Processing Videos</h2>
+          <h2 className="text-xl font-semibold text-white">{t.home.processing}</h2>
           <p className="text-gray-400 text-sm mt-1">
-            {message || 'Please wait while we prepare your footage...'}
+            {message || t.common.loading}
           </p>
         </div>
 
@@ -39,7 +41,7 @@ export function LoadingScreen({ progress }: LoadingScreenProps) {
         <div className="mb-6">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-gray-400">
-              {current} of {total} files
+              {current} / {total} {t.browser.files}
             </span>
             <span className="text-gray-300 font-medium">{percentage}%</span>
           </div>
@@ -127,7 +129,7 @@ export function LoadingScreen({ progress }: LoadingScreenProps) {
         {/* Tip */}
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
-            Tip: For best results, drop entire folders from your Tesla USB drive
+            {t.home.dragDrop}
           </p>
         </div>
       </div>

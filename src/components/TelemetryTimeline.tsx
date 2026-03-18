@@ -1,9 +1,177 @@
 'use client';
 
-import { useMemo, useRef, useCallback, useEffect, useState } from 'react';
+import { useMemo, useRef, useCallback, useEffect, useState, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import Image from 'next/image';
+import { IconArrowUp, IconArrowDown, IconArrowDownLeft, IconArrowDownRight, IconArrowLeft, IconArrowRight } from '@tabler/icons-react';
 import { SeiWithFrameIndex } from '@/lib/dashcam-mp4';
 import { TrimPoints, CameraSegment, ANGLE_COLORS, ANGLE_LABELS, TeslaEvent } from '@/types/video';
 import { Tooltip } from './Tooltip';
+import { useLanguage, Translations } from '@/lib/i18n';
+
+// Camera angle icons for track labels
+const ANGLE_ICONS: Record<string, ReactNode> = {
+  front: <IconArrowUp size={10} />,
+  back: <IconArrowDown size={10} />,
+  left_repeater: <IconArrowDownLeft size={10} />,
+  right_repeater: <IconArrowDownRight size={10} />,
+  left_pillar: <IconArrowLeft size={10} />,
+  right_pillar: <IconArrowRight size={10} />,
+};
+
+// Helper function to merge adjacent segments with the angle
+function mergeAdjacentSegments(segments: CameraSegment[]): CameraSegment[] {
+  if (segments.length <= 1) return segments;
+  
+  const merged: CameraSegment[] = [];
+  for (const seg of segments) {
+    const last = merged[merged.length - 1];
+    if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
+      last.endTime = seg.endTime;
+    } else {
+      merged.push({ ...seg });
+    }
+  }
+  return merged;
+}
+
+// Helper function to get translated event reason
+function getTranslatedReason(reason: string, t: Translations): string {
+  // Map snake_case reasons to translation keys
+  const reasonMap: Record<string, string> = {
+    'user_interaction_dashcam_multifunction_selected': t.eventReasons.userInteractionDashcamMultifunctionSelected,
+    'user_interaction_dashcam_icon_tapped': t.eventReasons.userInteractionDashcamIconTapped,
+    'user_interaction_dashcam_launcher_action_tapped': t.eventReasons.userInteractionDashcamLauncherActionTapped,
+    'user_interaction_honk': t.eventReasons.userInteractionHonk,
+    'sentry_aware_object_detection': t.eventReasons.sentryAwareObjectDetection,
+    'sentry_aware_accel': t.eventReasons.sentryAwareAccel,
+    'sentry_aware_intrusion': t.eventReasons.sentryAwareIntrusion,
+    'sentry_aware_proximity': t.eventReasons.sentryAwareProximity,
+    'sentry_ion': t.eventReasons.sentryIon,
+    'sentry_ioff': t.eventReasons.sentryIoff,
+    'dashcam_clip_request': t.eventReasons.dashcamClipRequest,
+    'emergency_braking': t.eventReasons.emergencyBraking,
+    'forward_collision_warning': t.eventReasons.forwardCollisionWarning,
+    'auto_emergency_braking': t.eventReasons.autoEmergencyBraking,
+    'ap_forward_collision': t.eventReasons.apForwardCollision,
+  };
+
+  // Check exact match first
+  if (reasonMap[reason]) {
+    return reasonMap[reason];
+  }
+
+  // Handle sentry_panic_accel_* pattern
+  const panicAccelMatch = reason.match(/^sentry_panic_accel_([\d.]+)$/);
+  if (panicAccelMatch) {
+    const gForce = parseFloat(panicAccelMatch[1]);
+    return t.eventReasons.sentryPanicAccel(gForce);
+  }
+
+  // Handle sentry_panic_* patterns
+  if (reason.startsWith('sentry_panic_')) {
+    const panicType = reason.replace('sentry_panic_', '');
+    return t.eventReasons.sentryPanic(panicType);
+  }
+
+  // Fallback: format the reason string
+  return reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Event Tooltip Component with fixed positioning to avoid clipping
+interface EventTooltipProps {
+  event: TeslaEvent;
+  markerRect: DOMRect | null;
+}
+
+function EventTooltip({ event, markerRect }: EventTooltipProps) {
+  const { t } = useLanguage();
+  const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      setTooltipRect(contentRef.current.getBoundingClientRect());
+    }
+  }, []);
+
+  if (!markerRect) return null;
+
+  const tooltipWidth = tooltipRect?.width ?? 200;
+  const tooltipHeight = tooltipRect?.height ?? 60;
+  const padding = 8;
+  const shiftOffset = 24; // 24px shift for left/right alignment
+  
+  // Calculate marker center
+  const markerCenterX = markerRect.left + markerRect.width / 2;
+  // The diamond tip is visually near the top of the marker element
+  const markerTipY = markerRect.top + 4; // Approximate tip position
+  
+  // Determine horizontal alignment based on viewport edges
+  let left: number;
+  let align: 'left' | 'center' | 'right' = 'center';
+  
+  const wouldClipLeft = markerCenterX - tooltipWidth / 2 < padding;
+  const wouldClipRight = markerCenterX + tooltipWidth / 2 > window.innerWidth - padding;
+  
+  if (wouldClipLeft) {
+    // Left align: shift left by 10px
+    left = Math.max(padding, markerCenterX - tooltipWidth + shiftOffset);
+    align = 'left';
+  } else if (wouldClipRight) {
+    // Right align: shift right by 10px
+    left = Math.min(window.innerWidth - tooltipWidth - padding, markerCenterX - shiftOffset);
+    align = 'right';
+  } else {
+    // Center align
+    left = markerCenterX - tooltipWidth / 2;
+    align = 'center';
+  }
+  
+  // Position tooltip arrow to align with diamond tip
+  // Arrow tip is at: top + tooltipHeight - 4 (arrow offset)
+  // We want this to equal markerTipY - shiftOffset (shift up by 10px)
+  const top = markerTipY - shiftOffset - tooltipHeight + 2; // +4 for arrow, -2 for fine tuning
+
+  // Arrow position: point to the diamond
+  const arrowX = markerCenterX - left;
+  const arrowPadding = 12;
+  const arrowLeft = {
+    left: Math.min(Math.max(arrowX, arrowPadding), tooltipWidth - arrowPadding),
+    center: tooltipWidth / 2,
+    right: Math.min(Math.max(arrowX, arrowPadding), tooltipWidth - arrowPadding),
+  };
+
+  // Get translated reason
+  const translatedReason = getTranslatedReason(event.reason, t);
+
+  return createPortal(
+    <div 
+      className="fixed pointer-events-none z-[9999]"
+      style={{ left, top }}
+    >
+      <div 
+        ref={contentRef}
+        className="bg-gray-900/30 backdrop-blur-sm border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap"
+      >
+        <div className="font-semibold text-orange-400">{translatedReason}</div>
+        {(event.city || event.street) && (
+          <div className="text-gray-400 mt-0.5">
+            {[event.street, event.city].filter(Boolean).join(', ')}
+          </div>
+        )}
+        <div className="text-gray-500 mt-0.5 text-[10px]">
+          {event.timestamp.toLocaleTimeString('en-US', { hour12: false })}
+        </div>
+      </div>
+      <div 
+        className="absolute w-2 h-2 bg-gray-900/95 border-r border-b border-orange-500/40 rotate-45 -bottom-1"
+        style={{ left: arrowLeft[align] - 4 }}
+      />
+    </div>,
+    document.body
+  );
+}
 
 interface TelemetryTimelineProps {
   allSeiMessages: SeiWithFrameIndex[];
@@ -26,6 +194,14 @@ interface TelemetryTimelineProps {
   onCameraSegmentsChange?: (segments: CameraSegment[]) => void;
   selectedAngle?: string;
   availableAngles?: string[];  // For drag-drop palette
+  // When true, hide event tooltip (e.g., when Video Files panel is open)
+  disableEventTooltip?: boolean;
+  // When false, hide event marker on timeline
+  showEventMarker?: boolean;
+  // Triple view compatibility
+  layout?: 'single' | 'pip' | 'triple' | 'all';
+  tripleViewAngles?: string[];
+  hasCustomCameraTrack?: boolean;
 }
 
 interface EventSegment {
@@ -61,7 +237,13 @@ export function TelemetryTimeline({
   onCameraSegmentsChange,
   selectedAngle,
   availableAngles = [],
+  disableEventTooltip = false,
+  showEventMarker = true,
+  layout = 'single',
+  tripleViewAngles = [],
+  hasCustomCameraTrack = false,
 }: TelemetryTimelineProps) {
+  const { t } = useLanguage();
   // Process telemetry data into timeline tracks
   const tracks = useMemo((): TrackData[] => {
     if (allSeiMessages.length === 0 || fps <= 0) return [];
@@ -133,39 +315,39 @@ export function TelemetryTimeline({
     return [
       {
         id: 'gas',
-        label: 'Gas',
+        label: t.telemetry.gas,
         color: '#22c55e', // green
         segments: buildIntensitySegments((msg) => {
           const val = msg.sei.accelerator_pedal_position || 0;
           return val > 1 ? val / 100 : val; // Normalize to 0-1
-        }),
+        }, 0.05), 
       },
       {
         id: 'brake',
-        label: 'Brake',
+        label: t.telemetry.brake,
         color: '#ef4444', // red
         segments: buildBooleanSegments((msg) => msg.sei.brake_applied === true),
       },
       {
         id: 'left-blinker',
-        label: 'Left',
+        label: t.telemetry.left,
         color: '#f59e0b', // amber
         segments: buildBooleanSegments((msg) => msg.sei.blinker_on_left === true),
       },
       {
         id: 'right-blinker',
-        label: 'Right',
+        label: t.telemetry.right,
         color: '#f59e0b', // amber
         segments: buildBooleanSegments((msg) => msg.sei.blinker_on_right === true),
       },
       {
         id: 'steering',
-        label: 'Steer',
+        label: t.telemetry.steer,
         color: '#3b82f6', // blue
         segments: buildIntensitySegments((msg) => {
           const angle = Math.abs(msg.sei.steering_wheel_angle || 0);
           return Math.min(1, angle / 180); // Normalize to 0-1 (180° = full)
-        }, 0.1),
+        }, 0.005),
       },
     ];
   }, [allSeiMessages, fps]);
@@ -183,21 +365,38 @@ export function TelemetryTimeline({
   const eventAbsoluteTime = useMemo(() => {
     if (!event || !sequenceStartTime) return null;
     const offsetSeconds = (event.timestamp.getTime() - sequenceStartTime.getTime()) / 1000;
-    if (offsetSeconds < 0 || offsetSeconds > duration) return null;
     return offsetSeconds;
-  }, [event, sequenceStartTime, duration]);
+  }, [event, sequenceStartTime]);
+
+  // Calculate view bounds based on trim state
+  const trimStart = trimPoints?.inPoint ?? 0;
+  const trimEnd = trimPoints?.outPoint ?? duration;
+  
+  // Check if event marker is outside video duration (after video end)
+  const isEventAfterVideoEnd = eventAbsoluteTime !== null && eventAbsoluteTime > duration;
+  // Check if event marker is before video start
+  const isEventBeforeVideoStart = eventAbsoluteTime !== null && eventAbsoluteTime < 0;
+  // Event is outside normal video range
+  const isEventOutsideRange = isEventAfterVideoEnd || isEventBeforeVideoStart;
+  
+  // Calculate view bounds
+  // When event is outside video range and marker is visible, extend view to include it
+  // without adding extra buffer - this ensures the timeline scales to fit everything
+  const viewStart = isTrimming ? 0 : trimStart;
+  let viewEnd = isTrimming 
+    ? (isEventOutsideRange && showEventMarker ? Math.max(duration, eventAbsoluteTime!) : duration)
+    : (isEventOutsideRange && showEventMarker ? Math.max(trimEnd, eventAbsoluteTime!) : trimEnd);
+  
+  const viewDuration = viewEnd - viewStart;
 
   const [showEventTooltip, setShowEventTooltip] = useState(false);
+  const [markerRect, setMarkerRect] = useState<DOMRect | null>(null);
+  const eventMarkerRef = useRef<HTMLDivElement>(null);
 
   // Notify parent when dragging state changes
   useEffect(() => {
     onDraggingChange?.(isDragging || draggingTrimHandle !== null || draggingSegmentBoundary !== null);
   }, [isDragging, draggingTrimHandle, draggingSegmentBoundary, onDraggingChange]);
-
-  // Calculate view bounds based on trim state
-  const viewStart = isTrimming ? 0 : (trimPoints?.inPoint ?? 0);
-  const viewEnd = isTrimming ? duration : (trimPoints?.outPoint ?? duration);
-  const viewDuration = viewEnd - viewStart;
 
   // Calculate time from mouse position (view-aware)
   const getTimeFromEvent = useCallback((clientX: number): number => {
@@ -210,6 +409,11 @@ export function TelemetryTimeline({
 
   // Handle mouse down - start dragging
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Don't start dragging if clicking on interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-no-seek]')) {
+      return;
+    }
     e.preventDefault();
     setIsDragging(true);
     const time = getTimeFromEvent(e.clientX);
@@ -218,6 +422,11 @@ export function TelemetryTimeline({
 
   // Handle touch start - start dragging
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    // Don't start dragging if touching interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-no-seek]')) {
+      return;
+    }
     setIsDragging(true);
     const time = getTimeFromEvent(e.touches[0].clientX);
     onSeek(time);
@@ -246,25 +455,49 @@ export function TelemetryTimeline({
         // Preview video at the trim position
         onTrimPreview?.(previewTime);
       } else if (draggingSegmentBoundary !== null && onCameraSegmentsChange) {
-        // Dragging a segment boundary - adjust the start time of this segment (and end time of previous)
+        // Dragging a segment boundary - allow merging by dragging to edges
         const segIdx = draggingSegmentBoundary;
         if (segIdx > 0 && segIdx < cameraSegments.length) {
           const prevSeg = cameraSegments[segIdx - 1];
           const currSeg = cameraSegments[segIdx];
-          // Boundary can't go before previous segment's start + 0.5s or after current segment's end - 0.5s
-          const minTime = prevSeg.startTime + 0.5;
-          const maxTime = currSeg.endTime - 0.5;
+          // Allow boundary to go all the way to previous segment's start or current segment's end
+          // This enables one segment to completely cover another
+          const minTime = prevSeg.startTime;
+          const maxTime = currSeg.endTime;
           const newBoundary = Math.max(minTime, Math.min(maxTime, time));
 
-          const newSegments = cameraSegments.map((seg, idx) => {
-            if (idx === segIdx - 1) {
-              return { ...seg, endTime: newBoundary };
-            } else if (idx === segIdx) {
-              return { ...seg, startTime: newBoundary };
-            }
-            return seg;
-          });
-          onCameraSegmentsChange(newSegments);
+          // If dragged to the edge, merge the segments based on direction
+          if (newBoundary <= prevSeg.startTime) {
+            // Dragged all the way left - current (right) segment wins, remove previous
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                // This was the current segment, now extends to cover previous
+                return { ...seg, startTime: prevSeg.startTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+          } else if (newBoundary >= currSeg.endTime) {
+            // Dragged all the way right - previous (left) segment wins, remove current
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: currSeg.endTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+          } else {
+            const newSegments = cameraSegments.map((seg, idx) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: newBoundary };
+              } else if (idx === segIdx) {
+                return { ...seg, startTime: newBoundary };
+              }
+              return seg;
+            });
+            // Check if the two segments now have the same angle and should be merged
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+          }
           onTrimPreview?.(newBoundary);
         }
       } else if (isDragging) {
@@ -292,19 +525,40 @@ export function TelemetryTimeline({
         if (segIdx > 0 && segIdx < cameraSegments.length) {
           const prevSeg = cameraSegments[segIdx - 1];
           const currSeg = cameraSegments[segIdx];
-          const minTime = prevSeg.startTime + 0.5;
-          const maxTime = currSeg.endTime - 0.5;
+          const minTime = prevSeg.startTime;
+          const maxTime = currSeg.endTime;
           const newBoundary = Math.max(minTime, Math.min(maxTime, time));
 
-          const newSegments = cameraSegments.map((seg, idx) => {
-            if (idx === segIdx - 1) {
-              return { ...seg, endTime: newBoundary };
-            } else if (idx === segIdx) {
-              return { ...seg, startTime: newBoundary };
-            }
-            return seg;
-          });
-          onCameraSegmentsChange(newSegments);
+          if (newBoundary <= prevSeg.startTime) {
+            // Dragged all the way left - current (right) segment wins
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, startTime: prevSeg.startTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+          } else if (newBoundary >= currSeg.endTime) {
+            // Dragged all the way right - previous (left) segment wins
+            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: currSeg.endTime };
+              }
+              return seg;
+            });
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+          } else {
+            const newSegments = cameraSegments.map((seg, idx) => {
+              if (idx === segIdx - 1) {
+                return { ...seg, endTime: newBoundary };
+              } else if (idx === segIdx) {
+                return { ...seg, startTime: newBoundary };
+              }
+              return seg;
+            });
+            // Check if the two segments now have the same angle and should be merged
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+          }
           onTrimPreview?.(newBoundary);
         }
       } else if (isDragging) {
@@ -349,22 +603,48 @@ export function TelemetryTimeline({
     setDraggingSegmentBoundary(segmentIndex);
   }, []);
 
-  // Handle segment boundary double-click to remove
-  const handleSegmentBoundaryDoubleClick = useCallback((segmentIndex: number) => (e: React.MouseEvent) => {
+  // Handle segment double-click to remove (merge with adjacent)
+  const handleSegmentDoubleClick = useCallback((segmentIndex: number) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!onCameraSegmentsChange || segmentIndex <= 0 || segmentIndex >= cameraSegments.length) return;
+    if (!onCameraSegmentsChange || cameraSegments.length <= 1) return;
 
-    // Merge this segment with the previous one (remove the boundary)
-    const newSegments = cameraSegments.filter((_, idx) => idx !== segmentIndex).map((seg, idx, arr) => {
-      // Extend the previous segment to cover the removed one's time
-      if (idx === segmentIndex - 1) {
-        const removedSeg = cameraSegments[segmentIndex];
-        return { ...seg, endTime: removedSeg.endTime };
-      }
-      return seg;
-    });
-    onCameraSegmentsChange(newSegments);
+    // Cannot remove the only segment
+    if (cameraSegments.length === 1) return;
+
+    const targetSeg = cameraSegments[segmentIndex];
+    let newSegments: CameraSegment[];
+
+    if (segmentIndex === 0) {
+      // First segment: merge with next, keep next segment's angle but extend backwards
+      const nextSeg = cameraSegments[1];
+      newSegments = cameraSegments.filter((_, idx) => idx !== 0).map((seg, idx) => {
+        if (idx === 0) {
+          return { ...seg, startTime: targetSeg.startTime };
+        }
+        return seg;
+      });
+    } else if (segmentIndex === cameraSegments.length - 1) {
+      // Last segment: merge with previous, extend previous segment
+      const prevSeg = cameraSegments[segmentIndex - 1];
+      newSegments = cameraSegments.filter((_, idx) => idx !== segmentIndex).map((seg, idx) => {
+        if (idx === segmentIndex - 1) {
+          return { ...seg, endTime: targetSeg.endTime };
+        }
+        return seg;
+      });
+    } else {
+      // Middle segment: merge with previous by extending previous to cover this one
+      newSegments = cameraSegments.filter((_, idx) => idx !== segmentIndex).map((seg, idx, arr) => {
+        if (idx === segmentIndex - 1) {
+          return { ...seg, endTime: targetSeg.endTime };
+        }
+        return seg;
+      });
+    }
+    
+    // Merge adjacent segments with same angle
+    onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
   }, [cameraSegments, onCameraSegmentsChange]);
 
   // Handle segment click to change its angle
@@ -381,16 +661,7 @@ export function TelemetryTimeline({
     });
 
     // Merge adjacent segments with the same angle
-    const merged: CameraSegment[] = [];
-    for (const seg of newSegments) {
-      const last = merged[merged.length - 1];
-      if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
-        last.endTime = seg.endTime;
-      } else {
-        merged.push({ ...seg });
-      }
-    }
-    onCameraSegmentsChange(merged);
+    onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
   }, [cameraSegments, onCameraSegmentsChange]);
 
   // Handle drag start from angle palette
@@ -403,15 +674,32 @@ export function TelemetryTimeline({
   const handleCameraTrackDrop = useCallback((e: React.MouseEvent) => {
     if (!draggingAngle || !cameraTrackRef.current || !onCameraSegmentsChange || !trimPoints) return;
 
-    const rect = cameraTrackRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, x / rect.width));
+    let dropTime: number;
+    
+    // Check if playhead is at the edges (within 0.5s of start or end)
+    const isAtStart = currentTime <= trimPoints.inPoint + 0.5;
+    const isAtEnd = currentTime >= trimPoints.outPoint - 0.5;
+    
+    // Check if playhead is at a segment boundary (within 0.3s of any boundary)
+    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+    const isAtBoundary = boundaries.some(boundary => Math.abs(currentTime - boundary) < 0.3);
+    
+    const isFreeDropMode = isAtStart || isAtEnd || isAtBoundary;
 
-    // Calculate time relative to trimmed portion
-    const trimStart = trimPoints.inPoint;
-    const trimEnd = trimPoints.outPoint;
-    const trimDuration = trimEnd - trimStart;
-    const dropTime = trimStart + (percentage * trimDuration);
+    if (isFreeDropMode) {
+      // Free drop mode: use mouse position for drop location
+      const rect = cameraTrackRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, x / rect.width));
+      
+      const trimStart = trimPoints.inPoint;
+      const trimEnd = trimPoints.outPoint;
+      const trimDuration = trimEnd - trimStart;
+      dropTime = trimStart + (percentage * trimDuration);
+    } else {
+      // Fixed mode: use current playhead position
+      dropTime = Math.max(trimPoints.inPoint, Math.min(trimPoints.outPoint, currentTime));
+    }
 
     // Find which segment was dropped on and split it
     const segIdx = cameraSegments.findIndex(
@@ -430,9 +718,10 @@ export function TelemetryTimeline({
       const newSegments = cameraSegments.map((seg, idx) =>
         idx === segIdx ? { ...seg, angle: draggingAngle } : seg
       );
-      onCameraSegmentsChange(newSegments);
+      // Merge adjacent segments with the same angle
+      onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
     } else {
-      // Split the segment
+      // Split the segment at drop position
       const newSegments = [...cameraSegments];
       newSegments.splice(segIdx, 1,
         { startTime: clickedSegment.startTime, endTime: dropTime, angle: clickedSegment.angle },
@@ -440,20 +729,14 @@ export function TelemetryTimeline({
       );
 
       // Merge adjacent segments with same angle
-      const merged: CameraSegment[] = [];
-      for (const seg of newSegments) {
-        const last = merged[merged.length - 1];
-        if (last && last.angle === seg.angle && Math.abs(last.endTime - seg.startTime) < 0.1) {
-          last.endTime = seg.endTime;
-        } else {
-          merged.push({ ...seg });
-        }
-      }
-      onCameraSegmentsChange(merged);
+      onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+      
+      // Move playhead to the split position (boundary)
+      onSeek(dropTime);
     }
 
     setDraggingAngle(null);
-  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints]);
+  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek]);
 
   // Track mouse movement and cancel drag on mouse up
   useEffect(() => {
@@ -481,15 +764,18 @@ export function TelemetryTimeline({
   }
 
   // Format time as m:ss
-  const formatTimeShort = (seconds: number) => {
+  const formatTimeShort = (seconds: number, showMs: boolean = true) => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
+    const ms = Math.round((seconds % 1) * 1000);
+    
+    if (showMs) {
+      return `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    }
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   // Calculate trim values (viewStart/viewEnd/viewDuration already calculated above for getTimeFromEvent)
-  const trimStart = trimPoints?.inPoint ?? 0;
-  const trimEnd = trimPoints?.outPoint ?? duration;
   const trimmedDuration = trimEnd - trimStart;
   const isTrimmed = trimStart > 0 || trimEnd < duration;
 
@@ -497,15 +783,18 @@ export function TelemetryTimeline({
   const timeToPosition = (time: number) => ((time - viewStart) / viewDuration) * 100;
   const playheadPosition = timeToPosition(Math.max(viewStart, Math.min(viewEnd, currentTime)));
 
-  // Trim handle positions (relative to full timeline, only when trimming)
-  const inPointPosition = trimPoints ? (trimPoints.inPoint / duration) * 100 : 0;
-  const outPointPosition = trimPoints ? (trimPoints.outPoint / duration) * 100 : 100;
+  // Trim handle positions (relative to current view range)
+  // Use timeToPosition to ensure consistency with timeline scaling
+  const inPointPosition = trimPoints ? timeToPosition(trimPoints.inPoint) : 0;
+  const outPointPosition = trimPoints ? timeToPosition(trimPoints.outPoint) : 100;
 
   // Generate time markers
   const timeMarkers = useMemo(() => {
     const markers: number[] = [];
+    // Always include viewStart (usually 0)
+    markers.push(viewStart);
     const interval = viewDuration > 120 ? 30 : 15;
-    for (let t = viewStart; t <= viewEnd; t += interval) {
+    for (let t = viewStart + interval; t <= viewEnd; t += interval) {
       markers.push(t);
     }
     if (markers[markers.length - 1] !== viewEnd) {
@@ -530,51 +819,32 @@ export function TelemetryTimeline({
   }, [cameraSegments, isTrimming, trimStart, trimEnd, duration]);
 
   return (
-    <div className="bg-gray-800/50 rounded-xl p-3 space-y-2">
+    <div className="bg-gray-800/50 rounded-xl p-3 space-y-2 px-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-400 font-medium">
-            {isTrimming ? 'Trim Video' : 'Timeline'}
+            {isTrimming ? t.player.trimVideo : t.player.timeline}
           </span>
 
-          {/* Trim info badge */}
-          {isEditMode && !isTrimming && isTrimmed && (
-            <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded font-medium">
+          {/* Trim info badge - only show when trimming or when video is trimmed */}
+          {(isTrimming || isTrimmed) && (
+            <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+              isTrimming 
+                ? 'bg-yellow-500/30 text-yellow-300 border border-yellow-500/30' 
+                : 'bg-yellow-500/20 text-yellow-400'
+            }`}>
               {formatTimeShort(trimStart)} → {formatTimeShort(trimEnd)} ({formatTimeShort(trimmedDuration)})
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Trim button / Done button */}
-          {isEditMode && (
-            isTrimming ? (
-              <button
-                onClick={() => onTrimmingChange?.(false)}
-                className="px-3 py-1 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors"
-              >
-                Done
-              </button>
-            ) : (
-              <button
-                onClick={() => onTrimmingChange?.(true)}
-                className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                  isTrimmed
-                    ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {isTrimmed ? 'Edit Trim' : 'Trim'}
-              </button>
-            )
-          )}
-
           {/* Track legend */}
-          {event && (
+          {showEventMarker && event && (
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rotate-45 bg-orange-500" />
-              <span className="text-[10px] text-orange-400 font-medium">{event.reasonLabel}</span>
+              <span className="text-[10px] text-orange-400 font-medium">{getTranslatedReason(event.reason, t)}</span>
             </div>
           )}
           {tracks.map((track) => (
@@ -589,7 +859,7 @@ export function TelemetryTimeline({
       {/* Trim mode instructions */}
       {isTrimming && (
         <div className="text-[10px] text-yellow-400">
-          Drag the yellow handles to set start and end points, then click Done
+          {t.player.dragHandlesToTrim}
         </div>
       )}
 
@@ -616,12 +886,23 @@ export function TelemetryTimeline({
           );
         })}
 
-        {/* Event marker */}
-        {eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && eventAbsoluteTime <= viewEnd && (
+        {/* Event marker - always show if in trim range (even if beyond video duration) */}
+        {showEventMarker && eventAbsoluteTime !== null && eventAbsoluteTime >= viewStart && (
+          // For post-video events, always show them in trimming mode
+          // For normal playback, only show if within trim range
+          (isTrimming || eventAbsoluteTime <= viewEnd || eventAbsoluteTime > duration)
+         ) && (
           <div
-            className="absolute top-0 bottom-0 z-[6] group"
+            ref={eventMarkerRef}
+            className="absolute top-0 bottom-0 z-[5] group"
             style={{ left: `${timeToPosition(eventAbsoluteTime)}%` }}
-            onMouseEnter={() => setShowEventTooltip(true)}
+            onMouseEnter={() => {
+              // Get marker position for fixed positioning
+              if (eventMarkerRef.current) {
+                setMarkerRect(eventMarkerRef.current.getBoundingClientRect());
+              }
+              setShowEventTooltip(true);
+            }}
             onMouseLeave={() => setShowEventTooltip(false)}
           >
             {/* Vertical line */}
@@ -632,59 +913,98 @@ export function TelemetryTimeline({
             </div>
             {/* Tooltip */}
             {showEventTooltip && event && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none z-[20]">
-                <div className="bg-gray-900 border border-orange-500/40 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap">
-                  <div className="font-semibold text-orange-400">{event.reasonLabel}</div>
-                  {(event.city || event.street) && (
-                    <div className="text-gray-400 mt-0.5">
-                      {[event.street, event.city].filter(Boolean).join(', ')}
-                    </div>
-                  )}
-                  <div className="text-gray-500 mt-0.5 text-[10px]">
-                    {event.timestamp.toLocaleTimeString()}
-                  </div>
-                </div>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-r border-b border-orange-500/40 rotate-45 -mt-1" />
-              </div>
+              <EventTooltip 
+                event={event} 
+                markerRect={markerRect}
+              />
             )}
           </div>
         )}
 
-        {/* Time interval lines */}
-        {timeMarkers.slice(1, -1).map((time) => (
-          <div
-            key={time}
-            className="absolute top-0 bottom-0 w-px bg-gray-600/50 z-[1] pointer-events-none"
-            style={{ left: `${timeToPosition(time)}%` }}
-          />
-        ))}
+        {/* Secondary tick marks - dynamic interval based on clip count */}
+        {(() => {
+          // Calculate secondary tick interval: 1 clip = 1s, 2-4 clips = 2s, 5+ clips = 4s
+          const clipCount = Math.max(1, clipBoundaries.length > 0 ? clipBoundaries.length - 1 : 1);
+          let secondaryInterval: number;
+          if (clipCount === 1) {
+            secondaryInterval = 1;
+          } else if (clipCount <= 4) {
+            secondaryInterval = 2;
+          } else {
+            secondaryInterval = 4;
+          }
+          
+          return Array.from({ length: Math.ceil((viewEnd - viewStart) / secondaryInterval) }, (_, i) => viewStart + i * secondaryInterval)
+            .filter(time => time > viewStart && time < viewEnd && !timeMarkers.includes(time))
+            .map((time) => (
+              <div
+                key={`tick-${time}`}
+                className="absolute top-0 bottom-0 w-px bg-gray-700/30 z-[0] pointer-events-none"
+                style={{ left: `${timeToPosition(time)}%` }}
+              />
+            ));
+        })()}
+
+        {/* Primary time interval lines - skip boundary markers (viewStart and viewEnd) */}
+        {timeMarkers
+          .filter(time => time > viewStart && time < viewEnd)
+          .map((time) => (
+            <div
+              key={time}
+              className="absolute top-0 bottom-0 w-px bg-gray-600/50 z-[1] pointer-events-none"
+              style={{ left: `${timeToPosition(time)}%` }}
+            />
+          ))}
 
         {/* Telemetry tracks */}
         {tracks.map((track) => (
           <div
             key={track.id}
-            className="relative h-3 bg-gray-700/50 rounded-sm mb-0.5 overflow-hidden"
+            className="relative h-3 rounded-sm mb-0.5 overflow-visible"
             title={track.label}
           >
+            {/* Background limited to actual video duration */}
+            <div 
+              className="absolute top-0 bottom-0 bg-gray-700/50 rounded-sm"
+              style={{ 
+                left: '0%', 
+                width: `${((Math.min(duration, viewEnd) - viewStart) / viewDuration) * 100}%` 
+              }}
+            />
             {track.segments.map((segment, idx) => {
               if (segment.endTime < viewStart || segment.startTime > viewEnd) return null;
               const segStart = Math.max(segment.startTime, viewStart);
-              const segEnd = Math.min(segment.endTime, viewEnd);
+              const segEnd = Math.min(segment.endTime, duration); // Limit to actual video end, not viewEnd
               const left = timeToPosition(segStart);
               const width = ((segEnd - segStart) / viewDuration) * 100;
               const opacity = segment.intensity !== undefined ? 0.4 + segment.intensity * 0.6 : 0.9;
 
+              const isLeftBlinker = track.id === 'left-blinker';
+              const isRightBlinker = track.id === 'right-blinker';
+              const showArrow = isLeftBlinker || isRightBlinker;
+
               return (
                 <div
                   key={idx}
-                  className="absolute top-0 bottom-0 rounded-sm"
+                  className="absolute top-0 bottom-0 rounded-sm flex items-center"
                   style={{
                     left: `${left}%`,
                     width: `${Math.max(width, 0.5)}%`,
                     backgroundColor: track.color,
                     opacity,
+                    justifyContent: 'center',
                   }}
-                />
+                >
+                  {showArrow && width > 1 && (
+                    <Image 
+                      src="/blinker.svg" 
+                      alt={isLeftBlinker ? 'Left' : 'Right'}
+                      width={10}
+                      height={10}
+                      className={`pointer-events-none opacity-30 ${isLeftBlinker ? '' : 'rotate-180'}`}
+                    />
+                  )}
+                </div>
               );
             })}
           </div>
@@ -715,6 +1035,7 @@ export function TelemetryTimeline({
 
             {/* In handle */}
             <div
+              data-no-seek
               className={`absolute top-0 bottom-0 w-4 bg-yellow-500 z-[15] cursor-ew-resize rounded-l-md ${
                 draggingTrimHandle === 'in' ? 'bg-yellow-400 w-5 shadow-lg shadow-yellow-500/50' : 'hover:bg-yellow-400'
               }`}
@@ -731,6 +1052,7 @@ export function TelemetryTimeline({
 
             {/* Out handle */}
             <div
+              data-no-seek
               className={`absolute top-0 bottom-0 w-4 bg-yellow-500 z-[15] cursor-ew-resize rounded-r-md ${
                 draggingTrimHandle === 'out' ? 'bg-yellow-400 w-5 shadow-lg shadow-yellow-500/50' : 'hover:bg-yellow-400'
               }`}
@@ -749,7 +1071,7 @@ export function TelemetryTimeline({
 
         {/* Playhead */}
         <div
-          className={`absolute top-0 bottom-0 w-0.5 bg-white shadow-lg z-10 pointer-events-none ${
+          className={`absolute top-0 bottom-0 w-0.5 bg-white shadow-lg z-10 pointer-events-none will-change-[left] ${
             isDragging ? 'w-1' : ''
           }`}
           style={{ left: `${playheadPosition}%` }}
@@ -770,10 +1092,11 @@ export function TelemetryTimeline({
           return (
             <div
               key={time}
-              className="absolute flex flex-col items-center pointer-events-none"
+              className="absolute flex flex-col pointer-events-none"
               style={{
-                left: `${position}%`,
+                left: isFirst ? '0px' : isLast ? '100%' : `${position}%`,
                 transform: isFirst ? 'translateX(0)' : isLast ? 'translateX(-100%)' : 'translateX(-50%)',
+                alignItems: isFirst ? 'flex-start' : isLast ? 'flex-end' : 'center',
               }}
             >
               <div className="w-px h-1.5 bg-gray-600" />
@@ -787,92 +1110,207 @@ export function TelemetryTimeline({
       {cameraSegments.length > 0 && (
         <div className="border-t border-gray-700 pt-3 mt-1">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-purple-400 font-medium">Camera Track</span>
+            <span className="text-xs text-purple-400 font-medium">{t.player.cameraTrack}</span>
             <span className="text-[10px] text-gray-500">
-              {cameraSegments.length > 1 ? 'Drag boundaries • Double-click to remove' : ''}
+              {cameraSegments.length > 1 ? t.player.dragBoundariesDoubleClick : ''}
             </span>
           </div>
 
           {/* Angle palette with drag instruction */}
           <div className="flex items-center gap-2 mb-2">
-            <div className="flex items-center gap-1">
-              {availableAngles.map((angle) => (
-                <div
-                  key={angle}
-                  className={`px-2 py-1.5 rounded text-[10px] font-medium select-none transition-all shadow-sm ${
-                    draggingAngle === angle
-                      ? 'opacity-50 scale-95 cursor-grabbing'
-                      : 'cursor-grab hover:scale-105 hover:shadow-md active:scale-95'
-                  }`}
-                  style={{
-                    backgroundColor: ANGLE_COLORS[angle] || '#6B7280',
-                    color: 'white',
-                    boxShadow: draggingAngle === angle ? 'none' : '0 2px 4px rgba(0,0,0,0.3)'
+            <div className="flex items-stretch gap-1">
+              {availableAngles.map((angle) => {
+                // In triple view, always restrict to layout angles regardless of custom track state
+                const isDisabledInTriple = layout === 'triple' && !tripleViewAngles.includes(angle);
+                
+                return (
+                  <div
+                    key={angle}
+                    className={`h-[24px] px-2 rounded text-[10px] font-medium select-none transition-all shadow-sm flex items-center justify-center ${
+                      draggingAngle === angle
+                        ? 'opacity-50 scale-95 cursor-grabbing'
+                        : isDisabledInTriple
+                          ? 'opacity-40 cursor-not-allowed grayscale'
+                          : 'cursor-grab hover:scale-105 hover:shadow-md active:scale-95'
+                    }`}
+                    style={{
+                      backgroundColor: ANGLE_COLORS[angle] || '#6B7280',
+                      color: 'white',
+                      boxShadow: draggingAngle === angle ? 'none' : '0 2px 4px rgba(0,0,0,0.3)'
+                    }}
+                    onMouseDown={(e) => !isDisabledInTriple && handleAngleDragStart(angle, e)}
+                    title={isDisabledInTriple 
+                      ? t.player.notInTripleView(t.angles[angle as keyof typeof t.angles] || angle)
+                      : t.player.dragToTimeline(t.angles[angle as keyof typeof t.angles] || angle)
+                    }
+                  >
+                    <span className="flex items-center gap-0.5 truncate">
+                      {ANGLE_ICONS[angle]}
+                      <span className="truncate">{t.angles[angle as keyof typeof t.angles] || angle}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Triple view restriction hint */}
+            {layout === 'triple' && (
+              <div className="flex items-center gap-1 text-[10px] text-amber-400">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>{t.player.onlyTripleViewEnabled}</span>
+              </div>
+            )}
+            
+            {/* Default drag hint - hide when showing triple view hint */}
+            {layout !== 'triple' && (
+              <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                <svg className="w-4 h-4 text-purple-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-5 5m0 0l-5-5m5 5V6" />
+                </svg>
+                <span>{t.player.dragToTrack}</span>
+              </div>
+            )}
+            
+            {/* Boundary navigation arrows - show when there are multiple segments */}
+            {cameraSegments.length > 1 && (
+              <div className="flex items-center gap-1 ml-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Find previous boundary or go to start
+                    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+                    const prevBoundaries = boundaries.filter(b => b < currentTime - 0.1);
+                    
+                    if (prevBoundaries.length > 0) {
+                      // Go to previous boundary
+                      onSeek(prevBoundaries[prevBoundaries.length - 1]);
+                    } else {
+                      // Go to start
+                      onSeek(cameraSegments[0].startTime);
+                    }
                   }}
-                  onMouseDown={(e) => handleAngleDragStart(angle, e)}
-                  title={`Drag ${ANGLE_LABELS[angle] || angle} to timeline`}
+                  disabled={currentTime <= cameraSegments[0].startTime + 0.1}
+                  className="p-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={t.player.previousBoundary}
                 >
-                  {ANGLE_LABELS[angle] || angle}
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center gap-1 text-[10px] text-gray-500">
-              <svg className="w-4 h-4 text-purple-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-5 5m0 0l-5-5m5 5V6" />
-              </svg>
-              <span>drag to track</span>
-            </div>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Find next boundary or go to end
+                    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+                    const nextBoundary = boundaries.find(b => b > currentTime + 0.1);
+                    
+                    if (nextBoundary !== undefined) {
+                      // Go to next boundary
+                      onSeek(nextBoundary);
+                    } else {
+                      // Go to end
+                      onSeek(cameraSegments[cameraSegments.length - 1].endTime);
+                    }
+                  }}
+                  disabled={currentTime >= cameraSegments[cameraSegments.length - 1].endTime - 0.1}
+                  className="p-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={t.player.nextBoundary}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Camera track - drop zone */}
           <div
             ref={cameraTrackRef}
-            className={`relative h-10 bg-gray-700/30 rounded-lg overflow-visible border-2 border-dashed transition-all ${
-              draggingAngle
-                ? 'border-purple-500 bg-purple-500/10'
-                : 'border-gray-600/50'
-            }`}
+            className="relative h-10 w-full overflow-visible"
             onMouseUp={draggingAngle ? handleCameraTrackDrop : undefined}
           >
-            {visibleCameraSegments.map((segment, idx) => {
-              const left = timeToPosition(segment.startTime);
-              const width = ((segment.endTime - segment.startTime) / viewDuration) * 100;
+            {/* Background with border - shows the full view range */}
+            <div 
+              className={`absolute top-0 bottom-0 rounded-lg transition-all ${
+                draggingAngle
+                  ? 'bg-purple-500/10 border-2 border-dashed border-purple-500'
+                  : 'bg-gray-700/30 border-2 border-dashed border-gray-600/50'
+              }`}
+              style={{ 
+                left: '0%', 
+                width: '100%' 
+              }}
+            />
+            {/* Render all camera segments - scaled to match current view */}
+            {cameraSegments.map((segment, idx) => {
+              // All segments are rendered relative to the current view range (viewStart to viewEnd)
+              // This ensures they sync with the timeline scaling
+              const clippedStart = Math.max(segment.startTime, viewStart);
+              const clippedEnd = Math.min(segment.endTime, viewEnd);
+              if (clippedStart >= clippedEnd) return null;
+              
+              const left = timeToPosition(clippedStart);
+              const width = ((clippedEnd - clippedStart) / viewDuration) * 100;
 
               return (
                 <div
                   key={idx}
-                  className="absolute top-1 bottom-1 flex items-center justify-center rounded transition-all hover:brightness-110"
+                  className="absolute top-1 bottom-1 flex items-center justify-center rounded transition-all hover:brightness-110 cursor-pointer"
                   style={{
                     left: `${left}%`,
                     width: `${Math.max(width, 1)}%`,
                     backgroundColor: ANGLE_COLORS[segment.angle] || '#6B7280',
                   }}
-                  title={ANGLE_LABELS[segment.angle]}
+                  title={`${t.angles[segment.angle as keyof typeof t.angles]} • ${t.player.doubleClickToRemove}`}
+                  onDoubleClick={handleSegmentDoubleClick(idx)}
                 >
-                  {width > 8 && (
-                    <span className="text-[10px] text-white/90 font-medium truncate px-1 pointer-events-none">
-                      {ANGLE_LABELS[segment.angle] || segment.angle}
+                  {width > 5 && (
+                    <span className="text-[10px] text-white/90 font-medium truncate px-1 pointer-events-none flex items-center gap-0.5">
+                      {ANGLE_ICONS[segment.angle]}
+                      {t.angles[segment.angle as keyof typeof t.angles] || segment.angle}
                     </span>
                   )}
                 </div>
               );
             })}
 
+            {/* Dimmed overlay for out-of-trim-range areas - synced with current view */}
+            {isTrimming && trimPoints && (
+              <>
+                <div
+                  className="absolute top-0 bottom-0 bg-black/50 z-[3] pointer-events-none rounded-l"
+                  style={{ left: 0, width: `${timeToPosition(trimPoints.inPoint)}%` }}
+                />
+                <div
+                  className="absolute top-0 bottom-0 bg-black/50 z-[3] pointer-events-none rounded-r"
+                  style={{ 
+                    left: `${timeToPosition(trimPoints.outPoint)}%`, 
+                    width: `${100 - timeToPosition(trimPoints.outPoint)}%` 
+                  }}
+                />
+              </>
+            )}
+
             {/* Segment boundaries - draggable */}
+            {/* Show boundaries within current view range */}
             {cameraSegments.slice(1).map((segment, idx) => {
-              if (segment.startTime <= trimStart || segment.startTime >= trimEnd) return null;
+              // Show boundary if it's within the current view range
+              if (segment.startTime <= viewStart || segment.startTime >= viewEnd) return null;
               const position = timeToPosition(segment.startTime);
 
               return (
                 <div
                   key={`boundary-${idx}`}
+                  data-no-seek
                   className={`absolute top-0 bottom-0 w-4 cursor-ew-resize z-[5] group ${
                     draggingSegmentBoundary === idx + 1 ? 'z-[10]' : ''
                   }`}
                   style={{ left: `${position}%`, transform: 'translateX(-50%)' }}
                   onMouseDown={handleSegmentBoundaryMouseDown(idx + 1)}
-                  onDoubleClick={handleSegmentBoundaryDoubleClick(idx + 1)}
-                  title="Drag to adjust • Double-click to remove"
+                  title="Drag to adjust boundary"
                 >
                   <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 ${
                     draggingSegmentBoundary === idx + 1 ? 'bg-white w-1.5 shadow-lg' : 'bg-white/60 group-hover:bg-white'
@@ -894,7 +1332,7 @@ export function TelemetryTimeline({
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
                   </svg>
-                  Drop {ANGLE_LABELS[draggingAngle] || draggingAngle} here
+                  {t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}
                 </div>
               </div>
             )}
@@ -902,7 +1340,7 @@ export function TelemetryTimeline({
 
           {/* Playback hint */}
           <div className="text-[10px] text-gray-500 mt-1.5">
-            Press play to preview camera switches
+            {t.player.pressPlayToPreview}
           </div>
         </div>
       )}
@@ -919,7 +1357,10 @@ export function TelemetryTimeline({
             boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           }}
         >
-          {ANGLE_LABELS[draggingAngle] || draggingAngle}
+          <span className="flex items-center gap-0.5">
+            {ANGLE_ICONS[draggingAngle]}
+            {t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle}
+          </span>
         </div>
       )}
     </div>

@@ -1,27 +1,35 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ExportDashCam",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "identifier": "com.exportdash.teslacam",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3001",
-    "beforeDevCommand": "npm run dev"
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "ExportDash.Cam",
         "width": 1280,
         "height": 800,
         "resizable": true,
         "fullscreen": false,
+        "maximized": true,
         "minWidth": 800,
-        "minHeight": 600
+        "minHeight": 600,
+        "dragDropEnabled": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
     }
   },
   "bundle": {
