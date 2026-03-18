@@ -40,6 +40,7 @@
           "fs:allow-read-dir",
           "fs:allow-read-file",
           "fs:default",
+          "shell:allow-open",
           "core:event:allow-listen",
           "core:event:default",
           {
