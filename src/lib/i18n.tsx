@@ -682,7 +682,7 @@ const zh: Translations = {
       `三视图需要 3 个摄像头角度（当前：${current}）。再添加 ${needed} 个轨迹以启用。`,
     tripleViewHasMore: (current: number, excess: number) => 
       `三视图需要 3 个摄像头角度（当前：${current}）。移除 ${excess} 个轨迹以启用。`,
-    rightClickConfigure: '右键单击配置布局',
+    rightClickConfigure: '右键配置布局',
     mapSize: '地图大小',
     loading: '加载中...',
     fullscreen: '全屏 (F)',
