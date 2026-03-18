@@ -1952,16 +1952,14 @@ export function VideoPlayer({
               content={
                 !sequence?.event 
                   ? "No event data available" 
-                  : (!isTrimming && !isEventMarkerInTrimRange)
-                    ? "Event marker outside trim range" 
-                    : "Event Marker"
+                  : "Event Marker"
               } 
               position="top"
             >
               <button
-                onClick={() => sequence?.event && (isTrimming || isEventMarkerInTrimRange) && setShowEventMarker(prev => !prev)}
+                onClick={() => sequence?.event && setShowEventMarker(prev => !prev)}
                 className={`p-1.5 rounded transition-all ${
-                  !sequence?.event || (!isTrimming && !isEventMarkerInTrimRange)
+                  !sequence?.event
                     ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     : showEventMarker
                       ? 'bg-green-600 text-white'
