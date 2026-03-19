@@ -14,6 +14,7 @@ export interface CameraVideo {
   duration: number;        // Duration in seconds
   durationFormatted: string | null;  // e.g., "1:00"
   size: string;            // Human-readable size
+  url?: string;            // For Tauri: direct file URL (convertFileSrc)
 }
 
 /** One timestamp - all camera angles at a specific moment */
@@ -70,55 +71,89 @@ export interface TeslaEvent {
 
 /** Human-readable labels for Tesla event reasons */
 export const REASON_LABELS: Record<string, string> = {
-  user_interaction_dashcam_multifunction_selected: 'Manual Save',
-  user_interaction_dashcam_icon_tapped: 'Manual Save',
-  user_interaction_honk: 'Honk Save',
-  sentry_aware_object_detection: 'Sentry: Object Detected',
-  sentry_aware_accel: 'Sentry: Acceleration',
-  sentry_aware_intrusion: 'Sentry: Intrusion',
-  sentry_aware_proximity: 'Sentry: Proximity',
-  sentry_ion: 'Sentry Mode',
-  sentry_ioff: 'Sentry Off',
-  dashcam_clip_request: 'Dashcam Clip',
+  user_interaction_dashcam_multifunction_selected: 'User Interaction Dashcam Multifunction Selected',
+  user_interaction_dashcam_icon_tapped: 'User Interaction Dashcam Icon Tapped',
+  user_interaction_dashcam_launcher_action_tapped: 'User Interaction Dashcam Launcher Action Tapped',
+  user_interaction_honk: 'User Interaction Honk',
+  sentry_aware_object_detection: 'Sentry Aware Object Detection',
+  sentry_aware_accel: 'Sentry Aware Accel',
+  sentry_aware_intrusion: 'Sentry Aware Intrusion',
+  sentry_aware_proximity: 'Sentry Aware Proximity',
+  sentry_ion: 'Sentry Mode On',
+  sentry_ioff: 'Sentry Mode Off',
+  dashcam_clip_request: 'Dashcam Clip Request',
   emergency_braking: 'Emergency Braking',
   forward_collision_warning: 'Forward Collision Warning',
   auto_emergency_braking: 'Auto Emergency Braking',
-  ap_forward_collision: 'Autopilot: Forward Collision',
+  ap_forward_collision: 'AP Forward Collision',
 };
 
-/** Get human-readable label for an event reason */
+/** Get human-readable label for an event reason
+ * Supports patterns like:
+ * - sentry_panic_accel_0.903371 -> Sentry Panic Accel (0.90g)
+ */
 export function getReasonLabel(reason: string): string {
-  return REASON_LABELS[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  // Check exact match first
+  if (REASON_LABELS[reason]) {
+    return REASON_LABELS[reason];
+  }
+  
+  // Handle sentry_panic_accel_* pattern (e.g., sentry_panic_accel_0.903371)
+  const panicAccelMatch = reason.match(/^sentry_panic_accel_([\d.]+)$/);
+  if (panicAccelMatch) {
+    const gForce = parseFloat(panicAccelMatch[1]);
+    return `Sentry Panic Accel (${gForce.toFixed(2)}g)`;
+  }
+  
+  // Handle sentry_panic_* patterns
+  if (reason.startsWith('sentry_panic_')) {
+    const panicType = reason.replace('sentry_panic_', '');
+    const panicLabels: Record<string, string> = {
+      accel: 'Accel',
+      intrusion: 'Intrusion',
+      proximity: 'Proximity',
+      object: 'Object Detection',
+    };
+    const label = panicLabels[panicType] || panicType;
+    return `Sentry Panic ${label}`;
+  }
+  
+  return reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 /** Angle constants and utilities */
 export const ANGLE_LABELS: Record<string, string> = {
   front: 'Front',
   back: 'Rear',
-  left_repeater: 'Left',
-  right_repeater: 'Right',
-  left_pillar: 'L Pillar',
-  right_pillar: 'R Pillar',
+  left_repeater: 'Left Repeater',
+  right_repeater: 'Right Repeater',
+  left_pillar: 'Left Pillar',
+  right_pillar: 'Right Pillar',
 };
 
-export const ANGLE_ORDER = ['front', 'left_repeater', 'right_repeater', 'back', 'left_pillar', 'right_pillar'];
+export const ANGLE_ORDER = ['front', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar', 'back'];
 
 /** Camera layout configuration for multi-camera views */
 export interface LayoutCameraConfig {
   pip: { corners: [string, string, string, string, string] }; // bottom-left, bottom-center, bottom-right, top-left, top-right
   triple: { cameras: [string, string, string] };               // left, center, right
-  all: { topRow: [string, string, string]; bottomRow: [string, string, string] };
+  all: { 
+    topRow: [string, string, string]; 
+    bottomRow: [string, string, string];
+  };
 }
 
 /** Special PiP corner values (besides camera angles) */
 export const PIP_SPECIAL_OPTIONS = ['none', 'map'] as const;
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutCameraConfig = {
-  pip: { corners: ['left_repeater', 'none', 'right_repeater', 'back', 'map'] },
+  // PiP: Left/Right on top, L Pillar/Rear/R Pillar on bottom
+  pip: { corners: ['left_pillar', 'back', 'right_pillar', 'left_repeater', 'right_repeater'] },
   triple: { cameras: ['left_pillar', 'front', 'right_pillar'] },
+  // All 6: Top row - Left, Front, Right; Bottom row - L Pillar, Rear, R Pillar
   all: {
-    topRow: ['left_repeater', 'left_pillar', 'front'],
-    bottomRow: ['right_repeater', 'right_pillar', 'back'],
+    topRow: ['left_repeater', 'front', 'right_repeater'],
+    bottomRow: ['left_pillar', 'back', 'right_pillar'],
   },
 };
 
@@ -217,20 +252,21 @@ export function parseTimestamp(filename: string): Date | null {
   if (!match) return null;
 
   const [, year, month, day, hour, minute, second] = match;
-  return new Date(
-    parseInt(year),
-    parseInt(month) - 1,  // Month is 0-indexed
-    parseInt(day),
-    parseInt(hour),
-    parseInt(minute),
-    parseInt(second)
-  );
+  // Create date in local time but treat it as if the components are local time
+  // Use explicit string format to ensure consistent parsing
+  const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+  return new Date(dateStr);
 }
 
-/** Format duration in seconds to MM:SS */
-export function formatDuration(seconds: number): string {
+/** Format duration in seconds to MM:SS or MM:SS.mmm (3-digit ms) */
+export function formatDuration(seconds: number, showMs: boolean = false): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
+  const ms = Math.round((seconds % 1) * 1000);
+  
+  if (showMs) {
+    return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+  }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 

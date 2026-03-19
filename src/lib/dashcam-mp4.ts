@@ -225,6 +225,27 @@ export class DashcamMP4 {
       totalFrames: frameIndex
     });
 
+    // Debug: Log first few decoded messages to check GPS data
+    if (messages.length > 0) {
+      console.log('[MP4] First SEI message sample:', {
+        frameIndex: messages[0].frameIndex,
+        hasLat: messages[0].sei.latitude_deg !== undefined && messages[0].sei.latitude_deg !== 0,
+        hasLng: messages[0].sei.longitude_deg !== undefined && messages[0].sei.longitude_deg !== 0,
+        lat: messages[0].sei.latitude_deg,
+        lng: messages[0].sei.longitude_deg,
+        speed: messages[0].sei.vehicle_speed_mps,
+        gear: messages[0].sei.gear_state,
+        allFields: Object.keys(messages[0].sei).filter(k => (messages[0].sei as any)[k] !== undefined && (messages[0].sei as any)[k] !== 0)
+      });
+      
+      // Check if any message has valid GPS
+      const withGps = messages.filter(m => 
+        m.sei.latitude_deg && m.sei.longitude_deg && 
+        m.sei.latitude_deg !== 0 && m.sei.longitude_deg !== 0
+      );
+      console.log(`[MP4] Messages with valid GPS: ${withGps.length}/${messages.length}`);
+    }
+
     return messages;
   }
 

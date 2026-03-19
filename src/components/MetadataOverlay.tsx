@@ -50,7 +50,7 @@ export function MetadataOverlay({ seiData, isLoading, error, speedUnit }: Metada
   // Convert speed (using snake_case field names from Tesla's protobuf)
   const speedMps = seiData.vehicle_speed_mps || 0;
   const speed = speedUnit === 'mph' ? speedMps * 2.23694 : speedMps * 3.6;
-  const speedLabel = speedUnit === 'mph' ? 'mph' : 'km/h';
+  const speedLabel = speedUnit === 'mph' ? 'MPH' : 'km/h';
 
   // Convert G-forces
   const gX = (seiData.linear_acceleration_mps2_x || 0) / 9.81;

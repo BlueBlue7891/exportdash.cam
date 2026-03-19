@@ -53,8 +53,9 @@ export function useSeiData(
       return;
     }
 
-    // Skip if we already processed this sequence
-    if (lastSequenceIdRef.current === sequence.id) {
+    // Skip if we already processed this sequence (check both id and moments length)
+    const sequenceKey = `${sequence.id}-${sequence.moments.length}-${sequence.totalDuration}`;
+    if (lastSequenceIdRef.current === sequenceKey) {
       return;
     }
 
@@ -95,7 +96,18 @@ export function useSeiData(
 
           try {
             console.log(`[SEI] Processing moment ${momentIdx}: ${videoFile.name}`);
-            const arrayBuffer = await videoFile.arrayBuffer();
+            // Handle both Tauri and browser files
+            let arrayBuffer: ArrayBuffer;
+            const tauriPath = (videoFile as any).tauriPath;
+            if (tauriPath) {
+              // Tauri file - read via native API
+              const { readFile } = await import('@tauri-apps/plugin-fs');
+              const content = await readFile(tauriPath);
+              arrayBuffer = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength);
+            } else {
+              // Browser file - use File API
+              arrayBuffer = await videoFile.arrayBuffer();
+            }
             const mp4 = new DashcamMP4(arrayBuffer);
 
             // Get FPS from first valid video
@@ -138,7 +150,7 @@ export function useSeiData(
         console.log(`[SEI] Total messages across sequence: ${allMessages.length}`);
         setAllSeiMessages(allMessages);
         setFps(sequenceFps);
-        lastSequenceIdRef.current = sequence.id;
+        lastSequenceIdRef.current = `${sequence.id}-${sequence.moments.length}-${sequence.totalDuration}`;
 
         if (allMessages.length === 0) {
           setError('No Tesla metadata found in this video. Make sure this is a Tesla dashcam recording.');
@@ -152,7 +164,7 @@ export function useSeiData(
     };
 
     extractAllSei();
-  }, [sequence?.id]);
+  }, [sequence?.id, sequence?.moments?.length, sequence?.totalDuration]);
 
   // Find SEI data for current absolute time
   const getSeiForTime = useCallback(
