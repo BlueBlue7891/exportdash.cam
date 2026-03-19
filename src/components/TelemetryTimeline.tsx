@@ -1338,18 +1338,28 @@ export function TelemetryTimeline({
               );
             })}
 
-            {/* Drop indicator when dragging */}
+            {/* Drop zone highlight when dragging */}
             {draggingAngle && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-purple-500/20 rounded-lg">
-                <div className="flex items-center gap-2 text-sm text-purple-300 bg-black/60 px-3 py-1.5 rounded-full">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
-                  </svg>
-                  {t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}
-                </div>
-              </div>
+              <div className="absolute inset-0 pointer-events-none bg-purple-500/10 rounded-lg border-2 border-purple-500/30 border-dashed" />
             )}
           </div>
+
+          {/* Drop hint below the track - follows the drag position */}
+          {draggingAngle && dragPosition && cameraTrackRef.current && (
+            <div 
+              className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-purple-400 bg-gray-900/90 px-2 py-1 rounded-full border border-purple-500/30 shadow-lg"
+              style={{
+                left: dragPosition.x - dragOffset,
+                top: cameraTrackRef.current.getBoundingClientRect().bottom + 8,
+                transform: 'translateX(0)',
+              }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20V4m0 0l-4 4m4-4l4 4" />
+              </svg>
+              <span>{t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
+            </div>
+          )}
 
           {/* Playback hint */}
           <div className="text-[10px] text-gray-500 mt-1.5">
