@@ -198,6 +198,7 @@ export function TelemetryCard({
 
         :global(.pedal-icon) {
           filter: brightness(1);
+          object-fit: contain;
         }
 
         :global(.pedal-icon.overlay) {

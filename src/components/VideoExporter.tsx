@@ -350,8 +350,8 @@ export function VideoExporter({
       ctx.save();
       // Apply brightness filter to match CSS
       applyFilter(ctx, 'brightness(1)');
-      // Fixed height 14px, width auto to maintain aspect ratio
-      const pedalH = 14 * scale;
+      // Fixed height 16px, width auto to maintain aspect ratio
+      const pedalH = 16 * scale;
       const pedalW = (icons.leftPedal.width / icons.leftPedal.height) * pedalH;
       ctx.drawImage(
         icons.leftPedal,
@@ -522,8 +522,8 @@ export function VideoExporter({
       ctx.save();
       // Apply brightness filter to match CSS
       applyFilter(ctx, 'brightness(1)');
-      // Fixed height 14px, width auto to maintain aspect ratio
-      const pedalH = 14 * scale;
+      // Fixed height 16px, width auto to maintain aspect ratio
+      const pedalH = 16 * scale;
       const pedalW = (icons.rightPedal.width / icons.rightPedal.height) * pedalH;
       ctx.drawImage(
         icons.rightPedal,
