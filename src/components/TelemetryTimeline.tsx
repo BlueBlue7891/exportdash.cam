@@ -1349,14 +1349,12 @@ export function TelemetryTimeline({
             <div 
               className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-purple-400 bg-gray-900/90 px-2 py-1 rounded-full border border-purple-500/30 shadow-lg"
               style={{
-                left: dragPosition.x - dragOffset,
+                left: dragPosition.x - dragOffset - 12, // 向左偏移12px，让箭头中心对准标签左侧
                 top: cameraTrackRef.current.getBoundingClientRect().bottom + 8,
                 transform: 'translateX(0)',
               }}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20V4m0 0l-4 4m4-4l4 4" />
-              </svg>
+              <IconArrowUp size={14} className="text-purple-400" />
               <span>{t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
             </div>
           )}
