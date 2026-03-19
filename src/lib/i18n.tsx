@@ -88,6 +88,7 @@ export interface Translations {
     configureLayout: string;
     trim: string;
     editTrim: string;
+    cancelTrim: string;
     done: string;
     show: string;
     dateTime: string;
@@ -120,10 +121,13 @@ export interface Translations {
     cameraTrack: string;
     dragToTrack: string;
     dragBoundariesDoubleClick: string;
+    dragToAdjustBoundary: string;
     previousBoundary: string;
     nextBoundary: string;
     doubleClickToRemove: string;
     dropHere: (angle: string) => string;
+    addToPlayhead: (angle: string) => string;
+    holdCtrlForFreeDrop: string;
     pressPlayToPreview: string;
     onlyTripleViewEnabled: string;
     notInTripleView: (angle: string) => string;
@@ -375,6 +379,7 @@ const en: Translations = {
     configureLayout: 'Configure layout',
     trim: 'Trim video (E)',
     editTrim: 'Edit trim (E)',
+    cancelTrim: 'Cancel trim',
     done: 'Done',
     show: 'Show:',
     dateTime: 'Date/Time (D)',
@@ -406,13 +411,16 @@ const en: Translations = {
     dragHandlesToTrim: 'Drag the yellow handles to set start and end points, then click Done',
     cameraTrack: 'Camera Track',
     dragToTrack: 'drag to track',
-    dragBoundariesDoubleClick: 'Drag boundaries • Double-click segment to remove',
+    dragBoundariesDoubleClick: 'Drag to adjust boundary • Double-click to remove segments',
+    dragToAdjustBoundary: 'Drag to adjust boundary',
     previousBoundary: 'Previous boundary',
     nextBoundary: 'Next boundary',
     doubleClickToRemove: 'Double-click to remove',
     dropHere: (angle: string) => `Drop ${angle} here`,
+    addToPlayhead: (angle: string) => `Auto add ${angle} at playhead`,
+    holdCtrlForFreeDrop: 'Hold Ctrl/Cmd for free drop',
     pressPlayToPreview: 'Press play to preview camera switches',
-    onlyTripleViewEnabled: 'Only triple view angles enabled. Configure layout to change.',
+    onlyTripleViewEnabled: 'Only configured camera angles enabled. Change layout to enable others.',
     notInTripleView: (angle: string) => `${angle} is not in triple view layout. Configure layout to enable.`,
     dragToTimeline: (angle: string) => `Drag ${angle} to timeline`,
   },
@@ -661,6 +669,7 @@ const zh: Translations = {
     configureLayout: '配置布局',
     trim: '裁剪视频 (E)',
     editTrim: '编辑裁剪 (E)',
+    cancelTrim: '取消裁剪',
     done: '完成',
     show: '显示：',
     dateTime: '日期/时间 (D)',
@@ -692,13 +701,16 @@ const zh: Translations = {
     dragHandlesToTrim: '拖动黄色手柄设置起点和终点，然后点击完成',
     cameraTrack: '摄像头时间线',
     dragToTrack: '拖放到摄像头时间线',
-    dragBoundariesDoubleClick: '拖动边界 • 双击片段移除',
+    dragBoundariesDoubleClick: '拖拽调整边界 • 双击移除片段',
+    dragToAdjustBoundary: '拖拽调整边界',
     previousBoundary: '上一个边界',
     nextBoundary: '下一个边界',
     doubleClickToRemove: '双击移除',
     dropHere: (angle: string) => `拖放 ${angle} 到此处`,
+    addToPlayhead: (angle: string) => `自动在播放头位置添加 ${angle}`,
+    holdCtrlForFreeDrop: '按住 Ctrl/Cmd 自由放置',
     pressPlayToPreview: '点击播放预览摄像头切换',
-    onlyTripleViewEnabled: '仅启用三视图角度。配置布局以更改。',
+    onlyTripleViewEnabled: '仅启用已配置的摄像头标签。更改布局配置以启用其他。',
     notInTripleView: (angle: string) => `${angle} 不在三视图布局中。配置布局以启用。`,
     dragToTimeline: (angle: string) => `拖放 ${angle} 到时间线`,
   },

@@ -355,11 +355,17 @@ export function TelemetryTimeline({
   // Dragging/scrubbing state
   const timelineRef = useRef<HTMLDivElement>(null);
   const cameraTrackRef = useRef<HTMLDivElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggingTrimHandle, setDraggingTrimHandle] = useState<'in' | 'out' | null>(null);
   const [draggingSegmentBoundary, setDraggingSegmentBoundary] = useState<number | null>(null);
   const [draggingAngle, setDraggingAngle] = useState<string | null>(null); // For drag-drop from palette
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
+  const [dragOffset, setDragOffset] = useState<number>(0); // Offset from label left edge to cursor (for accurate drop positioning)
+  const [isFreeDropMode, setIsFreeDropMode] = useState<boolean>(false); // Whether dropping at free position or fixed to playhead
+  const [isCtrlPressed, setIsCtrlPressed] = useState<boolean>(false); // Track Ctrl/Cmd key for temporary mode switch
+  const cameraSegmentsRef = useRef(cameraSegments);
+  cameraSegmentsRef.current = cameraSegments;
 
   // Calculate event position in absolute time
   const eventAbsoluteTime = useMemo(() => {
@@ -457,9 +463,10 @@ export function TelemetryTimeline({
       } else if (draggingSegmentBoundary !== null && onCameraSegmentsChange) {
         // Dragging a segment boundary - allow merging by dragging to edges
         const segIdx = draggingSegmentBoundary;
-        if (segIdx > 0 && segIdx < cameraSegments.length) {
-          const prevSeg = cameraSegments[segIdx - 1];
-          const currSeg = cameraSegments[segIdx];
+        const latestSegments = cameraSegmentsRef.current;
+        if (segIdx > 0 && segIdx < latestSegments.length) {
+          const prevSeg = latestSegments[segIdx - 1];
+          const currSeg = latestSegments[segIdx];
           // Allow boundary to go all the way to previous segment's start or current segment's end
           // This enables one segment to completely cover another
           const minTime = prevSeg.startTime;
@@ -469,25 +476,30 @@ export function TelemetryTimeline({
           // If dragged to the edge, merge the segments based on direction
           if (newBoundary <= prevSeg.startTime) {
             // Dragged all the way left - current (right) segment wins, remove previous
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                // This was the current segment, now extends to cover previous
-                return { ...seg, startTime: prevSeg.startTime };
-              }
-              return seg;
-            });
+            // Create new array: keep currSeg and after, extend currSeg to cover prevSeg
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1), // segments before prevSeg
+              { ...currSeg, startTime: prevSeg.startTime }, // currSeg extended
+              ...latestSegments.slice(segIdx + 1), // segments after currSeg
+            ];
+            // Merge adjacent segments with same angle after removal
             onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            // Stop dragging as the boundary has been merged
+            setDraggingSegmentBoundary(null);
           } else if (newBoundary >= currSeg.endTime) {
             // Dragged all the way right - previous (left) segment wins, remove current
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                return { ...seg, endTime: currSeg.endTime };
-              }
-              return seg;
-            });
+            // Create new array: keep before currSeg, extend prevSeg to cover currSeg
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1), // segments before prevSeg
+              { ...prevSeg, endTime: currSeg.endTime }, // prevSeg extended
+              ...latestSegments.slice(segIdx + 1), // segments after currSeg
+            ];
+            // Merge adjacent segments with same angle after removal
             onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            // Stop dragging as the boundary has been merged
+            setDraggingSegmentBoundary(null);
           } else {
-            const newSegments = cameraSegments.map((seg, idx) => {
+            const newSegments = latestSegments.map((seg, idx) => {
               if (idx === segIdx - 1) {
                 return { ...seg, endTime: newBoundary };
               } else if (idx === segIdx) {
@@ -522,33 +534,34 @@ export function TelemetryTimeline({
         onTrimPreview?.(previewTime);
       } else if (draggingSegmentBoundary !== null && onCameraSegmentsChange) {
         const segIdx = draggingSegmentBoundary;
-        if (segIdx > 0 && segIdx < cameraSegments.length) {
-          const prevSeg = cameraSegments[segIdx - 1];
-          const currSeg = cameraSegments[segIdx];
+        const latestSegments = cameraSegmentsRef.current;
+        if (segIdx > 0 && segIdx < latestSegments.length) {
+          const prevSeg = latestSegments[segIdx - 1];
+          const currSeg = latestSegments[segIdx];
           const minTime = prevSeg.startTime;
           const maxTime = currSeg.endTime;
           const newBoundary = Math.max(minTime, Math.min(maxTime, time));
 
           if (newBoundary <= prevSeg.startTime) {
-            // Dragged all the way left - current (right) segment wins
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                return { ...seg, startTime: prevSeg.startTime };
-              }
-              return seg;
-            });
+            // Dragged all the way left - current (right) segment wins, remove previous
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1),
+              { ...currSeg, startTime: prevSeg.startTime },
+              ...latestSegments.slice(segIdx + 1),
+            ];
             onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            setDraggingSegmentBoundary(null);
           } else if (newBoundary >= currSeg.endTime) {
-            // Dragged all the way right - previous (left) segment wins
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                return { ...seg, endTime: currSeg.endTime };
-              }
-              return seg;
-            });
+            // Dragged all the way right - previous (left) segment wins, remove current
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1),
+              { ...prevSeg, endTime: currSeg.endTime },
+              ...latestSegments.slice(segIdx + 1),
+            ];
             onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            setDraggingSegmentBoundary(null);
           } else {
-            const newSegments = cameraSegments.map((seg, idx) => {
+            const newSegments = latestSegments.map((seg, idx) => {
               if (idx === segIdx - 1) {
                 return { ...seg, endTime: newBoundary };
               } else if (idx === segIdx) {
@@ -556,7 +569,6 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            // Check if the two segments now have the same angle and should be merged
             onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           }
           onTrimPreview?.(newBoundary);
@@ -586,7 +598,7 @@ export function TelemetryTimeline({
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleEnd);
     };
-  }, [isDragging, draggingTrimHandle, draggingSegmentBoundary, getTimeFromEvent, onSeek, trimPoints, onTrimChange, onTrimPreview, duration, cameraSegments, onCameraSegmentsChange]);
+  }, [isDragging, draggingTrimHandle, draggingSegmentBoundary, getTimeFromEvent, onSeek, trimPoints, onTrimChange, onTrimPreview, duration, onCameraSegmentsChange]);
 
   // Handle trim handle mouse down
   const handleTrimHandleMouseDown = useCallback((handle: 'in' | 'out') => (e: React.MouseEvent) => {
@@ -666,9 +678,26 @@ export function TelemetryTimeline({
 
   // Handle drag start from angle palette
   const handleAngleDragStart = useCallback((angle: string, e: React.MouseEvent) => {
+    // Calculate offset from the label element's left edge to cursor
+    // This allows accurate positioning when dropping
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    
+    // Determine if we're in free drop mode (playhead at edges or boundary)
+    const isAtStart = currentTime <= (trimPoints?.inPoint ?? 0) + 0.5;
+    const isAtEnd = currentTime >= (trimPoints?.outPoint ?? duration) - 0.5;
+    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+    const isAtBoundary = boundaries.some(boundary => Math.abs(currentTime - boundary) < 0.3);
+    const freeMode = isAtStart || isAtEnd || isAtBoundary;
+    
     setDraggingAngle(angle);
     setDragPosition({ x: e.clientX, y: e.clientY });
-  }, []);
+    setDragOffset(offsetX);
+    setIsFreeDropMode(freeMode);
+    // Reset Ctrl state at the start of each drag to ensure clean state
+    setIsCtrlPressed(false);
+  }, [currentTime, trimPoints, duration, cameraSegments]);
 
   // Handle drop on camera track
   const handleCameraTrackDrop = useCallback((e: React.MouseEvent) => {
@@ -684,12 +713,16 @@ export function TelemetryTimeline({
     const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
     const isAtBoundary = boundaries.some(boundary => Math.abs(currentTime - boundary) < 0.3);
     
-    const isFreeDropMode = isAtStart || isAtEnd || isAtBoundary;
+    // Ctrl/Cmd key temporarily switches fixed mode to free drop mode
+    const isBaseFreeDropMode = isAtStart || isAtEnd || isAtBoundary;
+    const effectiveFreeDropMode = isBaseFreeDropMode || isCtrlPressed;
 
-    if (isFreeDropMode) {
+    if (effectiveFreeDropMode) {
       // Free drop mode: use mouse position for drop location
+      // Adjust position based on where the user grabbed the label (dragOffset)
+      // so the label's left edge aligns with the visual drop position
       const rect = cameraTrackRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
+      const x = (e.clientX - dragOffset) - rect.left;
       const percentage = Math.max(0, Math.min(1, x / rect.width));
       
       const trimStart = trimPoints.inPoint;
@@ -708,6 +741,8 @@ export function TelemetryTimeline({
 
     if (segIdx === -1) {
       setDraggingAngle(null);
+      setDragOffset(0);
+      setIsFreeDropMode(false);
       return;
     }
 
@@ -736,7 +771,9 @@ export function TelemetryTimeline({
     }
 
     setDraggingAngle(null);
-  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek]);
+    setDragOffset(0);
+    setIsFreeDropMode(false);
+  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek, dragOffset, isCtrlPressed]);
 
   // Track mouse movement and cancel drag on mouse up
   useEffect(() => {
@@ -749,13 +786,34 @@ export function TelemetryTimeline({
     const handleMouseUp = () => {
       setDraggingAngle(null);
       setDragPosition(null);
+      setDragOffset(0);
+      setIsFreeDropMode(false);
+      setIsCtrlPressed(false);
+    };
+
+    // Track Ctrl/Cmd key for temporary mode switch
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        setIsCtrlPressed(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) {
+        setIsCtrlPressed(false);
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
     };
   }, [draggingAngle]);
 
@@ -1071,6 +1129,7 @@ export function TelemetryTimeline({
 
         {/* Playhead */}
         <div
+          ref={playheadRef}
           className={`absolute top-0 bottom-0 w-0.5 bg-white shadow-lg z-10 pointer-events-none will-change-[left] ${
             isDragging ? 'w-1' : ''
           }`}
@@ -1310,7 +1369,7 @@ export function TelemetryTimeline({
                   }`}
                   style={{ left: `${position}%`, transform: 'translateX(-50%)' }}
                   onMouseDown={handleSegmentBoundaryMouseDown(idx + 1)}
-                  title="Drag to adjust boundary"
+                  title={t.player.dragToAdjustBoundary}
                 >
                   <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 ${
                     draggingSegmentBoundary === idx + 1 ? 'bg-white w-1.5 shadow-lg' : 'bg-white/60 group-hover:bg-white'
@@ -1325,18 +1384,46 @@ export function TelemetryTimeline({
               );
             })}
 
-            {/* Drop indicator when dragging */}
+            {/* Drop zone highlight when dragging */}
             {draggingAngle && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-purple-500/20 rounded-lg">
-                <div className="flex items-center gap-2 text-sm text-purple-300 bg-black/60 px-3 py-1.5 rounded-full">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
-                  </svg>
-                  {t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}
-                </div>
-              </div>
+              <div className="absolute inset-0 pointer-events-none bg-purple-500/10 rounded-lg border-2 border-purple-500/30 border-dashed" />
             )}
           </div>
+
+          {/* Drop hint - different for free drop vs fixed to playhead */}
+          {draggingAngle && cameraTrackRef.current && (
+            // Ctrl/Cmd key temporarily switches to free drop mode
+            (isFreeDropMode || isCtrlPressed) && dragPosition ? (
+              // Free drop mode: hint follows the drag position
+              <div 
+                className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-purple-400 bg-gray-900/90 px-2 py-1 rounded-full border border-purple-500/30 shadow-lg"
+                style={{
+                  left: dragPosition.x - dragOffset - 12,
+                  top: cameraTrackRef.current.getBoundingClientRect().bottom + 8,
+                  transform: 'translateX(0)',
+                }}
+              >
+                <IconArrowUp size={14} className="text-purple-400" />
+                <span>{t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
+              </div>
+            ) : (
+              // Fixed mode: hint aligns to playhead position
+              <div 
+                className="fixed pointer-events-none z-[999] flex flex-col items-center gap-0.5"
+                style={{
+                  left: playheadRef.current ? playheadRef.current.getBoundingClientRect().left - 12 : '50%',
+                  top: cameraTrackRef.current ? cameraTrackRef.current.getBoundingClientRect().bottom + 8 : 0,
+                  transform: 'translateX(0)',
+                }}
+              >
+                <div className="flex items-center gap-1.5 text-xs text-blue-400 bg-gray-900/90 px-2 py-1 rounded-full border border-blue-500/30 shadow-lg">
+                  <IconArrowUp size={14} className="text-blue-400" />
+                  <span>{t.player.addToPlayhead(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
+                </div>
+                <span className="text-[10px] text-gray-500 bg-gray-900/80 px-1.5 py-0.5 rounded">{t.player.holdCtrlForFreeDrop}</span>
+              </div>
+            )
+          )}
 
           {/* Playback hint */}
           <div className="text-[10px] text-gray-500 mt-1.5">
@@ -1348,9 +1435,9 @@ export function TelemetryTimeline({
       {/* Drag ghost - floating badge that follows cursor */}
       {draggingAngle && dragPosition && (
         <div
-          className="fixed pointer-events-none z-[1000] px-3 py-1.5 rounded text-xs font-medium shadow-lg transform -translate-x-1/2 -translate-y-1/2"
+          className="fixed pointer-events-none z-[1000] px-3 py-1.5 rounded text-xs font-medium shadow-lg transform -translate-y-1/2"
           style={{
-            left: dragPosition.x,
+            left: dragPosition.x - dragOffset,
             top: dragPosition.y,
             backgroundColor: ANGLE_COLORS[draggingAngle] || '#6B7280',
             color: 'white',
