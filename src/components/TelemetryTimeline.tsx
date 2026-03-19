@@ -364,6 +364,8 @@ export function TelemetryTimeline({
   const [dragOffset, setDragOffset] = useState<number>(0); // Offset from label left edge to cursor (for accurate drop positioning)
   const [isFreeDropMode, setIsFreeDropMode] = useState<boolean>(false); // Whether dropping at free position or fixed to playhead
   const [isCtrlPressed, setIsCtrlPressed] = useState<boolean>(false); // Track Ctrl/Cmd key for temporary mode switch
+  const cameraSegmentsRef = useRef(cameraSegments);
+  cameraSegmentsRef.current = cameraSegments;
 
   // Calculate event position in absolute time
   const eventAbsoluteTime = useMemo(() => {
@@ -461,9 +463,10 @@ export function TelemetryTimeline({
       } else if (draggingSegmentBoundary !== null && onCameraSegmentsChange) {
         // Dragging a segment boundary - allow merging by dragging to edges
         const segIdx = draggingSegmentBoundary;
-        if (segIdx > 0 && segIdx < cameraSegments.length) {
-          const prevSeg = cameraSegments[segIdx - 1];
-          const currSeg = cameraSegments[segIdx];
+        const latestSegments = cameraSegmentsRef.current;
+        if (segIdx > 0 && segIdx < latestSegments.length) {
+          const prevSeg = latestSegments[segIdx - 1];
+          const currSeg = latestSegments[segIdx];
           // Allow boundary to go all the way to previous segment's start or current segment's end
           // This enables one segment to completely cover another
           const minTime = prevSeg.startTime;
@@ -473,25 +476,28 @@ export function TelemetryTimeline({
           // If dragged to the edge, merge the segments based on direction
           if (newBoundary <= prevSeg.startTime) {
             // Dragged all the way left - current (right) segment wins, remove previous
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                // This was the current segment, now extends to cover previous
-                return { ...seg, startTime: prevSeg.startTime };
-              }
-              return seg;
-            });
-            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            // Create new array: keep currSeg and after, extend currSeg to cover prevSeg
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1), // segments before prevSeg
+              { ...currSeg, startTime: prevSeg.startTime }, // currSeg extended
+              ...latestSegments.slice(segIdx + 1), // segments after currSeg
+            ];
+            onCameraSegmentsChange(newSegments);
+            // Stop dragging as the boundary has been merged
+            setDraggingSegmentBoundary(null);
           } else if (newBoundary >= currSeg.endTime) {
             // Dragged all the way right - previous (left) segment wins, remove current
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                return { ...seg, endTime: currSeg.endTime };
-              }
-              return seg;
-            });
-            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            // Create new array: keep before currSeg, extend prevSeg to cover currSeg
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1), // segments before prevSeg
+              { ...prevSeg, endTime: currSeg.endTime }, // prevSeg extended
+              ...latestSegments.slice(segIdx + 1), // segments after currSeg
+            ];
+            onCameraSegmentsChange(newSegments);
+            // Stop dragging as the boundary has been merged
+            setDraggingSegmentBoundary(null);
           } else {
-            const newSegments = cameraSegments.map((seg, idx) => {
+            const newSegments = latestSegments.map((seg, idx) => {
               if (idx === segIdx - 1) {
                 return { ...seg, endTime: newBoundary };
               } else if (idx === segIdx) {
@@ -526,33 +532,34 @@ export function TelemetryTimeline({
         onTrimPreview?.(previewTime);
       } else if (draggingSegmentBoundary !== null && onCameraSegmentsChange) {
         const segIdx = draggingSegmentBoundary;
-        if (segIdx > 0 && segIdx < cameraSegments.length) {
-          const prevSeg = cameraSegments[segIdx - 1];
-          const currSeg = cameraSegments[segIdx];
+        const latestSegments = cameraSegmentsRef.current;
+        if (segIdx > 0 && segIdx < latestSegments.length) {
+          const prevSeg = latestSegments[segIdx - 1];
+          const currSeg = latestSegments[segIdx];
           const minTime = prevSeg.startTime;
           const maxTime = currSeg.endTime;
           const newBoundary = Math.max(minTime, Math.min(maxTime, time));
 
           if (newBoundary <= prevSeg.startTime) {
-            // Dragged all the way left - current (right) segment wins
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx - 1).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                return { ...seg, startTime: prevSeg.startTime };
-              }
-              return seg;
-            });
-            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            // Dragged all the way left - current (right) segment wins, remove previous
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1),
+              { ...currSeg, startTime: prevSeg.startTime },
+              ...latestSegments.slice(segIdx + 1),
+            ];
+            onCameraSegmentsChange(newSegments);
+            setDraggingSegmentBoundary(null);
           } else if (newBoundary >= currSeg.endTime) {
-            // Dragged all the way right - previous (left) segment wins
-            const newSegments = cameraSegments.filter((_, idx) => idx !== segIdx).map((seg, idx, arr) => {
-              if (idx === segIdx - 1) {
-                return { ...seg, endTime: currSeg.endTime };
-              }
-              return seg;
-            });
-            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
+            // Dragged all the way right - previous (left) segment wins, remove current
+            const newSegments = [
+              ...latestSegments.slice(0, segIdx - 1),
+              { ...prevSeg, endTime: currSeg.endTime },
+              ...latestSegments.slice(segIdx + 1),
+            ];
+            onCameraSegmentsChange(newSegments);
+            setDraggingSegmentBoundary(null);
           } else {
-            const newSegments = cameraSegments.map((seg, idx) => {
+            const newSegments = latestSegments.map((seg, idx) => {
               if (idx === segIdx - 1) {
                 return { ...seg, endTime: newBoundary };
               } else if (idx === segIdx) {
@@ -560,7 +567,6 @@ export function TelemetryTimeline({
               }
               return seg;
             });
-            // Check if the two segments now have the same angle and should be merged
             onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
           }
           onTrimPreview?.(newBoundary);
@@ -590,7 +596,7 @@ export function TelemetryTimeline({
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleEnd);
     };
-  }, [isDragging, draggingTrimHandle, draggingSegmentBoundary, getTimeFromEvent, onSeek, trimPoints, onTrimChange, onTrimPreview, duration, cameraSegments, onCameraSegmentsChange]);
+  }, [isDragging, draggingTrimHandle, draggingSegmentBoundary, getTimeFromEvent, onSeek, trimPoints, onTrimChange, onTrimPreview, duration, onCameraSegmentsChange]);
 
   // Handle trim handle mouse down
   const handleTrimHandleMouseDown = useCallback((handle: 'in' | 'out') => (e: React.MouseEvent) => {
