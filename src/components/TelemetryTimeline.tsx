@@ -1384,7 +1384,7 @@ export function TelemetryTimeline({
                 }}
               >
                 <IconArrowUp size={14} className="text-blue-400" />
-                <span>{t.player.addToPlayhead?.(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle) || `Add ${t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle} to playhead`}</span>
+                <span>{t.player.addToPlayhead(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
               </div>
             )
           )}
