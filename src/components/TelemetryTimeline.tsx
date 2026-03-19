@@ -360,6 +360,7 @@ export function TelemetryTimeline({
   const [draggingSegmentBoundary, setDraggingSegmentBoundary] = useState<number | null>(null);
   const [draggingAngle, setDraggingAngle] = useState<string | null>(null); // For drag-drop from palette
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
+  const [dragOffset, setDragOffset] = useState<number>(0); // Offset from label left edge to cursor (for accurate drop positioning)
 
   // Calculate event position in absolute time
   const eventAbsoluteTime = useMemo(() => {
@@ -666,8 +667,15 @@ export function TelemetryTimeline({
 
   // Handle drag start from angle palette
   const handleAngleDragStart = useCallback((angle: string, e: React.MouseEvent) => {
+    // Calculate offset from the label element's left edge to cursor
+    // This allows accurate positioning when dropping
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    
     setDraggingAngle(angle);
     setDragPosition({ x: e.clientX, y: e.clientY });
+    setDragOffset(offsetX);
   }, []);
 
   // Handle drop on camera track
@@ -688,8 +696,10 @@ export function TelemetryTimeline({
 
     if (isFreeDropMode) {
       // Free drop mode: use mouse position for drop location
+      // Adjust position based on where the user grabbed the label (dragOffset)
+      // so the label's left edge aligns with the visual drop position
       const rect = cameraTrackRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
+      const x = (e.clientX - dragOffset) - rect.left;
       const percentage = Math.max(0, Math.min(1, x / rect.width));
       
       const trimStart = trimPoints.inPoint;
@@ -708,6 +718,7 @@ export function TelemetryTimeline({
 
     if (segIdx === -1) {
       setDraggingAngle(null);
+      setDragOffset(0);
       return;
     }
 
@@ -736,7 +747,8 @@ export function TelemetryTimeline({
     }
 
     setDraggingAngle(null);
-  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek]);
+    setDragOffset(0);
+  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek, dragOffset]);
 
   // Track mouse movement and cancel drag on mouse up
   useEffect(() => {
@@ -749,6 +761,7 @@ export function TelemetryTimeline({
     const handleMouseUp = () => {
       setDraggingAngle(null);
       setDragPosition(null);
+      setDragOffset(0);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -1348,9 +1361,9 @@ export function TelemetryTimeline({
       {/* Drag ghost - floating badge that follows cursor */}
       {draggingAngle && dragPosition && (
         <div
-          className="fixed pointer-events-none z-[1000] px-3 py-1.5 rounded text-xs font-medium shadow-lg transform -translate-x-1/2 -translate-y-1/2"
+          className="fixed pointer-events-none z-[1000] px-3 py-1.5 rounded text-xs font-medium shadow-lg transform -translate-y-1/2"
           style={{
-            left: dragPosition.x,
+            left: dragPosition.x - dragOffset,
             top: dragPosition.y,
             backgroundColor: ANGLE_COLORS[draggingAngle] || '#6B7280',
             color: 'white',
