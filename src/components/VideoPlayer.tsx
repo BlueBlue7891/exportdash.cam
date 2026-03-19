@@ -1877,10 +1877,10 @@ export function VideoPlayer({
             <Tooltip content={trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? t.player.editTrim : t.player.trim} position="top">
               <button
                 onClick={toggleTrimMode}
-                className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
+                className={`px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 shadow-md ${
                   trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration)
-                    ? 'bg-yellow-500/80 text-black hover:bg-yellow-500'
-                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400'
+                    : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400'
                 }`}
               >
                 <IconScissors size={14} />
