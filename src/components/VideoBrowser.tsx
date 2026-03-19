@@ -660,8 +660,8 @@ export function VideoBrowser({ folderStructure, onSelectTimeSlot, onClose, selec
             </div>
 
             <div className="grid grid-cols-7 gap-1 mb-2">
-              {t.browser.weekdays.map(day => (
-                <div key={day} className="text-center text-xs text-gray-500 py-1">
+              {t.browser.weekdays.map((day, idx) => (
+                <div key={idx} className="text-center text-xs text-gray-500 py-1">
                   {day}
                 </div>
               ))}

@@ -363,6 +363,7 @@ export function TelemetryTimeline({
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
   const [dragOffset, setDragOffset] = useState<number>(0); // Offset from label left edge to cursor (for accurate drop positioning)
   const [isFreeDropMode, setIsFreeDropMode] = useState<boolean>(false); // Whether dropping at free position or fixed to playhead
+  const [isCtrlPressed, setIsCtrlPressed] = useState<boolean>(false); // Track Ctrl/Cmd key for temporary mode switch
 
   // Calculate event position in absolute time
   const eventAbsoluteTime = useMemo(() => {
@@ -686,6 +687,8 @@ export function TelemetryTimeline({
     setDragPosition({ x: e.clientX, y: e.clientY });
     setDragOffset(offsetX);
     setIsFreeDropMode(freeMode);
+    // Reset Ctrl state at the start of each drag to ensure clean state
+    setIsCtrlPressed(false);
   }, [currentTime, trimPoints, duration, cameraSegments]);
 
   // Handle drop on camera track
@@ -702,9 +705,11 @@ export function TelemetryTimeline({
     const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
     const isAtBoundary = boundaries.some(boundary => Math.abs(currentTime - boundary) < 0.3);
     
-    const isFreeDropMode = isAtStart || isAtEnd || isAtBoundary;
+    // Ctrl/Cmd key temporarily switches fixed mode to free drop mode
+    const isBaseFreeDropMode = isAtStart || isAtEnd || isAtBoundary;
+    const effectiveFreeDropMode = isBaseFreeDropMode || isCtrlPressed;
 
-    if (isFreeDropMode) {
+    if (effectiveFreeDropMode) {
       // Free drop mode: use mouse position for drop location
       // Adjust position based on where the user grabbed the label (dragOffset)
       // so the label's left edge aligns with the visual drop position
@@ -760,7 +765,7 @@ export function TelemetryTimeline({
     setDraggingAngle(null);
     setDragOffset(0);
     setIsFreeDropMode(false);
-  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek, dragOffset]);
+  }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek, dragOffset, isCtrlPressed]);
 
   // Track mouse movement and cancel drag on mouse up
   useEffect(() => {
@@ -775,13 +780,32 @@ export function TelemetryTimeline({
       setDragPosition(null);
       setDragOffset(0);
       setIsFreeDropMode(false);
+      setIsCtrlPressed(false);
+    };
+
+    // Track Ctrl/Cmd key for temporary mode switch
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        setIsCtrlPressed(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) {
+        setIsCtrlPressed(false);
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
     };
   }, [draggingAngle]);
 
@@ -1360,7 +1384,8 @@ export function TelemetryTimeline({
 
           {/* Drop hint - different for free drop vs fixed to playhead */}
           {draggingAngle && cameraTrackRef.current && (
-            isFreeDropMode && dragPosition ? (
+            // Ctrl/Cmd key temporarily switches to free drop mode
+            (isFreeDropMode || isCtrlPressed) && dragPosition ? (
               // Free drop mode: hint follows the drag position
               <div 
                 className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-purple-400 bg-gray-900/90 px-2 py-1 rounded-full border border-purple-500/30 shadow-lg"
@@ -1376,15 +1401,18 @@ export function TelemetryTimeline({
             ) : (
               // Fixed mode: hint aligns to playhead position
               <div 
-                className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-blue-400 bg-gray-900/90 px-2 py-1 rounded-full border border-blue-500/30 shadow-lg"
+                className="fixed pointer-events-none z-[999] flex flex-col items-center gap-0.5"
                 style={{
                   left: playheadRef.current ? playheadRef.current.getBoundingClientRect().left - 12 : '50%',
                   top: cameraTrackRef.current ? cameraTrackRef.current.getBoundingClientRect().bottom + 8 : 0,
                   transform: 'translateX(0)',
                 }}
               >
-                <IconArrowUp size={14} className="text-blue-400" />
-                <span>{t.player.addToPlayhead(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
+                <div className="flex items-center gap-1.5 text-xs text-blue-400 bg-gray-900/90 px-2 py-1 rounded-full border border-blue-500/30 shadow-lg">
+                  <IconArrowUp size={14} className="text-blue-400" />
+                  <span>{t.player.addToPlayhead(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
+                </div>
+                <span className="text-[10px] text-gray-500 bg-gray-900/80 px-1.5 py-0.5 rounded">{t.player.holdCtrlForFreeDrop}</span>
               </div>
             )
           )}

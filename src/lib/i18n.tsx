@@ -125,6 +125,7 @@ export interface Translations {
     doubleClickToRemove: string;
     dropHere: (angle: string) => string;
     addToPlayhead: (angle: string) => string;
+    holdCtrlForFreeDrop: string;
     pressPlayToPreview: string;
     onlyTripleViewEnabled: string;
     notInTripleView: (angle: string) => string;
@@ -413,6 +414,7 @@ const en: Translations = {
     doubleClickToRemove: 'Double-click to remove',
     dropHere: (angle: string) => `Drop ${angle} here`,
     addToPlayhead: (angle: string) => `Auto add ${angle} at playhead`,
+    holdCtrlForFreeDrop: 'Hold Ctrl/Cmd for free drop',
     pressPlayToPreview: 'Press play to preview camera switches',
     onlyTripleViewEnabled: 'Only triple view angles enabled. Configure layout to change.',
     notInTripleView: (angle: string) => `${angle} is not in triple view layout. Configure layout to enable.`,
@@ -700,6 +702,7 @@ const zh: Translations = {
     doubleClickToRemove: '双击移除',
     dropHere: (angle: string) => `拖放 ${angle} 到此处`,
     addToPlayhead: (angle: string) => `自动在播放头位置添加 ${angle}`,
+    holdCtrlForFreeDrop: '按住 Ctrl/Cmd 自由放置',
     pressPlayToPreview: '点击播放预览摄像头切换',
     onlyTripleViewEnabled: '仅启用三视图角度。配置布局以更改。',
     notInTripleView: (angle: string) => `${angle} 不在三视图布局中。配置布局以启用。`,
