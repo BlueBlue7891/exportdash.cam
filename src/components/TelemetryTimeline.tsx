@@ -1369,7 +1369,7 @@ export function TelemetryTimeline({
                   }`}
                   style={{ left: `${position}%`, transform: 'translateX(-50%)' }}
                   onMouseDown={handleSegmentBoundaryMouseDown(idx + 1)}
-                  title="Drag to adjust boundary"
+                  title={t.player.dragToAdjustBoundary}
                 >
                   <div className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 ${
                     draggingSegmentBoundary === idx + 1 ? 'bg-white w-1.5 shadow-lg' : 'bg-white/60 group-hover:bg-white'

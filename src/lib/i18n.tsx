@@ -120,6 +120,7 @@ export interface Translations {
     cameraTrack: string;
     dragToTrack: string;
     dragBoundariesDoubleClick: string;
+    dragToAdjustBoundary: string;
     previousBoundary: string;
     nextBoundary: string;
     doubleClickToRemove: string;
@@ -408,7 +409,8 @@ const en: Translations = {
     dragHandlesToTrim: 'Drag the yellow handles to set start and end points, then click Done',
     cameraTrack: 'Camera Track',
     dragToTrack: 'drag to track',
-    dragBoundariesDoubleClick: 'Drag boundaries to move • Double-click segment to remove',
+    dragBoundariesDoubleClick: 'Drag to adjust boundary • Double-click to remove segments',
+    dragToAdjustBoundary: 'Drag to adjust boundary',
     previousBoundary: 'Previous boundary',
     nextBoundary: 'Next boundary',
     doubleClickToRemove: 'Double-click to remove',
@@ -696,7 +698,8 @@ const zh: Translations = {
     dragHandlesToTrim: '拖动黄色手柄设置起点和终点，然后点击完成',
     cameraTrack: '摄像头时间线',
     dragToTrack: '拖放到摄像头时间线',
-    dragBoundariesDoubleClick: '拖动边界移动 • 双击片段移除',
+    dragBoundariesDoubleClick: '拖拽调整边界 • 双击移除片段',
+    dragToAdjustBoundary: '拖拽调整边界',
     previousBoundary: '上一个边界',
     nextBoundary: '下一个边界',
     doubleClickToRemove: '双击移除',
