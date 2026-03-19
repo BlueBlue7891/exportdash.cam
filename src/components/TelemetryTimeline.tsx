@@ -482,7 +482,8 @@ export function TelemetryTimeline({
               { ...currSeg, startTime: prevSeg.startTime }, // currSeg extended
               ...latestSegments.slice(segIdx + 1), // segments after currSeg
             ];
-            onCameraSegmentsChange(newSegments);
+            // Merge adjacent segments with same angle after removal
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
             // Stop dragging as the boundary has been merged
             setDraggingSegmentBoundary(null);
           } else if (newBoundary >= currSeg.endTime) {
@@ -493,7 +494,8 @@ export function TelemetryTimeline({
               { ...prevSeg, endTime: currSeg.endTime }, // prevSeg extended
               ...latestSegments.slice(segIdx + 1), // segments after currSeg
             ];
-            onCameraSegmentsChange(newSegments);
+            // Merge adjacent segments with same angle after removal
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
             // Stop dragging as the boundary has been merged
             setDraggingSegmentBoundary(null);
           } else {
@@ -547,7 +549,7 @@ export function TelemetryTimeline({
               { ...currSeg, startTime: prevSeg.startTime },
               ...latestSegments.slice(segIdx + 1),
             ];
-            onCameraSegmentsChange(newSegments);
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
             setDraggingSegmentBoundary(null);
           } else if (newBoundary >= currSeg.endTime) {
             // Dragged all the way right - previous (left) segment wins, remove current
@@ -556,7 +558,7 @@ export function TelemetryTimeline({
               { ...prevSeg, endTime: currSeg.endTime },
               ...latestSegments.slice(segIdx + 1),
             ];
-            onCameraSegmentsChange(newSegments);
+            onCameraSegmentsChange(mergeAdjacentSegments(newSegments));
             setDraggingSegmentBoundary(null);
           } else {
             const newSegments = latestSegments.map((seg, idx) => {
