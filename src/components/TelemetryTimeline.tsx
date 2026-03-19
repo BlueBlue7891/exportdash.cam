@@ -355,12 +355,14 @@ export function TelemetryTimeline({
   // Dragging/scrubbing state
   const timelineRef = useRef<HTMLDivElement>(null);
   const cameraTrackRef = useRef<HTMLDivElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggingTrimHandle, setDraggingTrimHandle] = useState<'in' | 'out' | null>(null);
   const [draggingSegmentBoundary, setDraggingSegmentBoundary] = useState<number | null>(null);
   const [draggingAngle, setDraggingAngle] = useState<string | null>(null); // For drag-drop from palette
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null); // Mouse position for drag ghost
   const [dragOffset, setDragOffset] = useState<number>(0); // Offset from label left edge to cursor (for accurate drop positioning)
+  const [isFreeDropMode, setIsFreeDropMode] = useState<boolean>(false); // Whether dropping at free position or fixed to playhead
 
   // Calculate event position in absolute time
   const eventAbsoluteTime = useMemo(() => {
@@ -673,10 +675,18 @@ export function TelemetryTimeline({
     const rect = target.getBoundingClientRect();
     const offsetX = e.clientX - rect.left;
     
+    // Determine if we're in free drop mode (playhead at edges or boundary)
+    const isAtStart = currentTime <= (trimPoints?.inPoint ?? 0) + 0.5;
+    const isAtEnd = currentTime >= (trimPoints?.outPoint ?? duration) - 0.5;
+    const boundaries = cameraSegments.slice(1).map(seg => seg.startTime);
+    const isAtBoundary = boundaries.some(boundary => Math.abs(currentTime - boundary) < 0.3);
+    const freeMode = isAtStart || isAtEnd || isAtBoundary;
+    
     setDraggingAngle(angle);
     setDragPosition({ x: e.clientX, y: e.clientY });
     setDragOffset(offsetX);
-  }, []);
+    setIsFreeDropMode(freeMode);
+  }, [currentTime, trimPoints, duration, cameraSegments]);
 
   // Handle drop on camera track
   const handleCameraTrackDrop = useCallback((e: React.MouseEvent) => {
@@ -719,6 +729,7 @@ export function TelemetryTimeline({
     if (segIdx === -1) {
       setDraggingAngle(null);
       setDragOffset(0);
+      setIsFreeDropMode(false);
       return;
     }
 
@@ -748,6 +759,7 @@ export function TelemetryTimeline({
 
     setDraggingAngle(null);
     setDragOffset(0);
+    setIsFreeDropMode(false);
   }, [draggingAngle, cameraSegments, onCameraSegmentsChange, trimPoints, currentTime, onSeek, dragOffset]);
 
   // Track mouse movement and cancel drag on mouse up
@@ -762,6 +774,7 @@ export function TelemetryTimeline({
       setDraggingAngle(null);
       setDragPosition(null);
       setDragOffset(0);
+      setIsFreeDropMode(false);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -1084,6 +1097,7 @@ export function TelemetryTimeline({
 
         {/* Playhead */}
         <div
+          ref={playheadRef}
           className={`absolute top-0 bottom-0 w-0.5 bg-white shadow-lg z-10 pointer-events-none will-change-[left] ${
             isDragging ? 'w-1' : ''
           }`}
@@ -1344,19 +1358,35 @@ export function TelemetryTimeline({
             )}
           </div>
 
-          {/* Drop hint below the track - follows the drag position */}
-          {draggingAngle && dragPosition && cameraTrackRef.current && (
-            <div 
-              className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-purple-400 bg-gray-900/90 px-2 py-1 rounded-full border border-purple-500/30 shadow-lg"
-              style={{
-                left: dragPosition.x - dragOffset - 12, // 向左偏移12px，让箭头中心对准标签左侧
-                top: cameraTrackRef.current.getBoundingClientRect().bottom + 8,
-                transform: 'translateX(0)',
-              }}
-            >
-              <IconArrowUp size={14} className="text-purple-400" />
-              <span>{t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
-            </div>
+          {/* Drop hint - different for free drop vs fixed to playhead */}
+          {draggingAngle && cameraTrackRef.current && (
+            isFreeDropMode && dragPosition ? (
+              // Free drop mode: hint follows the drag position
+              <div 
+                className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-purple-400 bg-gray-900/90 px-2 py-1 rounded-full border border-purple-500/30 shadow-lg"
+                style={{
+                  left: dragPosition.x - dragOffset - 12,
+                  top: cameraTrackRef.current.getBoundingClientRect().bottom + 8,
+                  transform: 'translateX(0)',
+                }}
+              >
+                <IconArrowUp size={14} className="text-purple-400" />
+                <span>{t.player.dropHere(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle)}</span>
+              </div>
+            ) : (
+              // Fixed mode: hint aligns to playhead position
+              <div 
+                className="fixed pointer-events-none z-[999] flex items-center gap-1.5 text-xs text-blue-400 bg-gray-900/90 px-2 py-1 rounded-full border border-blue-500/30 shadow-lg"
+                style={{
+                  left: playheadRef.current ? playheadRef.current.getBoundingClientRect().left - 12 : '50%',
+                  top: cameraTrackRef.current ? cameraTrackRef.current.getBoundingClientRect().bottom + 8 : 0,
+                  transform: 'translateX(0)',
+                }}
+              >
+                <IconArrowUp size={14} className="text-blue-400" />
+                <span>{t.player.addToPlayhead?.(t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle) || `Add ${t.angles[draggingAngle as keyof typeof t.angles] || draggingAngle} to playhead`}</span>
+              </div>
+            )
           )}
 
           {/* Playback hint */}
