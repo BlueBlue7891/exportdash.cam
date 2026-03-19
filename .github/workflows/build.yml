@@ -68,12 +68,20 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'ExportDashCam v__VERSION__'
           releaseBody: |
-            Download the desktop application for your platform.
+            下载适合您平台的桌面应用程序。
 
-            ## Desktop App
-            - Windows: `.exe` installer
-            - macOS: `.dmg` disk image
-            - Linux: `.AppImage` or `.deb`
+            ## 更新内容
+            - LanguageSwitcher 简化（点击图标直接切换语言）
+            - TelemetryTimeline 拖拽优化（边界拖拽、片段合并）
+            - VideoPlayer 按钮和布局改进
+            - i18n 新增翻译（中文/英文）
+
+            ## 桌面应用程序
+            - **Windows**: `.msi` 或 `.exe` 安装程序
+            - **macOS**: `.dmg` 磁盘镜像
+              - Apple Silicon (M1/M2/M3): 下载文件名含 `aarch64` 或 `arm64` 的版本
+              - Intel Mac: 下载文件名含 `x86_64` 或 `x64` 的版本
+            - **Linux**: `.AppImage` 或 `.deb`
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.rust_target }}
