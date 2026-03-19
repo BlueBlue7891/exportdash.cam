@@ -1744,7 +1744,7 @@ export function VideoPlayer({
               const isTripleOrAll = layout === 'triple' || layout === 'all';
               const canSelect = layout === 'single' || layout === 'pip' || isEditMode || hasCustomCameraTrack;
               const isDisabled = !isAvailable || isTripleOrAll || !canSelect;
-              const isActive = selectedAngle === angle && !useCustomCameraTrack && canSelect;
+              const isActive = selectedAngle === angle && canSelect;
 
               return (
                 <Tooltip key={angle} content={t.angles[angle as keyof typeof t.angles]} position="top">
@@ -1759,8 +1759,10 @@ export function VideoPlayer({
                     className={`p-1.5 rounded text-xs font-medium transition-all ${
                       isActive
                         ? isTrimming 
-                          ? 'bg-yellow-500 text-black'
-                          : 'bg-blue-600 text-white'
+                          ? 'bg-yellow-500 text-white'
+                          : useCustomCameraTrack
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-blue-600 text-white'
                         : isDisabled
                         ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
