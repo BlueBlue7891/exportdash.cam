@@ -44,6 +44,7 @@ import {
   IconChevronDown,
   IconCheck,
   IconScissors,
+  IconX,
   IconWand,
 
   IconClock,
@@ -211,6 +212,11 @@ export function VideoPlayer({
   const tripleViewLayoutAngles = useMemo(() => {
     return layoutConfig.triple.cameras;
   }, [layoutConfig.triple.cameras]);
+
+  // Get available angles for all (6-camera) view layout
+  const allViewLayoutAngles = useMemo(() => {
+    return [...layoutConfig.all.topRow, ...layoutConfig.all.bottomRow];
+  }, [layoutConfig.all.topRow, layoutConfig.all.bottomRow]);
 
   // Handle layout config change with Camera Track sync
   const handleLayoutConfigChange = useCallback((newConfig: LayoutCameraConfig) => {
@@ -1739,15 +1745,26 @@ export function VideoPlayer({
             <span className="text-[10px] text-gray-500 mr-1">{t.player.cameras}</span>
             {BUTTON_ORDER.map((angle) => {
               const isAvailable = availableAngles.includes(angle);
-              // In triple/all layouts, disable camera buttons (they show all cameras at once)
-              // PIP and single layouts allow camera switching
-              const isTripleOrAll = layout === 'triple' || layout === 'all';
-              const canSelect = layout === 'single' || layout === 'pip' || isEditMode || hasCustomCameraTrack;
-              const isDisabled = !isAvailable || isTripleOrAll || !canSelect;
-              const isActive = selectedAngle === angle && canSelect;
+              // In triple/all layouts, only configured angles are enabled for selection
+              // PIP and single layouts allow all camera switching
+              const canSelect = layout === 'single' || layout === 'pip' || isEditMode || hasCustomCameraTrack ||
+                                (layout === 'triple' && tripleViewLayoutAngles.includes(angle)) ||
+                                (layout === 'all' && allViewLayoutAngles.includes(angle));
+              // In triple/all view, disable non-configured angles
+              const isInTripleConfig = tripleViewLayoutAngles.includes(angle);
+              const isInAllConfig = allViewLayoutAngles.includes(angle);
+              const isLayoutDisabled = (layout === 'triple' && !isInTripleConfig) || 
+                                       (layout === 'all' && !isInAllConfig);
+              const isDisabled = !isAvailable || !canSelect || isLayoutDisabled;
+              const isActive = selectedAngle === angle && canSelect && !isLayoutDisabled;
+
+              // Tooltip content: show restriction message for disabled buttons
+              const tooltipContent = (isLayoutDisabled && isAvailable)
+                ? t.player.onlyTripleViewEnabled
+                : t.angles[angle as keyof typeof t.angles];
 
               return (
-                <Tooltip key={angle} content={t.angles[angle as keyof typeof t.angles]} position="top">
+                <Tooltip key={angle} content={tooltipContent} position="top">
                   <button
                     disabled={isDisabled}
                     onClick={() => {
@@ -1887,6 +1904,19 @@ export function VideoPlayer({
               >
                 <IconScissors size={14} />
                 <span>{trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) ? t.player.editTrim : t.player.trim}</span>
+              </button>
+            </Tooltip>
+          )}
+
+          {/* Cancel trim button - only show when video is trimmed and not in trim mode */}
+          {!isTrimming && trimPoints && (trimPoints.inPoint > 0 || trimPoints.outPoint < totalDuration) && (
+            <Tooltip content={t.player.cancelTrim} position="top">
+              <button
+                onClick={() => setTrimPoints({ inPoint: 0, outPoint: sequence.totalDuration })}
+                className="px-2 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 bg-gray-700 text-gray-300 hover:bg-gray-600"
+              >
+                <IconX size={14} />
+                <span>{t.player.cancelTrim}</span>
               </button>
             </Tooltip>
           )}

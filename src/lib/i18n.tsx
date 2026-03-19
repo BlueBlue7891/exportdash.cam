@@ -88,6 +88,7 @@ export interface Translations {
     configureLayout: string;
     trim: string;
     editTrim: string;
+    cancelTrim: string;
     done: string;
     show: string;
     dateTime: string;
@@ -378,6 +379,7 @@ const en: Translations = {
     configureLayout: 'Configure layout',
     trim: 'Trim video (E)',
     editTrim: 'Edit trim (E)',
+    cancelTrim: 'Cancel trim',
     done: 'Done',
     show: 'Show:',
     dateTime: 'Date/Time (D)',
@@ -418,7 +420,7 @@ const en: Translations = {
     addToPlayhead: (angle: string) => `Auto add ${angle} at playhead`,
     holdCtrlForFreeDrop: 'Hold Ctrl/Cmd for free drop',
     pressPlayToPreview: 'Press play to preview camera switches',
-    onlyTripleViewEnabled: 'Only triple view angles enabled. Configure layout to change.',
+    onlyTripleViewEnabled: 'Only configured camera angles enabled. Change layout to enable others.',
     notInTripleView: (angle: string) => `${angle} is not in triple view layout. Configure layout to enable.`,
     dragToTimeline: (angle: string) => `Drag ${angle} to timeline`,
   },
@@ -667,6 +669,7 @@ const zh: Translations = {
     configureLayout: '配置布局',
     trim: '裁剪视频 (E)',
     editTrim: '编辑裁剪 (E)',
+    cancelTrim: '取消裁剪',
     done: '完成',
     show: '显示：',
     dateTime: '日期/时间 (D)',
@@ -707,7 +710,7 @@ const zh: Translations = {
     addToPlayhead: (angle: string) => `自动在播放头位置添加 ${angle}`,
     holdCtrlForFreeDrop: '按住 Ctrl/Cmd 自由放置',
     pressPlayToPreview: '点击播放预览摄像头切换',
-    onlyTripleViewEnabled: '仅启用三视图角度。配置布局以更改。',
+    onlyTripleViewEnabled: '仅启用已配置的摄像头标签。更改布局配置以启用其他。',
     notInTripleView: (angle: string) => `${angle} 不在三视图布局中。配置布局以启用。`,
     dragToTimeline: (angle: string) => `拖放 ${angle} 到时间线`,
   },
