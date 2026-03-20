@@ -27,6 +27,7 @@ interface VideoExporterProps {
   layout?: LayoutType;
   layoutConfig?: LayoutCameraConfig;
   mapSize?: number;
+  hasCustomCameraTrack?: boolean;
 }
 
 // Map tile cache
@@ -193,6 +194,7 @@ export function VideoExporter({
   layout = 'single',
   layoutConfig = DEFAULT_LAYOUT_CONFIG,
   mapSize: mapSizeProp = 160,
+  hasCustomCameraTrack = false,
 }: VideoExporterProps) {
   const { t, language } = useLanguage();
   const [isExporting, setIsExporting] = useState(false);
@@ -1156,7 +1158,8 @@ export function VideoExporter({
           for (let i = 0; i < tripleAngles.length; i++) {
             const angle = tripleAngles[i];
             const ev = extraVideos[angle];
-            const isMain = angle === frameAngle;
+            // Only highlight main view in Custom Camera Track mode
+            const isMain = hasCustomCameraTrack && angle === frameAngle;
             
             // Calculate position: leftOffset + i * (cell + spacing)
             const px = leftOffset + i * (cellW + spacing);
@@ -1237,7 +1240,7 @@ export function VideoExporter({
             const labelX = px + labelMargin;
             const labelY = py + ph - labelHeight - labelMargin;
             
-            // Label style for main angle: bg-green-600/70 border border-green-400/50
+            // Label style for main angle: bg-green-600/70 border border-green-400/50 (only in Custom Camera Track mode)
             const labelCornerRadius = 6 * baseUIScale;
             if (isMain) {
               // Background: bg-green-600/70
@@ -1332,8 +1335,8 @@ export function VideoExporter({
             const pipH = Math.floor(pipW * (srcH / srcW));
             const cornerRadius = 8 * (width / 1920);
             
-            // Check if this corner matches the current main angle
-            const isMatchingMainView = frameAngle === angle;
+            // Check if this corner matches the current main angle (only in Custom Camera Track mode)
+            const isMatchingMainView = hasCustomCameraTrack && frameAngle === angle;
             
             // Calculate breathing glow animation (2s cycle like CSS animate-pipGlow)
             const breathePhase = (Math.sin((absoluteTime * Math.PI)) + 1) / 2;
@@ -1626,7 +1629,8 @@ export function VideoExporter({
             for (let colIdx = 0; colIdx < 3; colIdx++) {
               const angle = row[colIdx];
               const ev = extraVideos[angle];
-              const isMain = angle === frameAngle;
+              // Only highlight main view in Custom Camera Track mode
+              const isMain = hasCustomCameraTrack && angle === frameAngle;
               
               if (!ev || !moment.videos.some(v => v.angle === angle)) {
                 // Draw placeholder for unavailable angle

@@ -1187,7 +1187,7 @@ export function VideoPlayer({
   const availableAngles = currentMoment.videos.map(v => v.angle);
 
   // Render a single video element
-  const renderVideo = (angle: string, isMain: boolean, className: string = '', showLabel: boolean = false, moreLabelSpacing: boolean = false) => {
+  const renderVideo = (angle: string, isMain: boolean, className: string = '', showLabel: boolean = false, moreLabelSpacing: boolean = false, showHighlight: boolean = false) => {
     const url = videoUrls[angle];
     const isAvailable = availableAngles.includes(angle);
 
@@ -1243,14 +1243,13 @@ export function VideoPlayer({
           onPause={isMain ? () => setIsPlaying(false) : undefined}
           onClick={() => isMain ? togglePlay() : handleAngleChange(angle)}
         />
-        {isMain && layout !== 'single' && layout !== 'pip' && (
+        {showHighlight && layout !== 'single' && layout !== 'pip' && (
           <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
         )}
-        {/* Angle label for all videos (green for main in multi-view, blue for pip main, black for others) */}
+        {/* Angle label for all videos (green for highlighted in multi-view, black for others) */}
         {showLabel && (
           <div className={`absolute bottom-1 ${moreLabelSpacing ? 'left-2' : 'left-1'} px-1.5 py-0.5 backdrop-blur-sm rounded text-[10px] text-white/90 font-medium pointer-events-none ${
-            isMain && layout !== 'single' && layout !== 'pip' ? 'bg-green-600/70 border border-green-400/50' : 
-            isMain ? 'bg-blue-600/50' : 'bg-black/50'
+            showHighlight && layout !== 'single' && layout !== 'pip' ? 'bg-green-600/70 border border-green-400/50' : 'bg-black/50'
           }`}>
             {t.angles[angle as keyof typeof t.angles] || angle}
           </div>
@@ -1405,8 +1404,8 @@ export function VideoPlayer({
               const shouldFlash = pipSwitchAnim.active && pipSwitchAnim.flashCorners.includes(cornerKey);
               
               // Check if this corner's CONFIGURED angle matches the main view angle
-              // If so, show green breathing glow effect
-              const isMatchingMainView = angle === selectedAngle;
+              // If so, show green breathing glow effect (only in Custom Camera Track mode)
+              const isMatchingMainView = hasCustomCameraTrack && angle === selectedAngle;
               
               return (
                 <div
@@ -1457,18 +1456,21 @@ export function VideoPlayer({
         <div key={`triple-${selectedAngle}-${trackHighlightVersion}`} className="relative w-full bg-black flex items-center justify-center overflow-hidden aspect-video max-h-full">
           <div className="grid grid-cols-3 w-full">
             {tripleAngles.map((angle, idx) => {
+              // isMain: for video event syncing (always need one main video)
+              // isHighlighted: for UI highlight (only in Custom Camera Track mode)
               const isMain = angle === selectedAngle;
+              const isHighlighted = hasCustomCameraTrack && isMain;
               const isAvailable = availableAngles.includes(angle);
 
               return (
                 <div
                   key={idx}
                   className={`relative overflow-hidden transition-all duration-150 ${
-                    isMain ? 'ring-2 ring-inset ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : ''
+                    isHighlighted ? 'ring-2 ring-inset ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : ''
                   } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
-                  onClick={() => isAvailable && handleAngleChange(angle)}
+                  onClick={() => isAvailable && hasCustomCameraTrack && handleAngleChange(angle)}
                 >
-                  {renderVideo(angle, isMain, 'w-full', true)}
+                  {renderVideo(angle, isMain, 'w-full', true, false, isHighlighted)}
                 </div>
               );
             })}
@@ -1489,18 +1491,21 @@ export function VideoPlayer({
             {rows.map((row, rowIdx) => (
               <div key={rowIdx} className="flex-1 flex gap-1 min-h-0">
                 {row.map((angle, colIdx) => {
+                  // isMain: for video event syncing (always need one main video)
+                  // isHighlighted: for UI highlight (only in Custom Camera Track mode)
                   const isMain = angle === selectedAngle;
+                  const isHighlighted = hasCustomCameraTrack && isMain;
                   const isAvailable = availableAngles.includes(angle);
 
                   return (
                     <div
                       key={colIdx}
                       className={`relative flex-1 rounded overflow-hidden transition-all duration-150 ${
-                        isMain ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : ''
+                        isHighlighted ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : ''
                       } ${isAvailable ? 'cursor-pointer' : 'opacity-40'}`}
-                      onClick={() => isAvailable && handleAngleChange(angle)}
+                      onClick={() => isAvailable && hasCustomCameraTrack && handleAngleChange(angle)}
                     >
-                      {renderVideo(angle, isMain, 'w-full h-full', true, true)}
+                      {renderVideo(angle, isMain, 'w-full h-full', true, true, isHighlighted)}
                     </div>
                   );
                 })}
@@ -2116,6 +2121,7 @@ export function VideoPlayer({
               layout={layout}
               layoutConfig={layoutConfig}
               mapSize={mapSize}
+              hasCustomCameraTrack={hasCustomCameraTrack}
             />
           </div>
         </div>
