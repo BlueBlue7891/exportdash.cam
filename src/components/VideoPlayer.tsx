@@ -1523,7 +1523,7 @@ export function VideoPlayer({
       className={`relative flex flex-col gap-2 ${
         isFullscreen
           ? 'fixed inset-0 z-50 bg-black p-4'
-          : 'max-w-[1800px] mx-auto h-[calc(100vh-2rem)]'
+          : 'max-w-[1800px] mx-auto h-full'
       }`}
     >
       {/* Video Container with Overlays */}

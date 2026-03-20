@@ -403,12 +403,12 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="h-full flex flex-col bg-gray-950 text-white overflow-hidden">
       {/* Loading Screen */}
       {isProcessing && <LoadingScreen progress={processingProgress} />}
 
       {/* Header with version */}
-      <header className="px-4 py-2 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between">
+      <header className="px-4 py-2 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
         <div className="flex items-end gap-2">
           <img src="/icon.png" alt="ExportDash" className="w-6 h-6" />
           <div className="flex items-baseline gap-1.5">
@@ -418,8 +418,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Main Content - Full width */}
-      <main className="p-4">
+      {/* Main Content - Full width, takes remaining height */}
+      <main className="flex-1 p-4 overflow-auto">
         {sequences.length === 0 ? (
           /* Empty State */
           <div className="max-w-4xl mx-auto">
@@ -654,16 +654,18 @@ export default function Home() {
           </div>
         ) : (
           /* Full-width Video Player with integrated controls */
-          <VideoPlayer
-            sequences={sequences}
-            selectedSequence={selectedSequence}
-            onSelectSequence={setSelectedSequence}
-            onClear={handleClear}
-            onDeleteSequence={handleDeleteSequence}
-            onAddFiles={handleFilesAdded}
-            folderStructure={folderStructure}
-            onOpenVideoBrowser={() => setShowVideoBrowser(true)}
-          />
+          <div className="h-full">
+            <VideoPlayer
+              sequences={sequences}
+              selectedSequence={selectedSequence}
+              onSelectSequence={setSelectedSequence}
+              onClear={handleClear}
+              onDeleteSequence={handleDeleteSequence}
+              onAddFiles={handleFilesAdded}
+              folderStructure={folderStructure}
+              onOpenVideoBrowser={() => setShowVideoBrowser(true)}
+            />
+          </div>
         )}
         
         {/* Video Browser Modal */}
