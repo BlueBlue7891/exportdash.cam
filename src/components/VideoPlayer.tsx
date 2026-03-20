@@ -127,7 +127,17 @@ export function VideoPlayer({
     {
       id: 'all',
       label: t.player.all6,
-      icon: <IconLayoutGrid size={14} />,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.1">
+          {/* 2 rows x 3 cols grid */}
+          <rect x="0.75" y="2" width="3" height="4" rx="0.5" />
+          <rect x="5.5" y="2" width="3" height="4" rx="0.5" />
+          <rect x="10.25" y="2" width="3" height="4" rx="0.5" />
+          <rect x="0.75" y="8.5" width="3" height="4" rx="0.5" />
+          <rect x="5.5" y="8.5" width="3" height="4" rx="0.5" />
+          <rect x="10.25" y="8.5" width="3" height="4" rx="0.5" />
+        </svg>
+      ),
       description: t.player.all6,
     },
   ], [t]);
