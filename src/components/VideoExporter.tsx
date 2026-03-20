@@ -10,6 +10,10 @@ import { VideoSequence, TrimPoints, CameraSegment, formatDuration, LayoutCameraC
 import { Tooltip } from './Tooltip';
 import { useLanguage } from '@/lib/i18n';
 
+// Check if running in Tauri desktop app
+const isTauri = () => typeof window !== 'undefined' && 
+  (('__TAURI__' in window) || (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+
 type LayoutType = 'single' | 'pip' | 'triple' | 'all';
 
 interface VideoExporterProps {
@@ -1052,7 +1056,7 @@ export function VideoExporter({
 
       const videoSource = new VideoSampleSource({
         codec: 'avc',
-        bitrate: 8_000_000,
+        bitrate: 5_000_000,
         latencyMode: 'quality',
         onEncoderConfig: (config) => {
           console.log('Encoder config:', config);
@@ -1945,16 +1949,66 @@ export function VideoExporter({
     setStatus('');
   }, []);
 
-  const downloadExport = useCallback(() => {
+  const downloadExport = useCallback(async () => {
     if (!exportUrl) return;
 
-    const a = document.createElement('a');
-    a.href = exportUrl;
-    a.download = `${filename}-${Date.now()}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [exportUrl, filename]);
+    // Check if running in Tauri desktop app
+    const inTauri = isTauri();
+    console.log('[downloadExport] Running in Tauri:', inTauri);
+    
+    if (inTauri) {
+      try {
+        // Dynamically import Tauri APIs
+        console.log('[downloadExport] Importing Tauri APIs...');
+        const [{ save }, { writeFile }] = await Promise.all([
+          import('@tauri-apps/plugin-dialog'),
+          import('@tauri-apps/plugin-fs')
+        ]);
+        console.log('[downloadExport] Tauri APIs imported successfully');
+
+        // Show save dialog
+        const defaultName = `${filename}-${Date.now()}.mp4`;
+        console.log('[downloadExport] Opening save dialog with default name:', defaultName);
+        const savePath = await save({
+          filters: [
+            { name: 'MP4 Video', extensions: ['mp4'] },
+            { name: 'All Files', extensions: ['*'] }
+          ],
+          defaultPath: defaultName,
+        });
+        console.log('[downloadExport] Save dialog result:', savePath);
+
+        if (!savePath) {
+          // User cancelled the dialog
+          console.log('[downloadExport] User cancelled the dialog');
+          return;
+        }
+
+        // Fetch blob from the object URL
+        const response = await fetch(exportUrl);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        // Write file using Tauri FS API
+        await writeFile(savePath, uint8Array);
+
+        // Show success message
+        setStatus(t.exporter.saveSuccess || 'File saved successfully');
+      } catch (err) {
+        console.error('Save error:', err);
+        setStatus(`${t.exporter.saveError || 'Save failed'}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    } else {
+      // Browser fallback: use native download
+      const a = document.createElement('a');
+      a.href = exportUrl;
+      a.download = `${filename}-${Date.now()}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  }, [exportUrl, filename, t]);
 
   return (
     <>

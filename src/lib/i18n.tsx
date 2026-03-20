@@ -229,6 +229,8 @@ export interface Translations {
     loadingTiles: string;
     initEncoder: string;
     exportToMP4: string;
+    saveSuccess: string;
+    saveError: string;
   };
   // Footer
   footer: {
@@ -514,6 +516,8 @@ const en: Translations = {
     loadingTiles: 'Pre-loading map tiles...',
     initEncoder: 'Initializing encoder...',
     exportToMP4: 'Export to MP4',
+    saveSuccess: 'File saved successfully',
+    saveError: 'Save failed',
   },
   footer: {
     mitLicense: 'MIT licensed',
@@ -805,6 +809,8 @@ const zh: Translations = {
     loadingTiles: '预加载地图瓦片中...',
     initEncoder: '初始化编码器中...',
     exportToMP4: '导出为 MP4',
+    saveSuccess: '文件保存成功',
+    saveError: '保存失败',
   },
   footer: {
     mitLicense: 'MIT 许可',
