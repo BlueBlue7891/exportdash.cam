@@ -807,40 +807,37 @@ export function VideoPlayer({
     pendingRestoreRef.current = { time: localTime, playing: isPlaying };
     
     // Handle triple view compatibility with camera track
-    if (newLayout === 'triple' && hasCustomCameraTrack) {
-      if (cameraTrackUniqueAngles.length === 3) {
-        // Smart merge: only replace non-matching positions, keep matching ones in place
-        const currentTripleAngles = layoutConfig.triple.cameras;
-        const trackAngles = cameraTrackUniqueAngles;
-        
-        // Find which track angles are already in the layout and where
-        const newTripleAngles = [...currentTripleAngles];
-        const usedTrackAngles = new Set<string>();
-        
-        // First pass: keep matching angles in their current positions
-        for (let i = 0; i < 3; i++) {
-          if (trackAngles.includes(currentTripleAngles[i])) {
-            usedTrackAngles.add(currentTripleAngles[i]);
-          }
+    if (newLayout === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length <= 3) {
+      const currentTripleAngles = layoutConfig.triple.cameras;
+      const trackAngles = cameraTrackUniqueAngles;
+      
+      // Find which track angles are already in the layout and where
+      const newTripleAngles = [...currentTripleAngles];
+      const usedTrackAngles = new Set<string>();
+      
+      // First pass: keep matching angles in their current positions
+      for (let i = 0; i < 3; i++) {
+        if (trackAngles.includes(currentTripleAngles[i])) {
+          usedTrackAngles.add(currentTripleAngles[i]);
         }
-        
-        // Second pass: fill in non-matching positions with unused track angles
-        for (let i = 0; i < 3; i++) {
-          if (!trackAngles.includes(currentTripleAngles[i])) {
-            // Find an unused track angle
-            const unusedAngle = trackAngles.find(a => !usedTrackAngles.has(a));
-            if (unusedAngle) {
-              newTripleAngles[i] = unusedAngle;
-              usedTrackAngles.add(unusedAngle);
-            }
-          }
-        }
-        
-        handleLayoutConfigChange({
-          ...layoutConfig,
-          triple: { cameras: newTripleAngles as [string, string, string] }
-        });
       }
+      
+      // Second pass: fill in non-matching positions with unused track angles
+      for (let i = 0; i < 3; i++) {
+        if (!trackAngles.includes(currentTripleAngles[i])) {
+          // Find an unused track angle
+          const unusedAngle = trackAngles.find(a => !usedTrackAngles.has(a));
+          if (unusedAngle) {
+            newTripleAngles[i] = unusedAngle;
+            usedTrackAngles.add(unusedAngle);
+          }
+        }
+      }
+      
+      handleLayoutConfigChange({
+        ...layoutConfig,
+        triple: { cameras: newTripleAngles as [string, string, string] }
+      });
     }
     
     // Note: PiP layout no longer auto-adjusts corners based on camera track
@@ -1821,17 +1818,21 @@ export function VideoPlayer({
             <span className="text-[10px] text-gray-500 mr-1">{t.player.layout}</span>
             {LAYOUTS.map((l) => {
               // Check if triple view is disabled due to camera track incompatibility
-              const isTripleDisabled = l.id === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length !== 3;
+              // Only disable when track has more than 3 angles
+              const isTripleDisabled = l.id === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length > 3;
               // Dynamic tooltip based on camera track count
               let tooltipContent = l.label;
               if (l.id === 'triple' && hasCustomCameraTrack) {
                 const count = cameraTrackUniqueAngles.length;
                 if (count < 3) {
-                  tooltipContent = t.player.tripleViewNeeds3(count, 3 - count);
+                  tooltipContent = t.player.tripleViewNeeds3(count, 3 - count) + ' ' + t.player.rightClickConfigure;
                 } else if (count > 3) {
                   tooltipContent = t.player.tripleViewHasMore(count, count - 3);
                 }
               }
+              
+              // Check if right-click config should be disabled (track has > 3 angles)
+              const disableRightClickConfig = l.id === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length > 3;
               
               return (
                 <Tooltip 
@@ -1839,7 +1840,9 @@ export function VideoPlayer({
                   content={
                     <div className="flex flex-col items-center">
                       <span>{tooltipContent}</span>
-                      {l.id !== 'single' && <span className="text-[10px] text-gray-400 mt-1">{t.player.rightClickConfigure}</span>}
+                      {l.id !== 'single' && !disableRightClickConfig && (
+                        <span className="text-[10px] text-gray-400 mt-1">{t.player.rightClickConfigure}</span>
+                      )}
                     </div>
                   } 
                   position="top"
@@ -1849,6 +1852,51 @@ export function VideoPlayer({
                     onContextMenu={(e) => {
                       e.preventDefault();
                       if (l.id !== 'single') {
+                        // If track has more than 3 angles, disable config panel for triple view
+                        if (disableRightClickConfig) {
+                          return;
+                        }
+                        
+                        // If track has 2 angles, smart replace the layout angles before opening config
+                        if (l.id === 'triple' && hasCustomCameraTrack && cameraTrackUniqueAngles.length === 2) {
+                          const trackAngles = cameraTrackUniqueAngles;
+                          const currentTripleAngles = layoutConfig.triple.cameras;
+                          
+                          // Find which angles in current triple view are NOT in track
+                          const nonTrackIndices = currentTripleAngles
+                            .map((angle, idx) => ({ angle, idx }))
+                            .filter(({ angle }) => !trackAngles.includes(angle));
+                          
+                          // Replace non-track angles with track angles
+                          const newTripleAngles = [...currentTripleAngles];
+                          
+                          // If only one position has non-track angle, replace it with the missing track angle
+                          if (nonTrackIndices.length === 1) {
+                            const missingTrackAngle = trackAngles.find(a => !currentTripleAngles.includes(a));
+                            if (missingTrackAngle) {
+                              newTripleAngles[nonTrackIndices[0].idx] = missingTrackAngle;
+                            }
+                          } else if (nonTrackIndices.length === 2) {
+                            // If two positions have non-track angles, replace one with missing track angle
+                            const missingTrackAngle = trackAngles.find(a => !currentTripleAngles.includes(a));
+                            if (missingTrackAngle) {
+                              newTripleAngles[nonTrackIndices[0].idx] = missingTrackAngle;
+                            }
+                          } else if (nonTrackIndices.length === 3) {
+                            // If all three are non-track, replace two with track angles
+                            newTripleAngles[0] = trackAngles[0];
+                            newTripleAngles[1] = trackAngles[1];
+                          }
+                          
+                          // Update layout config before opening panel
+                          const newConfig = {
+                            ...layoutConfig,
+                            triple: { cameras: newTripleAngles as [string, string, string] }
+                          };
+                          setLayoutConfig(newConfig);
+                          saveLayoutConfig(newConfig);
+                        }
+                        
                         // Open layout config for this specific layout
                         setLayout(l.id);
                         setShowLayoutConfig(true);
