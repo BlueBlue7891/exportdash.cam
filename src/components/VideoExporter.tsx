@@ -206,6 +206,8 @@ export function VideoExporter({
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('');
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
   const abortRef = useRef(false);
 
   // Cleanup
@@ -839,7 +841,10 @@ export function VideoExporter({
     }
 
     setIsExporting(true);
+    setIsComplete(false);
+    setIsSaved(false);
     setProgress(0);
+    setExportProgress({ current: 0, total: 0 });
     setExportUrl(null);
     abortRef.current = false;
 
@@ -1123,7 +1128,7 @@ export function VideoExporter({
         const { clipIdx, localTime } = clipInfo;
         const moment = sequence.moments[clipIdx];
 
-        setStatus(`${t.exporter.processing}: ${formatDuration(absoluteTime - exportStart)} / ${formatDuration(exportDuration)}`);
+        setExportProgress({ current: absoluteTime - exportStart, total: exportDuration });
 
         if (layout === 'triple') {
           // Load and seek all 3 angles
@@ -1902,7 +1907,7 @@ export function VideoExporter({
         return;
       }
 
-      setStatus(`${t.exporter.processing}...`);
+      setExportProgress({ current: exportDuration, total: exportDuration });
 
       await output.finalize();
 
@@ -1940,6 +1945,8 @@ export function VideoExporter({
     abortRef.current = true;
     setIsExporting(false);
     setIsComplete(false);
+    setIsSaved(false);
+    setExportProgress({ current: 0, total: 0 });
   }, []);
 
   const closeDialog = useCallback(() => {
@@ -1947,6 +1954,8 @@ export function VideoExporter({
     setIsComplete(false);
     setProgress(0);
     setStatus('');
+    setIsSaved(false);
+    setExportProgress({ current: 0, total: 0 });
   }, []);
 
   const downloadExport = useCallback(async () => {
@@ -1993,11 +2002,11 @@ export function VideoExporter({
         // Write file using Tauri FS API
         await writeFile(savePath, uint8Array);
 
-        // Show success message
-        setStatus(t.exporter.saveSuccess || 'File saved successfully');
+        // Mark as saved
+        setIsSaved(true);
       } catch (err) {
         console.error('Save error:', err);
-        setStatus(`${t.exporter.saveError || 'Save failed'}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setStatus(`${t.exporter.saveError}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     } else {
       // Browser fallback: use native download
@@ -2041,7 +2050,13 @@ export function VideoExporter({
               <h3 className="text-xl font-semibold text-white mb-2">
                 {isComplete ? `${t.exporter.complete}!` : t.exporter.exporting}
               </h3>
-              <p className="text-gray-400 mb-6">{status}</p>
+              <p className="text-gray-400 mb-6">
+                {isComplete 
+                  ? (isSaved ? t.exporter.saveSuccess : t.exporter.complete)
+                  : (exportProgress.total > 0 
+                      ? `${t.exporter.processing}: ${formatDuration(exportProgress.current)} / ${formatDuration(exportProgress.total)}`
+                      : status)}
+              </p>
 
               {/* Progress bar - only show when not complete */}
               {!isComplete && (
