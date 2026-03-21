@@ -433,8 +433,14 @@ export default function Home() {
       {/* Loading Screen */}
       {isProcessing && <LoadingScreen progress={processingProgress} />}
 
-      {/* Header with version */}
-      <header className="px-4 py-2 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+      {/* Header with version - Fixed at top with frosted glass */}
+      <header className="absolute top-0 left-0 right-0 z-40 px-4 py-2 border-b border-gray-800/90 flex items-center justify-between overflow-hidden">
+        {/* Frosted glass blur layer */}
+        <div className="absolute inset-0 -z-10" style={{ 
+          backdropFilter: 'blur(5px) saturate(100%)',
+          WebkitBackdropFilter: 'blur(5px) saturate(100%)',
+          background: 'linear-gradient(135deg, rgba(4, 7, 11, 0.7) 0%, rgba(17, 23, 30, 0.7) 100%)'
+        }} />
         <div className="flex items-end gap-2">
           <img src="/icon.png" alt="ExportDash" className="w-6 h-6" />
           <div className="flex items-baseline gap-1.5">
@@ -445,7 +451,7 @@ export default function Home() {
       </header>
 
       {/* Main Content - Full width, takes remaining height */}
-      <main className="flex-1 p-4 overflow-auto">
+      <main className="flex-1 pt-14 p-4 overflow-auto">
         {sequences.length === 0 ? (
           /* Empty State */
           <div className="max-w-4xl mx-auto">
