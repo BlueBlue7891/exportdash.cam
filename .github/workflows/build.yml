@@ -78,12 +78,6 @@ jobs:
             - **键盘快捷键**: ←→ 方向键调整 1 秒，Shift+←→ 调整 5 秒
             - **标题栏磨砂效果**: 顶部标题栏添加半透明磨砂背景
 
-            ## 历史更新
-            - LanguageSwitcher 简化（点击图标直接切换语言）
-            - TelemetryTimeline 拖拽优化（边界拖拽、片段合并）
-            - VideoPlayer 按钮和布局改进
-            - i18n 新增翻译（中文/英文）
-
             ## 桌面应用程序
             - **Windows**: `.msi` 或 `.exe` 安装程序
             - **macOS**: `.dmg` 磁盘镜像
