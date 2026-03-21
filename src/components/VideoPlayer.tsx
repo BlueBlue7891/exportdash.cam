@@ -1114,11 +1114,13 @@ export function VideoPlayer({
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          seekToAbsoluteTime(absoluteTime - 5);
+          // Shift + Arrow: 5s, Arrow only: 1s
+          seekToAbsoluteTime(absoluteTime - (e.shiftKey ? 5 : 1));
           break;
         case 'ArrowRight':
           e.preventDefault();
-          seekToAbsoluteTime(absoluteTime + 5);
+          // Shift + Arrow: 5s, Arrow only: 1s
+          seekToAbsoluteTime(absoluteTime + (e.shiftKey ? 5 : 1));
           break;
         case 'u':
           setSpeedUnit((prev) => (prev === 'mph' ? 'kmh' : 'mph'));
