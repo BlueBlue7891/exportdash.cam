@@ -445,7 +445,7 @@ export default function Home() {
             {/* Features */}
             <div className={`mt-12 grid gap-4 transition-all duration-200 ${
               isCompactMode 
-                ? 'grid-cols-3' 
+                ? 'grid-cols-9' 
                 : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
             }`}>
               {/* Privacy First */}
