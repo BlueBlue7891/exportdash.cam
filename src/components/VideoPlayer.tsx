@@ -6,6 +6,7 @@ import { useSeiData } from '@/hooks/useSeiData';
 import { TelemetryCard } from './TelemetryCard';
 import { VideoSequence, ANGLE_LABELS, ANGLE_ORDER, VideoMoment, TrimPoints, CameraSegment, LayoutCameraConfig, DEFAULT_LAYOUT_CONFIG, loadLayoutConfig, saveLayoutConfig, loadMapSize, saveMapSize, DEFAULT_MAP_SIZE, MIN_MAP_SIZE, MAX_MAP_SIZE, formatDuration } from '@/types/video';
 import { findMomentForTime, toAbsoluteTime } from '@/lib/sequence-detector';
+import { createPortal } from 'react-dom';
 
 /**
  * Find the camera segment for a given absolute time.
@@ -1943,13 +1944,14 @@ export function VideoPlayer({
                 </button>
               </Tooltip>
             )}
-            {showLayoutConfig && layout !== 'single' && (
+            {showLayoutConfig && layout !== 'single' && createPortal(
               <LayoutConfigPopover
                 layout={layout}
                 config={layoutConfig}
                 onChange={handleLayoutConfigChange}
                 onClose={() => setShowLayoutConfig(false)}
-              />
+              />,
+              document.body
             )}
           </div>
 
