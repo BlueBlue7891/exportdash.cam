@@ -872,7 +872,12 @@ export default function Home() {
                   right: tooltipStyle.right !== undefined ? tooltipStyle.right : 'auto',
                 }}
               >
-                <div className="rounded-xl p-5 shadow-2xl w-[18rem] animate-in fade-in zoom-in-95 duration-150 border border-gray-500/20" style={{ background: 'linear-gradient(135deg, rgba(21, 30, 42, 1) 0%, rgba(30, 38, 49, 0.95) 100%)' }}>
+                <div className="relative rounded-xl p-5 shadow-2xl w-[18rem] animate-in fade-in zoom-in-95 duration-150 border border-white/10 overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(29, 55, 88, 0.5) 0%, rgba(33, 39, 47, 0.5) 100%)' }}>
+                  {/* Blur layer */}
+                  <div className="absolute inset-0 -z-10 rounded-xl" style={{ 
+                    backdropFilter: 'blur(5px) saturate(100%)',
+                    WebkitBackdropFilter: 'blur(5px) saturate(100%)'
+                  }} />
                   {/* Privacy First */}
                   {hoveredCard === 0 && (
                     <div className="text-left">
