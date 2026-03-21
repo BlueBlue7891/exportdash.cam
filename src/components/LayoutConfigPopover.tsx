@@ -300,7 +300,7 @@ export function LayoutConfigPopover({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
         className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl p-4 min-w-[340px]"
         onClick={(e) => e.stopPropagation()}

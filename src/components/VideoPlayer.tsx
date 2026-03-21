@@ -1750,7 +1750,7 @@ export function VideoPlayer({
       </div>
 
       {/* Control Bar: Camera + Layout + Date + Toggles */}
-      <div className="bg-gray-800/50 rounded-xl px-3 py-2 relative z-20">
+      <div className="bg-gray-800/50 rounded-xl px-3 py-2 relative z-40">
         <div className="flex items-center gap-3 flex-wrap">
           {/* Camera buttons — always visible, disabled for triple/all unless in edit mode */}
           <div className="flex items-center gap-1">
