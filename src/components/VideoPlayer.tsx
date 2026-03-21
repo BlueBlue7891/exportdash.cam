@@ -168,6 +168,10 @@ export function VideoPlayer({
   const [showDateTime, setShowDateTime] = useState(true);
   const [showEventMarker, setShowEventMarker] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [videoHeightPercent, setVideoHeightPercent] = useState(65); // 视频区域高度百分比 (默认65%)
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartYRef = useRef(0);
+  const resizeStartPercentRef = useRef(65);
   const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null);
   const [isTimelineDragging, setIsTimelineDragging] = useState(false);
   
@@ -1166,6 +1170,37 @@ export function VideoPlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePlay, absoluteTime, sequence, seekToAbsoluteTime, handleLayoutChange, toggleFullscreen, skipToPreviousClip, skipToNextClip, toggleTrimMode]);
 
+  // Resize handle drag handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartYRef.current = e.clientY;
+    resizeStartPercentRef.current = videoHeightPercent;
+  }, [videoHeightPercent]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - resizeStartYRef.current;
+      const containerHeight = containerRef.current?.clientHeight || 600;
+      const deltaPercent = (deltaY / containerHeight) * 100;
+      const newPercent = Math.max(30, Math.min(85, resizeStartPercentRef.current + deltaPercent));
+      setVideoHeightPercent(newPercent);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   // Close map size control when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -1542,9 +1577,8 @@ export function VideoPlayer({
       {/* Video Container with Overlays */}
       <div
         ref={videoContainerRef}
-        className={`relative bg-black rounded-xl overflow-hidden flex items-center justify-center ${
-          isFullscreen ? 'flex-1' : 'max-h-[60vh]'
-        }`}
+        className="relative bg-black rounded-xl overflow-hidden flex items-center justify-center"
+        style={!isFullscreen ? { height: `${videoHeightPercent}%`, minHeight: '200px' } : { flex: 1 }}
       >
         {renderVideoGrid()}
 
@@ -1752,8 +1786,19 @@ export function VideoPlayer({
         </div>
       </div>
 
+      {/* Resize Handle */}
+      {!isFullscreen && (
+        <div
+          className={`h-3 flex items-center justify-center cursor-ns-resize select-none z-50 ${isResizing ? 'bg-blue-500/20' : 'hover:bg-gray-700/30'} transition-colors`}
+          onMouseDown={handleResizeStart}
+          title="拖拽调整视频区域大小"
+        >
+          <div className="w-8 h-1 rounded-full bg-gray-600/50" />
+        </div>
+      )}
+
       {/* Control Bar: Camera + Layout + Date + Toggles */}
-      <div className="bg-gray-800/50 rounded-xl px-3 py-2 relative z-40">
+      <div className="bg-gray-800/50 rounded-xl px-3 py-2 relative z-40" style={!isFullscreen ? { flex: 1, minHeight: '120px' } : undefined}>
         <div className="flex items-center gap-3 flex-wrap">
           {/* Camera buttons — always visible, disabled for triple/all unless in edit mode */}
           <div className="flex items-center gap-1">
