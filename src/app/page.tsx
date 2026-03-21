@@ -38,8 +38,8 @@ export default function Home() {
   
   useEffect(() => {
     const checkSize = () => {
-      const isNarrow = window.innerWidth <= 1024;
-      const isShort = window.innerHeight <= 850;
+      const isNarrow = window.innerWidth <= 768;
+      const isShort = window.innerHeight <= 1024;
       setIsCompactMode(isNarrow || isShort);
     };
     
