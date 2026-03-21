@@ -872,7 +872,7 @@ export default function Home() {
                   right: tooltipStyle.right !== undefined ? tooltipStyle.right : 'auto',
                 }}
               >
-                <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-600/50 rounded-xl p-4 shadow-2xl w-80 animate-in fade-in zoom-in-95 duration-150">
+                <div className="rounded-xl p-5 shadow-2xl w-[18rem] animate-in fade-in zoom-in-95 duration-150 border border-gray-500/20" style={{ background: 'linear-gradient(135deg, rgba(21, 30, 42, 1) 0%, rgba(30, 38, 49, 0.95) 100%)' }}>
                   {/* Privacy First */}
                   {hoveredCard === 0 && (
                     <div className="text-left">
