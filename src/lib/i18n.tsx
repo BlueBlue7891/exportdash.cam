@@ -219,6 +219,7 @@ export interface Translations {
     export: string;
     exporting: string;
     processing: string;
+    finalizing: string;
     complete: string;
     download: string;
     cancel: string;
@@ -506,6 +507,7 @@ const en: Translations = {
     export: 'Export',
     exporting: 'Exporting...',
     processing: 'Processing',
+    finalizing: 'Writing file...',
     complete: 'Complete',
     download: 'Download',
     cancel: 'Cancel',
@@ -799,6 +801,7 @@ const zh: Translations = {
     export: '导出',
     exporting: '导出中...',
     processing: '处理中',
+    finalizing: '写入文件中...',
     complete: '完成',
     download: '下载',
     cancel: '取消',

@@ -1929,7 +1929,11 @@ export function VideoExporter({
       }
 
       setExportProgress({ current: exportDuration, total: exportDuration });
-
+      
+      // Finalize phase: flush encoder and write MP4 metadata
+      setProgress(95);
+      setStatus(t.exporter.finalizing);
+      
       await output.finalize();
 
       const buffer = output.target.buffer;
