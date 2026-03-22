@@ -1510,10 +1510,11 @@ export function VideoExporter({
             : sequence.event?.est_lat && sequence.event?.est_lon
               ? { ...(rawPipSei || {}), latitude_deg: sequence.event.est_lat, longitude_deg: sequence.event.est_lon } as typeof rawPipSei
               : rawPipSei;
+          // Map drawing is non-blocking to avoid frame processing delays
           for (let ci = 0; ci < allCorners.length; ci++) {
             if (allCorners[ci] === 'map') {
               const mp = mapCornerPositions[ci];
-              await drawMiniMap(ctx, pipMapSeiData, width, height, { x: mp.x, y: mp.y, size: pipW }, {
+              drawMiniMap(ctx, pipMapSeiData, width, height, { x: mp.x, y: mp.y, size: pipW }, {
                 isEventJsonGps: !hasNativePipGps && !!sequence.event?.est_lat,
                 eventReason: sequence.event?.reasonLabel || sequence.event?.reason,
                 city: sequence.event?.city,
@@ -1894,8 +1895,10 @@ export function VideoExporter({
           const isSingleOrPip = layout === 'single' || layout === 'pip';
           drawTelemetry(ctx, seiData, width, height, telemetryIcons, absoluteTime, isSingleOrPip);
         }
+        // Map drawing is non-blocking to avoid frame processing delays
+        // Tiles are pre-loaded, so drawing should be fast
         if (showMap && !(layout === 'pip' && layoutConfig.pip.corners.includes('map'))) {
-          await drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right', {
+          drawMiniMap(ctx, seiData, width, height, layout === 'pip' ? 'top-right' : 'bottom-right', {
             isEventJsonGps: !hasNativeGps && !!sequence.event?.est_lat,
             eventReason: sequence.event?.reasonLabel || sequence.event?.reason,
             city: sequence.event?.city,
@@ -1914,7 +1917,8 @@ export function VideoExporter({
         const sample = new VideoSample(frame);
         
         // Add encoding task to queue (non-blocking to allow parallel rendering)
-        const encodeTask = videoSource.add(sample, { keyFrame: frameCount % 30 === 0 }).then(() => {
+        // Keyframe every 2 seconds (48 frames at 24fps) for better compression and less overhead
+        const encodeTask = videoSource.add(sample, { keyFrame: frameCount % 48 === 0 }).then(() => {
           sample.close();
           frame.close();
         });
