@@ -1149,9 +1149,8 @@ export function VideoExporter({
         setExportProgress({ current: absoluteTime - exportStart, total: exportDuration });
 
         if (layout === 'triple') {
-          // Load and seek all 3 angles
-          for (let i = 0; i < tripleAngles.length; i++) {
-            const angle = tripleAngles[i];
+          // Load and seek all 3 angles in parallel
+          const anglePromises = tripleAngles.map(async (angle) => {
             const ev = extraVideos[angle];
             const video = moment.videos.find(v => v.angle === angle) || moment.videos[0];
 
@@ -1160,8 +1159,9 @@ export function VideoExporter({
               ev.loadedClipIdx = clipIdx;
             }
             await seekVideoEl(ev.el, localTime);
-          }
-          // Small delay to allow video frame to be ready
+          });
+          await Promise.all(anglePromises);
+          // Small delay to allow video frames to be ready
           await new Promise((r) => setTimeout(r, 2));
 
           // Draw 3 videos side by side with gaps
@@ -1314,19 +1314,20 @@ export function VideoExporter({
           }
           await seekVideo(localTime);
 
-          // Load and seek PiP camera angles
-          for (const angle of pipAngles) {
+          // Load and seek PiP camera angles in parallel
+          const pipPromises = pipAngles.map(async (angle) => {
             const ev = extraVideos[angle];
-            if (!ev) continue;
+            if (!ev) return;
             const video = moment.videos.find(v => v.angle === angle);
-            if (!video) continue;
+            if (!video) return;
             if (ev.loadedClipIdx !== clipIdx) {
               ev.blobUrl = await loadVideoInto(ev.el, video.file, video.url, ev.blobUrl);
               ev.loadedClipIdx = clipIdx;
             }
             await seekVideoEl(ev.el, localTime);
-          }
-          // Small delay to allow video frame to be ready
+          });
+          await Promise.all(pipPromises);
+          // Small delay to allow video frames to be ready
           await new Promise((r) => setTimeout(r, 2));
 
           // Draw main video
@@ -1634,19 +1635,20 @@ export function VideoExporter({
           const baseUIScale = width / 1920;
           const uiScale = baseUIScale * 1.25;
 
-          // Load and seek all 6 angles
-          for (const angle of sixViewAngles) {
+          // Load and seek all 6 angles in parallel
+          const allAnglePromises = sixViewAngles.map(async (angle) => {
             const ev = extraVideos[angle];
-            if (!ev) continue;
+            if (!ev) return;
             const video = moment.videos.find(v => v.angle === angle);
-            if (!video) continue;
+            if (!video) return;
             if (ev.loadedClipIdx !== clipIdx) {
               ev.blobUrl = await loadVideoInto(ev.el, video.file, video.url, ev.blobUrl);
               ev.loadedClipIdx = clipIdx;
             }
             await seekVideoEl(ev.el, localTime);
-          }
-          // Small delay to allow video frame to be ready
+          });
+          await Promise.all(allAnglePromises);
+          // Small delay to allow video frames to be ready
           await new Promise((r) => setTimeout(r, 2));
 
           // Draw background
