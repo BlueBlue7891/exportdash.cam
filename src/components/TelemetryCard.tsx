@@ -173,12 +173,7 @@ export function TelemetryCard({
         }
 
         .telemetry-steering :global(.wheel-icon) {
-          filter: brightness(0.5) invert(0.8);
           transition: transform 0.1s ease-out;
-        }
-
-        .telemetry-steering.autopilot :global(.wheel-icon) {
-          filter: brightness(0.5) invert(0.8);
         }
 
         .telemetry-accelerator {
