@@ -1005,7 +1005,7 @@ export function VideoExporter({
         height = height - (height % 2);
       }
 
-      const exportFps = 30;
+      const exportFps = 24; // Lower fps for faster export
 
       // Calculate export range from trim points
       const exportStart = trimPoints?.inPoint ?? 0;
