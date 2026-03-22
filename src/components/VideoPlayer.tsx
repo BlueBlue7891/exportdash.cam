@@ -1670,17 +1670,6 @@ export function VideoPlayer({
         )}
       </div>
 
-      {/* Resize Handle - between video and playback controls */}
-      {!isFullscreen && (
-        <div
-          className={`h-3 flex items-center justify-center cursor-ns-resize select-none z-50 ${isResizing ? 'bg-blue-500/20' : 'hover:bg-gray-700/30'} transition-colors`}
-          onMouseDown={handleResizeStart}
-          title="拖拽调整视频区域大小"
-        >
-          <div className="w-8 h-1 rounded-full bg-gray-600/50" />
-        </div>
-      )}
-
       {/* Playback Controls - Fixed under video */}
       <div className="bg-gray-800/50 rounded-xl px-4 py-3 flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -2234,6 +2223,16 @@ export function VideoPlayer({
         </div>
       </div>
 
+      {/* Resize Handle - between Control Bar and Telemetry Timeline */}
+      {!isFullscreen && (
+        <div
+          className={`h-3 flex items-center justify-center cursor-ns-resize select-none z-50 transition-colors my-1.5 group ${isResizing ? 'is-resizing' : ''}`}
+          onMouseDown={handleResizeStart}
+        >
+          <div className={`w-8 h-1 rounded-full transition-colors ${isResizing ? 'bg-blue-400/80' : 'bg-gray-600/50 group-hover:bg-gray-400/70'}`} />
+        </div>
+      )}
+
       {/* Sequence Dialog - moved outside Control Bar to avoid z-index stacking context issues */}
       {showSequenceMenu && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowSequenceMenu(false)}>
@@ -2332,7 +2331,7 @@ export function VideoPlayer({
       )}
 
         {/* Telemetry Timeline - Scrollable */}
-        <div className="flex-1 overflow-y-auto min-h-0 mt-2">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {totalDuration > 0 && (
             <TelemetryTimeline
               allSeiMessages={allSeiMessages}
