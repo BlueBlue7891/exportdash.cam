@@ -1061,8 +1061,9 @@ export function VideoExporter({
 
       const videoSource = new VideoSampleSource({
         codec: 'avc',
-        bitrate: 5_000_000,
-        latencyMode: 'quality',
+        bitrate: 8_000_000,
+        latencyMode: 'realtime',
+        hardwareAcceleration: 'prefer-hardware',
         onEncoderConfig: (config) => {
           console.log('Encoder config:', config);
         },
@@ -1113,8 +1114,17 @@ export function VideoExporter({
       let prevPipMainAngle = '';
       let pipAngleChangeTime = -1;
 
+      // Frame queue for parallel encoding (allows rendering next frame while encoding current)
+      const frameQueue: Promise<void>[] = [];
+      const maxQueueSize = 3; // Keep up to 3 frames in flight
+
       for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
         if (abortRef.current) break;
+        
+        // Wait if queue is full (backpressure)
+        while (frameQueue.length >= maxQueueSize) {
+          await frameQueue.shift();
+        }
 
         const absoluteTime = exportStart + (frameIdx / exportFps);
 
@@ -1143,7 +1153,8 @@ export function VideoExporter({
             }
             await seekVideoEl(ev.el, localTime);
           }
-          await new Promise((r) => setTimeout(r, 10));
+          // Small delay to allow video frame to be ready
+          await new Promise((r) => setTimeout(r, 2));
 
           // Draw 3 videos side by side with gaps
           ctx.fillStyle = '#ffffff'; // White background
@@ -1307,7 +1318,8 @@ export function VideoExporter({
             }
             await seekVideoEl(ev.el, localTime);
           }
-          await new Promise((r) => setTimeout(r, 10));
+          // Small delay to allow video frame to be ready
+          await new Promise((r) => setTimeout(r, 2));
 
           // Draw main video
           ctx.drawImage(tempVideo, 0, 0, width, height);
@@ -1626,7 +1638,8 @@ export function VideoExporter({
             }
             await seekVideoEl(ev.el, localTime);
           }
-          await new Promise((r) => setTimeout(r, 10));
+          // Small delay to allow video frame to be ready
+          await new Promise((r) => setTimeout(r, 2));
 
           // Draw background
           ctx.fillStyle = '#ffffff'; // White background
@@ -1786,7 +1799,8 @@ export function VideoExporter({
             currentLoadedAngle = video.angle;
           }
           await seekVideo(localTime);
-          await new Promise((r) => setTimeout(r, 10));
+          // Small delay to allow video frame to be ready
+          await new Promise((r) => setTimeout(r, 2));
 
           ctx.drawImage(tempVideo, 0, 0, width, height);
           
@@ -1888,13 +1902,20 @@ export function VideoExporter({
         });
 
         const sample = new VideoSample(frame);
-        await videoSource.add(sample, { keyFrame: frameCount % 30 === 0 });
-        sample.close();
-        frame.close();
+        
+        // Add encoding task to queue (non-blocking to allow parallel rendering)
+        const encodeTask = videoSource.add(sample, { keyFrame: frameCount % 30 === 0 }).then(() => {
+          sample.close();
+          frame.close();
+        });
+        frameQueue.push(encodeTask);
 
         frameCount++;
         setProgress(Math.round((frameCount / totalFrames) * 90));
       }
+      
+      // Wait for all pending frames to complete
+      await Promise.all(frameQueue)
 
       // Cleanup extra video elements
       for (const angle of Object.keys(extraVideos)) {
