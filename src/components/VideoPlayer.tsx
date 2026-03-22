@@ -1670,10 +1670,19 @@ export function VideoPlayer({
         )}
       </div>
 
-      {/* Controls Area - Scrollable if needed */}
-      <div className={`flex-1 overflow-y-auto space-y-2 min-h-0 ${isFullscreen ? '' : ''}`}>
-        {/* Playback Controls - Under Video */}
-        <div className="bg-gray-800/50 rounded-xl px-4 py-3">
+      {/* Resize Handle - between video and playback controls */}
+      {!isFullscreen && (
+        <div
+          className={`h-3 flex items-center justify-center cursor-ns-resize select-none z-50 ${isResizing ? 'bg-blue-500/20' : 'hover:bg-gray-700/30'} transition-colors`}
+          onMouseDown={handleResizeStart}
+          title="拖拽调整视频区域大小"
+        >
+          <div className="w-8 h-1 rounded-full bg-gray-600/50" />
+        </div>
+      )}
+
+      {/* Playback Controls - Fixed under video */}
+      <div className="bg-gray-800/50 rounded-xl px-4 py-3 flex-shrink-0">
         <div className="flex items-center gap-2">
           {/* Skip to Previous Clip */}
           {sequence.clipCount > 1 && (
@@ -1786,19 +1795,10 @@ export function VideoPlayer({
         </div>
       </div>
 
-      {/* Resize Handle */}
-      {!isFullscreen && (
-        <div
-          className={`h-3 flex items-center justify-center cursor-ns-resize select-none z-50 ${isResizing ? 'bg-blue-500/20' : 'hover:bg-gray-700/30'} transition-colors`}
-          onMouseDown={handleResizeStart}
-          title="拖拽调整视频区域大小"
-        >
-          <div className="w-8 h-1 rounded-full bg-gray-600/50" />
-        </div>
-      )}
-
-      {/* Control Bar: Camera + Layout + Date + Toggles */}
-      <div className="bg-gray-800/50 rounded-xl px-3 py-2 relative z-40" style={!isFullscreen ? { flex: 1, minHeight: '120px' } : undefined}>
+      {/* Controls & Timeline Container */}
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+        {/* Control Bar: Camera + Layout + Date + Toggles */}
+        <div className="bg-gray-800/50 rounded-xl px-3 py-2 relative z-40 flex-shrink-0">
         <div className="flex items-center gap-3 flex-wrap">
           {/* Camera buttons — always visible, disabled for triple/all unless in edit mode */}
           <div className="flex items-center gap-1">
@@ -2331,35 +2331,37 @@ export function VideoPlayer({
         </div>
       )}
 
-        {/* Telemetry Timeline */}
-        {totalDuration > 0 && (
-          <TelemetryTimeline
-            allSeiMessages={allSeiMessages}
-            fps={fps}
-            duration={totalDuration}
-            currentTime={absoluteTime}
-            onSeek={handleTimelineSeek}
-            onDraggingChange={setIsTimelineDragging}
-            clipBoundaries={sequence.momentOffsets}
-            event={sequence.event}
-            sequenceStartTime={sequence.startTime}
-            isEditMode={isEditMode}
-            isTrimming={isTrimming}
-            onTrimmingChange={setIsTrimming}
-            trimPoints={trimPoints}
-            onTrimChange={handleTrimChange}
-            onTrimPreview={handleTrimPreview}
-            cameraSegments={cameraSegments}
-            onCameraSegmentsChange={setCameraSegments}
-            selectedAngle={selectedAngle}
-            availableAngles={availableAngles}
-            disableEventTooltip={showSequenceMenu}
-            showEventMarker={showEventMarker}
-            layout={layout}
-            tripleViewAngles={layoutConfig.triple.cameras}
-            hasCustomCameraTrack={hasCustomCameraTrack}
-          />
-        )}
+        {/* Telemetry Timeline - Scrollable */}
+        <div className="flex-1 overflow-y-auto min-h-0 mt-2">
+          {totalDuration > 0 && (
+            <TelemetryTimeline
+              allSeiMessages={allSeiMessages}
+              fps={fps}
+              duration={totalDuration}
+              currentTime={absoluteTime}
+              onSeek={handleTimelineSeek}
+              onDraggingChange={setIsTimelineDragging}
+              clipBoundaries={sequence.momentOffsets}
+              event={sequence.event}
+              sequenceStartTime={sequence.startTime}
+              isEditMode={isEditMode}
+              isTrimming={isTrimming}
+              onTrimmingChange={setIsTrimming}
+              trimPoints={trimPoints}
+              onTrimChange={handleTrimChange}
+              onTrimPreview={handleTrimPreview}
+              cameraSegments={cameraSegments}
+              onCameraSegmentsChange={setCameraSegments}
+              selectedAngle={selectedAngle}
+              availableAngles={availableAngles}
+              disableEventTooltip={showSequenceMenu}
+              showEventMarker={showEventMarker}
+              layout={layout}
+              tripleViewAngles={layoutConfig.triple.cameras}
+              hasCustomCameraTrack={hasCustomCameraTrack}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
