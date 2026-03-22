@@ -1061,7 +1061,7 @@ export function VideoExporter({
 
       const videoSource = new VideoSampleSource({
         codec: 'avc',
-        bitrate: 8_000_000,
+        bitrate: 5_000_000,
         latencyMode: 'realtime',
         hardwareAcceleration: 'prefer-hardware',
         onEncoderConfig: (config) => {
