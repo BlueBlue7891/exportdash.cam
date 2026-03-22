@@ -1061,11 +1061,12 @@ export function VideoExporter({
 
       const videoSource = new VideoSampleSource({
         codec: 'avc',
-        bitrate: 5_000_000,
+        bitrate: 8_000_000,
         latencyMode: 'realtime',
         hardwareAcceleration: 'prefer-hardware',
         onEncoderConfig: (config) => {
-          console.log('Encoder config:', config);
+          console.log('[VideoExporter] Encoder config:', config);
+          console.log('[VideoExporter] Hardware acceleration:', (config as unknown as { hardwareAcceleration?: string }).hardwareAcceleration || 'unknown');
         },
         onEncodedPacket: () => {
           // Packet encoded successfully
@@ -1117,9 +1118,16 @@ export function VideoExporter({
       // Frame queue for parallel encoding (allows rendering next frame while encoding current)
       const frameQueue: Promise<void>[] = [];
       const maxQueueSize = 3; // Keep up to 3 frames in flight
+      
+      // Timing metrics
+      let totalRenderTime = 0;
+      const exportStartTime = performance.now();
+      console.log(`[VideoExporter] Starting export of ${totalFrames} frames at ${exportFps}fps`);
 
       for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
         if (abortRef.current) break;
+        
+        const frameStartTime = performance.now();
         
         // Wait if queue is full (backpressure)
         while (frameQueue.length >= maxQueueSize) {
@@ -1911,6 +1919,17 @@ export function VideoExporter({
         frameQueue.push(encodeTask);
 
         frameCount++;
+        const frameTime = performance.now() - frameStartTime;
+        totalRenderTime += frameTime;
+        
+        // Log progress every 60 frames (2 seconds of video)
+        if (frameCount % 60 === 0) {
+          const avgFrameTime = totalRenderTime / frameCount;
+          const elapsed = performance.now() - exportStartTime;
+          const fps = frameCount / (elapsed / 1000);
+          console.log(`[VideoExporter] Frame ${frameCount}/${totalFrames} - avg: ${avgFrameTime.toFixed(1)}ms/frame, throughput: ${fps.toFixed(1)} fps`);
+        }
+        
         setProgress(Math.round((frameCount / totalFrames) * 90));
       }
       
@@ -1933,8 +1952,13 @@ export function VideoExporter({
       // Finalize phase: flush encoder and write MP4 metadata
       setProgress(95);
       setStatus(t.exporter.finalizing);
+      console.log('[VideoExporter] Starting finalize...');
+      const finalizeStartTime = performance.now();
       
       await output.finalize();
+      
+      const finalizeDuration = performance.now() - finalizeStartTime;
+      console.log(`[VideoExporter] Finalize completed in ${finalizeDuration.toFixed(0)}ms`);
 
       const buffer = output.target.buffer;
       if (!buffer) {
