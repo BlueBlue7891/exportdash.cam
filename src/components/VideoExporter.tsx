@@ -1005,7 +1005,7 @@ export function VideoExporter({
         height = height - (height % 2);
       }
 
-      const exportFps = 24; // Lower fps for faster export
+      const exportFps = 30;
 
       // Calculate export range from trim points
       const exportStart = trimPoints?.inPoint ?? 0;
@@ -1917,8 +1917,8 @@ export function VideoExporter({
         const sample = new VideoSample(frame);
         
         // Add encoding task to queue (non-blocking to allow parallel rendering)
-        // Keyframe every 2 seconds (48 frames at 24fps) for better compression and less overhead
-        const encodeTask = videoSource.add(sample, { keyFrame: frameCount % 48 === 0 }).then(() => {
+        // Keyframe every 2 seconds (60 frames at 30fps) for better compression and less overhead
+        const encodeTask = videoSource.add(sample, { keyFrame: frameCount % 60 === 0 }).then(() => {
           sample.close();
           frame.close();
         });
